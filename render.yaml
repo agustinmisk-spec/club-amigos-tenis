@@ -1,0 +1,14 @@
+# Configuración opcional para desplegar en Render (https://render.com)
+# Si conectás este repositorio, Render lee este archivo y crea el servicio solo.
+services:
+  - type: web
+    name: club-amigos-tenis
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true        # Render genera una clave secreta segura
+      - key: DATABASE_URL
+        sync: false                # la pegás vos en el panel (la copiás de Neon)

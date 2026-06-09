@@ -1,0 +1,17 @@
+{
+  "name": "club-amigos-tenis",
+  "version": "1.0.0",
+  "description": "Gestión de la Escuela de Tenis del Club de Amigos (web app con login real y base de datos)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node seed.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.11.5"
+  }
+}
