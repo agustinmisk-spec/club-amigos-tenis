@@ -1,0 +1,128 @@
+/* Capa de almacenamiento.
+   - Si existe DATABASE_URL  -> PostgreSQL (producción, persistente, multiusuario).
+   - Si no                   -> archivo JSON local (./data/db.json) para probar sin nube.
+   La interfaz es idéntica en ambos casos. */
+const fs = require('fs');
+const path = require('path');
+const bcrypt = require('bcryptjs');
+
+const USE_PG = !!process.env.DATABASE_URL;
+
+/* ---------------- helpers de seed ---------------- */
+function loadSeed() {
+  try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'seed-data.json'), 'utf8')); }
+  catch (e) { return { config: {}, students: [] }; }
+}
+function defaultDirector() {
+  return {
+    id: 'u_director',
+    nombre: 'Director',
+    usuario: 'director',
+    rol: 'director',
+    prof: '',
+    passHash: bcrypt.hashSync('director', 10)
+  };
+}
+
+/* =====================================================================
+   IMPLEMENTACIÓN POSTGRES
+   ===================================================================== */
+function pgStore() {
+  const { Pool } = require('pg');
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.PGSSL === 'off' ? false : { rejectUnauthorized: false }
+  });
+
+  async function q(text, params) { return (await pool.query(text, params)).rows; }
+
+  async function init() {
+    await q(`CREATE TABLE IF NOT EXISTS kv (key text PRIMARY KEY, val jsonb NOT NULL)`);
+    await q(`CREATE TABLE IF NOT EXISTS students (id text PRIMARY KEY, data jsonb NOT NULL)`);
+    await q(`CREATE TABLE IF NOT EXISTS users (id text PRIMARY KEY, data jsonb NOT NULL)`);
+    await q(`CREATE TABLE IF NOT EXISTS attendance (student_id text, dt text, val text, PRIMARY KEY(student_id, dt))`);
+    const seed = loadSeed();
+    if (!(await getConfig())) await setConfig(seed.config || {});
+    if ((await countStudents()) === 0 && Array.isArray(seed.students)) {
+      for (const s of seed.students) await upsertStudent(s);
+    }
+    if ((await countUsers()) === 0) await rawUpsertUser(defaultDirector());
+  }
+
+  async function getConfig() { const r = await q(`SELECT val FROM kv WHERE key='config'`); return r[0] ? r[0].val : null; }
+  async function setConfig(obj) { await q(`INSERT INTO kv(key,val) VALUES('config',$1) ON CONFLICT(key) DO UPDATE SET val=$1`, [obj]); return obj; }
+
+  async function listStudents() { return (await q(`SELECT data FROM students`)).map(r => r.data); }
+  async function upsertStudent(s) { await q(`INSERT INTO students(id,data) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET data=$2`, [s.id, s]); return s; }
+  async function deleteStudent(id) { await q(`DELETE FROM students WHERE id=$1`, [id]); }
+  async function countStudents() { return parseInt((await q(`SELECT count(*) c FROM students`))[0].c, 10); }
+
+  async function listUsers() { return (await q(`SELECT data FROM users`)).map(r => r.data); }
+  async function rawUpsertUser(u) { await q(`INSERT INTO users(id,data) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET data=$2`, [u.id, u]); return u; }
+  async function deleteUser(id) { await q(`DELETE FROM users WHERE id=$1`, [id]); }
+  async function countUsers() { return parseInt((await q(`SELECT count(*) c FROM users`))[0].c, 10); }
+
+  async function getAttendanceByDate(dt) {
+    const rows = await q(`SELECT student_id, val FROM attendance WHERE dt=$1`, [dt]);
+    const m = {}; rows.forEach(r => m[r.student_id] = r.val); return m;
+  }
+  async function setAttendance(studentId, dt, val) {
+    if (val == null) await q(`DELETE FROM attendance WHERE student_id=$1 AND dt=$2`, [studentId, dt]);
+    else await q(`INSERT INTO attendance(student_id,dt,val) VALUES($1,$2,$3) ON CONFLICT(student_id,dt) DO UPDATE SET val=$3`, [studentId, dt, val]);
+  }
+
+  return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents,
+           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance };
+}
+
+/* =====================================================================
+   IMPLEMENTACIÓN JSON (archivo local, sin base de datos)
+   ===================================================================== */
+function jsonStore() {
+  const dir = process.env.DATA_DIR || path.join(__dirname, 'data');
+  const file = path.join(dir, 'db.json');
+  let db = { config: null, students: [], users: [], attendance: {} };
+
+  function persist() { fs.writeFileSync(file, JSON.stringify(db)); }
+
+  async function init() {
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (fs.existsSync(file)) { try { db = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) {} }
+    const seed = loadSeed();
+    if (!db.config) db.config = seed.config || {};
+    if (!db.students.length && Array.isArray(seed.students)) db.students = seed.students.slice();
+    if (!db.users.length) db.users = [defaultDirector()];
+    if (!db.attendance) db.attendance = {};
+    persist();
+  }
+
+  async function getConfig() { return db.config; }
+  async function setConfig(obj) { db.config = obj; persist(); return obj; }
+
+  async function listStudents() { return db.students.slice(); }
+  async function upsertStudent(s) { const i = db.students.findIndex(x => x.id === s.id); if (i >= 0) db.students[i] = s; else db.students.push(s); persist(); return s; }
+  async function deleteStudent(id) { db.students = db.students.filter(x => x.id !== id); persist(); }
+  async function countStudents() { return db.students.length; }
+
+  async function listUsers() { return db.users.slice(); }
+  async function rawUpsertUser(u) { const i = db.users.findIndex(x => x.id === u.id); if (i >= 0) db.users[i] = u; else db.users.push(u); persist(); return u; }
+  async function deleteUser(id) { db.users = db.users.filter(x => x.id !== id); persist(); }
+  async function countUsers() { return db.users.length; }
+
+  async function getAttendanceByDate(dt) {
+    const m = {}; Object.keys(db.attendance).forEach(k => { const [sid, d] = k.split('|'); if (d === dt) m[sid] = db.attendance[k]; }); return m;
+  }
+  async function setAttendance(studentId, dt, val) {
+    const k = studentId + '|' + dt;
+    if (val == null) delete db.attendance[k]; else db.attendance[k] = val;
+    persist();
+  }
+
+  return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents,
+           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance };
+}
+
+const store = USE_PG ? pgStore() : jsonStore();
+store.MODE = USE_PG ? 'postgres' : 'json-file';
+module.exports = store;
+
