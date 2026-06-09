@@ -116,7 +116,7 @@ app.post('/api/users', auth, need('users'), async (req, res) => {
   const users = await store.listUsers();
   if (users.some(u => u.usuario.toLowerCase() === b.usuario.toLowerCase())) return res.status(400).json({ error: 'Ese usuario ya existe' });
   const u = { id: uid(), nombre: b.nombre.trim(), usuario: b.usuario.trim(), rol: ROLES[b.rol] ? b.rol : 'profesor',
-              prof: b.rol === 'profesor' ? (b.prof || '') : '', passHash: bcrypt.hashSync(b.pass, 10) };
+              prof: b.prof || '', passHash: bcrypt.hashSync(b.pass, 10) };
   await store.rawUpsertUser(u);
   res.json(publicUser(u));
 });
@@ -130,7 +130,7 @@ app.put('/api/users/:id', auth, need('users'), async (req, res) => {
   u.nombre = (b.nombre || u.nombre).trim();
   u.usuario = (b.usuario || u.usuario).trim();
   u.rol = ROLES[b.rol] ? b.rol : u.rol;
-  u.prof = u.rol === 'profesor' ? (b.prof || '') : '';
+  u.prof = b.prof || '';
   if (b.pass) u.passHash = bcrypt.hashSync(b.pass, 10);
   await store.rawUpsertUser(u);
   res.json(publicUser(u));
