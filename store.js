@@ -71,8 +71,13 @@ function pgStore() {
     else await q(`INSERT INTO attendance(student_id,dt,val) VALUES($1,$2,$3) ON CONFLICT(student_id,dt) DO UPDATE SET val=$3`, [studentId, dt, val]);
   }
 
+  async function getAttendanceStats() {
+    const rows = await q(`SELECT student_id, val, count(*)::int c FROM attendance GROUP BY student_id, val`);
+    const m = {}; rows.forEach(r => { (m[r.student_id] = m[r.student_id] || { p:0, a:0 }); if (r.val==='P') m[r.student_id].p=r.c; else if (r.val==='A') m[r.student_id].a=r.c; }); return m;
+  }
+
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents,
-           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance };
+           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats };
 }
 
 /* =====================================================================
@@ -118,8 +123,12 @@ function jsonStore() {
     persist();
   }
 
+  async function getAttendanceStats() {
+    const m = {}; Object.keys(db.attendance).forEach(k => { const sid=k.split('|')[0]; const v=db.attendance[k]; (m[sid]=m[sid]||{p:0,a:0}); if(v==='P')m[sid].p++; else if(v==='A')m[sid].a++; }); return m;
+  }
+
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents,
-           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance };
+           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats };
 }
 
 const store = USE_PG ? pgStore() : jsonStore();

@@ -93,6 +93,9 @@ app.delete('/api/students/:id', auth, need('delete'), async (req, res) => {
 });
 
 /* ---------------- Asistencia ---------------- */
+app.get('/api/attendance/stats', auth, async (req, res) => {
+  res.json(await store.getAttendanceStats());
+});
 app.get('/api/attendance', auth, async (req, res) => {
   res.json(await store.getAttendanceByDate(String(req.query.date || '')));
 });
