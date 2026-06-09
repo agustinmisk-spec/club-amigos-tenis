@@ -41,6 +41,8 @@ function pgStore() {
     await q(`CREATE TABLE IF NOT EXISTS students (id text PRIMARY KEY, data jsonb NOT NULL)`);
     await q(`CREATE TABLE IF NOT EXISTS users (id text PRIMARY KEY, data jsonb NOT NULL)`);
     await q(`CREATE TABLE IF NOT EXISTS attendance (student_id text, dt text, val text, PRIMARY KEY(student_id, dt))`);
+    await q(`CREATE TABLE IF NOT EXISTS plans (id text PRIMARY KEY, meta jsonb NOT NULL, content text)`);
+    await q(`CREATE TABLE IF NOT EXISTS messages (id text PRIMARY KEY, data jsonb NOT NULL)`);
     const seed = loadSeed();
     if (!(await getConfig())) await setConfig(seed.config || {});
     if ((await countStudents()) === 0 && Array.isArray(seed.students)) {
@@ -76,8 +78,17 @@ function pgStore() {
     const m = {}; rows.forEach(r => { (m[r.student_id] = m[r.student_id] || { p:0, a:0 }); if (r.val==='P') m[r.student_id].p=r.c; else if (r.val==='A') m[r.student_id].a=r.c; }); return m;
   }
 
+  async function listPlans() { return (await q(`SELECT meta FROM plans ORDER BY meta->>'fecha' DESC`)).map(r => r.meta); }
+  async function addPlan(p, content) { await q(`INSERT INTO plans(id,meta,content) VALUES($1,$2,$3)`, [p.id, p, content]); return p; }
+  async function getPlan(id) { const r = await q(`SELECT meta, content FROM plans WHERE id=$1`, [id]); return r[0] ? { meta: r[0].meta, content: r[0].content } : null; }
+  async function deletePlan(id) { await q(`DELETE FROM plans WHERE id=$1`, [id]); }
+  async function listMessages() { return (await q(`SELECT data FROM messages ORDER BY data->>'fecha' DESC`)).map(r => r.data); }
+  async function addMessage(m) { await q(`INSERT INTO messages(id,data) VALUES($1,$2)`, [m.id, m]); return m; }
+  async function deleteMessage(id) { await q(`DELETE FROM messages WHERE id=$1`, [id]); }
+
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents,
-           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats };
+           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats,
+           listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage };
 }
 
 /* =====================================================================
@@ -86,7 +97,7 @@ function pgStore() {
 function jsonStore() {
   const dir = process.env.DATA_DIR || path.join(__dirname, 'data');
   const file = path.join(dir, 'db.json');
-  let db = { config: null, students: [], users: [], attendance: {} };
+  let db = { config: null, students: [], users: [], attendance: {}, plans: [], messages: [] };
 
   function persist() { fs.writeFileSync(file, JSON.stringify(db)); }
 
@@ -98,6 +109,8 @@ function jsonStore() {
     if (!db.students.length && Array.isArray(seed.students)) db.students = seed.students.slice();
     if (!db.users.length) db.users = [defaultDirector()];
     if (!db.attendance) db.attendance = {};
+    if (!db.plans) db.plans = [];
+    if (!db.messages) db.messages = [];
     persist();
   }
 
@@ -127,8 +140,17 @@ function jsonStore() {
     const m = {}; Object.keys(db.attendance).forEach(k => { const sid=k.split('|')[0]; const v=db.attendance[k]; (m[sid]=m[sid]||{p:0,a:0}); if(v==='P')m[sid].p++; else if(v==='A')m[sid].a++; }); return m;
   }
 
+  async function listPlans() { return db.plans.map(({ content, ...meta }) => meta).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')); }
+  async function addPlan(p, content) { db.plans.push({ ...p, content }); persist(); return p; }
+  async function getPlan(id) { const p = db.plans.find(x => x.id === id); if(!p) return null; const { content, ...meta } = p; return { meta, content }; }
+  async function deletePlan(id) { db.plans = db.plans.filter(x => x.id !== id); persist(); }
+  async function listMessages() { return db.messages.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')); }
+  async function addMessage(m) { db.messages.push(m); persist(); return m; }
+  async function deleteMessage(id) { db.messages = db.messages.filter(x => x.id !== id); persist(); }
+
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents,
-           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats };
+           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats,
+           listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage };
 }
 
 const store = USE_PG ? pgStore() : jsonStore();

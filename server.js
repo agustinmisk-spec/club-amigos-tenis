@@ -8,7 +8,7 @@ const jwt = require('jsonwebtoken');
 const store = require('./store');
 
 const app = express();
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '12mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 3000;
@@ -16,9 +16,9 @@ const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('he
 
 /* Permisos por rol (idénticos al frontend) */
 const ROLES = {
-  director: { label: 'Director / Coordinador', students: true, config: true, users: true, backup: true, import: true, attendance: true, obs: true, delete: true },
-  admin:    { label: 'Administrativo',         students: true, config: false, users: false, backup: true, import: false, attendance: true, obs: true, delete: false },
-  profesor: { label: 'Profesor/a',             students: false, config: false, users: false, backup: false, import: false, attendance: true, obs: true, delete: false }
+  director: { label: 'Director / Coordinador', students: true, config: true, users: true, backup: true, import: true, attendance: true, obs: true, delete: true, content: true },
+  admin:    { label: 'Administrativo',         students: true, config: false, users: false, backup: true, import: false, attendance: true, obs: true, delete: false, content: true },
+  profesor: { label: 'Profesor/a',             students: false, config: false, users: false, backup: false, import: false, attendance: true, obs: true, delete: false, content: false }
 };
 const cap = (role, k) => !!(ROLES[role] && ROLES[role][k]);
 const publicUser = u => ({ id: u.id, nombre: u.nombre, usuario: u.usuario, rol: u.rol, prof: u.prof || '' });
@@ -144,6 +144,40 @@ app.delete('/api/users/:id', auth, need('users'), async (req, res) => {
   await store.deleteUser(req.params.id);
   res.json({ ok: true });
 });
+
+/* ---------------- Planificaciones (archivos) ---------------- */
+app.get('/api/plans', auth, async (req, res) => { res.json(await store.listPlans()); });
+app.post('/api/plans', auth, need('content'), async (req, res) => {
+  const b = req.body || {};
+  if (!b.dataBase64) return res.status(400).json({ error: 'Falta el archivo' });
+  const p = { id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+    nombre: (b.nombre || b.filename || 'Archivo').toString().slice(0, 200),
+    filename: b.filename || 'archivo', mime: b.mime || 'application/octet-stream',
+    size: b.size || 0, fecha: new Date().toISOString(), autor: req.user.nombre };
+  await store.addPlan(p, b.dataBase64);
+  res.json(p);
+});
+app.get('/api/plans/:id/download', auth, async (req, res) => {
+  const p = await store.getPlan(req.params.id);
+  if (!p) return res.status(404).json({ error: 'No existe' });
+  res.setHeader('Content-Type', (p.meta && p.meta.mime) || 'application/octet-stream');
+  res.setHeader('Content-Disposition', 'attachment; filename="' + encodeURIComponent((p.meta && p.meta.filename) || 'archivo') + '"');
+  res.send(Buffer.from(p.content || '', 'base64'));
+});
+app.delete('/api/plans/:id', auth, need('content'), async (req, res) => { await store.deletePlan(req.params.id); res.json({ ok: true }); });
+
+/* ---------------- Comunicaciones (mensajes) ---------------- */
+app.get('/api/messages', auth, async (req, res) => { res.json(await store.listMessages()); });
+app.post('/api/messages', auth, need('content'), async (req, res) => {
+  const b = req.body || {};
+  if (!b.texto) return res.status(400).json({ error: 'Falta el mensaje' });
+  const m = { id: 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+    titulo: (b.titulo || '').toString().slice(0, 200), texto: b.texto.toString(),
+    fecha: new Date().toISOString(), autor: req.user.nombre };
+  await store.addMessage(m);
+  res.json(m);
+});
+app.delete('/api/messages/:id', auth, need('content'), async (req, res) => { await store.deleteMessage(req.params.id); res.json({ ok: true }); });
 
 app.get('/api/health', (req, res) => res.json({ ok: true, mode: store.MODE }));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
