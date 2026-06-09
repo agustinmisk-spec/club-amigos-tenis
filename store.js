@@ -75,7 +75,7 @@ function pgStore() {
 
   async function getAttendanceStats() {
     const rows = await q(`SELECT student_id, val, count(*)::int c FROM attendance GROUP BY student_id, val`);
-    const m = {}; rows.forEach(r => { (m[r.student_id] = m[r.student_id] || { p:0, a:0 }); if (r.val==='P') m[r.student_id].p=r.c; else if (r.val==='A') m[r.student_id].a=r.c; }); return m;
+    const m = {}; rows.forEach(r => { const o=(m[r.student_id]=m[r.student_id]||{p:0,a:0,s:0}); if(r.val==='P')o.p=r.c; else if(r.val==='A')o.a=r.c; else if(r.val&&r.val[0]==='S')o.s+=r.c; }); return m;
   }
 
   async function listPlans() { return (await q(`SELECT meta FROM plans ORDER BY meta->>'fecha' DESC`)).map(r => r.meta); }
@@ -137,7 +137,7 @@ function jsonStore() {
   }
 
   async function getAttendanceStats() {
-    const m = {}; Object.keys(db.attendance).forEach(k => { const sid=k.split('|')[0]; const v=db.attendance[k]; (m[sid]=m[sid]||{p:0,a:0}); if(v==='P')m[sid].p++; else if(v==='A')m[sid].a++; }); return m;
+    const m = {}; Object.keys(db.attendance).forEach(k => { const sid=k.split('|')[0]; const v=db.attendance[k]; const o=(m[sid]=m[sid]||{p:0,a:0,s:0}); if(v==='P')o.p++; else if(v==='A')o.a++; else if(v&&v[0]==='S')o.s++; }); return m;
   }
 
   async function listPlans() { return db.plans.map(({ content, ...meta }) => meta).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')); }
