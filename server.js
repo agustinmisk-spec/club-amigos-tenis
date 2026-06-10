@@ -179,6 +179,19 @@ app.post('/api/messages', auth, need('content'), async (req, res) => {
 });
 app.delete('/api/messages/:id', auth, need('content'), async (req, res) => { await store.deleteMessage(req.params.id); res.json({ ok: true }); });
 
+/* ---------------- Calendario (eventos) ---------------- */
+app.get('/api/events', auth, async (req, res) => { res.json(await store.listEvents()); });
+app.post('/api/events', auth, need('content'), async (req, res) => {
+  const b = req.body || {};
+  if (!b.fecha || !b.titulo) return res.status(400).json({ error: 'Faltan fecha y título' });
+  const ev = { id: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+    fecha: String(b.fecha), titulo: String(b.titulo).slice(0, 200), tipo: String(b.tipo || 'Actividad'),
+    nota: String(b.nota || ''), autor: req.user.nombre };
+  await store.addEvent(ev);
+  res.json(ev);
+});
+app.delete('/api/events/:id', auth, need('content'), async (req, res) => { await store.deleteEvent(req.params.id); res.json({ ok: true }); });
+
 app.get('/api/health', (req, res) => res.json({ ok: true, mode: store.MODE }));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 

@@ -43,6 +43,7 @@ function pgStore() {
     await q(`CREATE TABLE IF NOT EXISTS attendance (student_id text, dt text, val text, PRIMARY KEY(student_id, dt))`);
     await q(`CREATE TABLE IF NOT EXISTS plans (id text PRIMARY KEY, meta jsonb NOT NULL, content text)`);
     await q(`CREATE TABLE IF NOT EXISTS messages (id text PRIMARY KEY, data jsonb NOT NULL)`);
+    await q(`CREATE TABLE IF NOT EXISTS events (id text PRIMARY KEY, data jsonb NOT NULL)`);
     const seed = loadSeed();
     if (!(await getConfig())) await setConfig(seed.config || {});
     if ((await countStudents()) === 0 && Array.isArray(seed.students)) {
@@ -85,10 +86,14 @@ function pgStore() {
   async function listMessages() { return (await q(`SELECT data FROM messages ORDER BY data->>'fecha' DESC`)).map(r => r.data); }
   async function addMessage(m) { await q(`INSERT INTO messages(id,data) VALUES($1,$2)`, [m.id, m]); return m; }
   async function deleteMessage(id) { await q(`DELETE FROM messages WHERE id=$1`, [id]); }
+  async function listEvents() { return (await q(`SELECT data FROM events ORDER BY data->>'fecha'`)).map(r => r.data); }
+  async function addEvent(ev) { await q(`INSERT INTO events(id,data) VALUES($1,$2)`, [ev.id, ev]); return ev; }
+  async function deleteEvent(id) { await q(`DELETE FROM events WHERE id=$1`, [id]); }
 
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents,
            listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats,
-           listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage };
+           listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage,
+           listEvents, addEvent, deleteEvent };
 }
 
 /* =====================================================================
@@ -97,7 +102,7 @@ function pgStore() {
 function jsonStore() {
   const dir = process.env.DATA_DIR || path.join(__dirname, 'data');
   const file = path.join(dir, 'db.json');
-  let db = { config: null, students: [], users: [], attendance: {}, plans: [], messages: [] };
+  let db = { config: null, students: [], users: [], attendance: {}, plans: [], messages: [], events: [] };
 
   function persist() { fs.writeFileSync(file, JSON.stringify(db)); }
 
@@ -111,6 +116,7 @@ function jsonStore() {
     if (!db.attendance) db.attendance = {};
     if (!db.plans) db.plans = [];
     if (!db.messages) db.messages = [];
+    if (!db.events) db.events = [];
     persist();
   }
 
@@ -147,10 +153,14 @@ function jsonStore() {
   async function listMessages() { return db.messages.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')); }
   async function addMessage(m) { db.messages.push(m); persist(); return m; }
   async function deleteMessage(id) { db.messages = db.messages.filter(x => x.id !== id); persist(); }
+  async function listEvents() { return db.events.slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')); }
+  async function addEvent(ev) { db.events.push(ev); persist(); return ev; }
+  async function deleteEvent(id) { db.events = db.events.filter(x => x.id !== id); persist(); }
 
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents,
            listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats,
-           listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage };
+           listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage,
+           listEvents, addEvent, deleteEvent };
 }
 
 const store = USE_PG ? pgStore() : jsonStore();
