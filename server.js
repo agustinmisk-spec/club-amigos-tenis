@@ -177,6 +177,16 @@ app.post('/api/messages', auth, need('content'), async (req, res) => {
   await store.addMessage(m);
   res.json(m);
 });
+app.put('/api/messages/:id', auth, need('content'), async (req, res) => {
+  const list = await store.listMessages();
+  const m = list.find(x => x.id === req.params.id);
+  if (!m) return res.status(404).json({ error: 'No existe' });
+  const b = req.body || {};
+  if (b.titulo != null) m.titulo = String(b.titulo).slice(0, 200);
+  if (b.texto != null) m.texto = String(b.texto);
+  await store.updateMessage(m);
+  res.json(m);
+});
 app.delete('/api/messages/:id', auth, need('content'), async (req, res) => { await store.deleteMessage(req.params.id); res.json({ ok: true }); });
 
 /* ---------------- Calendario (eventos) ---------------- */
@@ -189,6 +199,18 @@ app.post('/api/events', auth, need('content'), async (req, res) => {
     nota: String(b.nota || ''), autor: req.user.nombre };
   await store.addEvent(ev);
   res.json(ev);
+});
+app.put('/api/events/:id', auth, need('content'), async (req, res) => {
+  const list = await store.listEvents();
+  const e = list.find(x => x.id === req.params.id);
+  if (!e) return res.status(404).json({ error: 'No existe' });
+  const b = req.body || {};
+  if (b.fecha != null) e.fecha = String(b.fecha);
+  if (b.titulo != null) e.titulo = String(b.titulo).slice(0, 200);
+  if (b.tipo != null) e.tipo = String(b.tipo);
+  if (b.nota != null) e.nota = String(b.nota);
+  await store.updateEvent(e);
+  res.json(e);
 });
 app.delete('/api/events/:id', auth, need('content'), async (req, res) => { await store.deleteEvent(req.params.id); res.json({ ok: true }); });
 

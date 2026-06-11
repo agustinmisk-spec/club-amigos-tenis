@@ -88,9 +88,11 @@ function pgStore() {
   async function listMessages() { return (await q(`SELECT data FROM messages ORDER BY data->>'fecha' DESC`)).map(r => r.data); }
   async function addMessage(m) { await q(`INSERT INTO messages(id,data) VALUES($1,$2)`, [m.id, m]); return m; }
   async function deleteMessage(id) { await q(`DELETE FROM messages WHERE id=$1`, [id]); }
+  async function updateMessage(m) { await q(`UPDATE messages SET data=$2 WHERE id=$1`, [m.id, m]); return m; }
   async function listEvents() { return (await q(`SELECT data FROM events ORDER BY data->>'fecha'`)).map(r => r.data); }
   async function addEvent(ev) { await q(`INSERT INTO events(id,data) VALUES($1,$2)`, [ev.id, ev]); return ev; }
   async function deleteEvent(id) { await q(`DELETE FROM events WHERE id=$1`, [id]); }
+  async function updateEvent(ev) { await q(`UPDATE events SET data=$2 WHERE id=$1`, [ev.id, ev]); return ev; }
   async function listRecoveries() { return (await q(`SELECT data FROM recoveries ORDER BY data->>'fecha' DESC`)).map(r => r.data); }
   async function addRecovery(r) { await q(`INSERT INTO recoveries(id,data) VALUES($1,$2)`, [r.id, r]); return r; }
   async function deleteRecovery(id) { await q(`DELETE FROM recoveries WHERE id=$1`, [id]); }
@@ -101,8 +103,8 @@ function pgStore() {
 
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents,
            listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats,
-           listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage,
-           listEvents, addEvent, deleteEvent,
+           listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage, updateMessage,
+           listEvents, addEvent, deleteEvent, updateEvent,
            listRecoveries, addRecovery, deleteRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition };
 }
 
@@ -165,9 +167,11 @@ function jsonStore() {
   async function listMessages() { return db.messages.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')); }
   async function addMessage(m) { db.messages.push(m); persist(); return m; }
   async function deleteMessage(id) { db.messages = db.messages.filter(x => x.id !== id); persist(); }
+  async function updateMessage(m) { const i=db.messages.findIndex(x=>x.id===m.id); if(i>=0)db.messages[i]=m; persist(); return m; }
   async function listEvents() { return db.events.slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')); }
   async function addEvent(ev) { db.events.push(ev); persist(); return ev; }
   async function deleteEvent(id) { db.events = db.events.filter(x => x.id !== id); persist(); }
+  async function updateEvent(ev) { const i=db.events.findIndex(x=>x.id===ev.id); if(i>=0)db.events[i]=ev; persist(); return ev; }
   async function listRecoveries() { return db.recoveries.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')); }
   async function addRecovery(r) { db.recoveries.push(r); persist(); return r; }
   async function deleteRecovery(id) { db.recoveries = db.recoveries.filter(x => x.id !== id); persist(); }
@@ -178,8 +182,8 @@ function jsonStore() {
 
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents,
            listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats,
-           listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage,
-           listEvents, addEvent, deleteEvent,
+           listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage, updateMessage,
+           listEvents, addEvent, deleteEvent, updateEvent,
            listRecoveries, addRecovery, deleteRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition };
 }
 
