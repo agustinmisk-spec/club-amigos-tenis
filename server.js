@@ -192,6 +192,46 @@ app.post('/api/events', auth, need('content'), async (req, res) => {
 });
 app.delete('/api/events/:id', auth, need('content'), async (req, res) => { await store.deleteEvent(req.params.id); res.json({ ok: true }); });
 
+/* ---------------- Recuperaciones e invitaciones (por fecha) ---------------- */
+app.get('/api/recoveries', auth, async (req, res) => { res.json(await store.listRecoveries()); });
+app.post('/api/recoveries', auth, need('attendance'), async (req, res) => {
+  const b = req.body || {};
+  if (!b.fecha || (!b.studentId && !b.nombre)) return res.status(400).json({ error: 'Faltan fecha y alumno' });
+  const r = { id: 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+    fecha: String(b.fecha), studentId: b.studentId || '', nombre: String(b.nombre || ''),
+    tipo: String(b.tipo || 'Recuperación'), hora: String(b.hora || ''), court: String(b.court || ''),
+    prof: String(b.prof || ''), nota: String(b.nota || ''), autor: req.user.nombre };
+  await store.addRecovery(r);
+  res.json(r);
+});
+app.delete('/api/recoveries/:id', auth, need('attendance'), async (req, res) => { await store.deleteRecovery(req.params.id); res.json({ ok: true }); });
+
+/* ---------------- Competencias ---------------- */
+app.get('/api/competitions', auth, async (req, res) => { res.json(await store.listCompetitions()); });
+app.post('/api/competitions', auth, need('content'), async (req, res) => {
+  const b = req.body || {};
+  if (!b.fecha || !b.nombre) return res.status(400).json({ error: 'Faltan fecha y nombre' });
+  const c = { id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+    fecha: String(b.fecha), nombre: String(b.nombre).slice(0, 200), lugar: String(b.lugar || ''),
+    nota: String(b.nota || ''), participantes: Array.isArray(b.participantes) ? b.participantes : [], autor: req.user.nombre };
+  await store.addCompetition(c);
+  res.json(c);
+});
+app.put('/api/competitions/:id', auth, need('content'), async (req, res) => {
+  const list = await store.listCompetitions();
+  const c = list.find(x => x.id === req.params.id);
+  if (!c) return res.status(404).json({ error: 'No existe' });
+  const b = req.body || {};
+  if (b.fecha != null) c.fecha = String(b.fecha);
+  if (b.nombre != null) c.nombre = String(b.nombre).slice(0, 200);
+  if (b.lugar != null) c.lugar = String(b.lugar);
+  if (b.nota != null) c.nota = String(b.nota);
+  if (Array.isArray(b.participantes)) c.participantes = b.participantes;
+  await store.updateCompetition(c);
+  res.json(c);
+});
+app.delete('/api/competitions/:id', auth, need('content'), async (req, res) => { await store.deleteCompetition(req.params.id); res.json({ ok: true }); });
+
 app.get('/api/health', (req, res) => res.json({ ok: true, mode: store.MODE }));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
