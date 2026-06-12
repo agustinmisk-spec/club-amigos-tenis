@@ -254,6 +254,39 @@ app.put('/api/competitions/:id', auth, need('content'), async (req, res) => {
 });
 app.delete('/api/competitions/:id', auth, need('content'), async (req, res) => { await store.deleteCompetition(req.params.id); res.json({ ok: true }); });
 
+/* ---------------- Historial de cambios ---------------- */
+app.get('/api/changes', auth, async (req, res) => { res.json(await store.listChanges()); });
+app.post('/api/changes', auth, need('students'), async (req, res) => {
+  const b = req.body || {};
+  const ch = { id: 'h' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+    fecha: new Date().toISOString(), studentId: b.studentId || '', nombre: String(b.nombre || ''),
+    descripcion: String(b.descripcion || ''), obs: '', cerrado: false, autor: req.user.nombre };
+  await store.addChange(ch);
+  res.json(ch);
+});
+app.patch('/api/changes/:id', auth, need('content'), async (req, res) => {
+  const list = await store.listChanges();
+  const ch = list.find(x => x.id === req.params.id);
+  if (!ch) return res.status(404).json({ error: 'No existe' });
+  const b = req.body || {};
+  if (b.obs != null) ch.obs = String(b.obs);
+  if (b.cerrado != null) ch.cerrado = !!b.cerrado;
+  await store.updateChange(ch);
+  res.json(ch);
+});
+app.delete('/api/changes/:id', auth, need('content'), async (req, res) => { await store.deleteChange(req.params.id); res.json({ ok: true }); });
+
+/* ---------------- Editar recuperación ---------------- */
+app.put('/api/recoveries/:id', auth, need('attendance'), async (req, res) => {
+  const list = await store.listRecoveries();
+  const r = list.find(x => x.id === req.params.id);
+  if (!r) return res.status(404).json({ error: 'No existe' });
+  const b = req.body || {};
+  ['fecha','studentId','nombre','tipo','hora','court','prof','nota'].forEach(k => { if (b[k] != null) r[k] = String(b[k]); });
+  await store.updateRecovery(r);
+  res.json(r);
+});
+
 app.get('/api/health', (req, res) => res.json({ ok: true, mode: store.MODE }));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 

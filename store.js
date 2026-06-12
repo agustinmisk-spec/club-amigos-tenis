@@ -46,6 +46,7 @@ function pgStore() {
     await q(`CREATE TABLE IF NOT EXISTS events (id text PRIMARY KEY, data jsonb NOT NULL)`);
     await q(`CREATE TABLE IF NOT EXISTS recoveries (id text PRIMARY KEY, data jsonb NOT NULL)`);
     await q(`CREATE TABLE IF NOT EXISTS competitions (id text PRIMARY KEY, data jsonb NOT NULL)`);
+    await q(`CREATE TABLE IF NOT EXISTS changes (id text PRIMARY KEY, data jsonb NOT NULL)`);
     const seed = loadSeed();
     if (!(await getConfig())) await setConfig(seed.config || {});
     if ((await countStudents()) === 0 && Array.isArray(seed.students)) {
@@ -100,12 +101,18 @@ function pgStore() {
   async function addCompetition(c) { await q(`INSERT INTO competitions(id,data) VALUES($1,$2)`, [c.id, c]); return c; }
   async function updateCompetition(c) { await q(`UPDATE competitions SET data=$2 WHERE id=$1`, [c.id, c]); return c; }
   async function deleteCompetition(id) { await q(`DELETE FROM competitions WHERE id=$1`, [id]); }
+  async function updateRecovery(r) { await q(`UPDATE recoveries SET data=$2 WHERE id=$1`, [r.id, r]); return r; }
+  async function listChanges() { return (await q(`SELECT data FROM changes ORDER BY data->>'fecha' DESC`)).map(x => x.data); }
+  async function addChange(c) { await q(`INSERT INTO changes(id,data) VALUES($1,$2)`, [c.id, c]); return c; }
+  async function updateChange(c) { await q(`UPDATE changes SET data=$2 WHERE id=$1`, [c.id, c]); return c; }
+  async function deleteChange(id) { await q(`DELETE FROM changes WHERE id=$1`, [id]); }
 
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents,
            listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats,
            listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage, updateMessage,
            listEvents, addEvent, deleteEvent, updateEvent,
-           listRecoveries, addRecovery, deleteRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition };
+           listRecoveries, addRecovery, deleteRecovery, updateRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition,
+           listChanges, addChange, updateChange, deleteChange };
 }
 
 /* =====================================================================
@@ -114,7 +121,7 @@ function pgStore() {
 function jsonStore() {
   const dir = process.env.DATA_DIR || path.join(__dirname, 'data');
   const file = path.join(dir, 'db.json');
-  let db = { config: null, students: [], users: [], attendance: {}, plans: [], messages: [], events: [], recoveries: [], competitions: [] };
+  let db = { config: null, students: [], users: [], attendance: {}, plans: [], messages: [], events: [], recoveries: [], competitions: [], changes: [] };
 
   function persist() { fs.writeFileSync(file, JSON.stringify(db)); }
 
@@ -131,6 +138,7 @@ function jsonStore() {
     if (!db.events) db.events = [];
     if (!db.recoveries) db.recoveries = [];
     if (!db.competitions) db.competitions = [];
+    if (!db.changes) db.changes = [];
     persist();
   }
 
@@ -179,12 +187,18 @@ function jsonStore() {
   async function addCompetition(c) { db.competitions.push(c); persist(); return c; }
   async function updateCompetition(c) { const i=db.competitions.findIndex(x=>x.id===c.id); if(i>=0)db.competitions[i]=c; persist(); return c; }
   async function deleteCompetition(id) { db.competitions = db.competitions.filter(x => x.id !== id); persist(); }
+  async function updateRecovery(r) { const i=db.recoveries.findIndex(x=>x.id===r.id); if(i>=0)db.recoveries[i]=r; persist(); return r; }
+  async function listChanges() { return db.changes.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')); }
+  async function addChange(c) { db.changes.push(c); persist(); return c; }
+  async function updateChange(c) { const i=db.changes.findIndex(x=>x.id===c.id); if(i>=0)db.changes[i]=c; persist(); return c; }
+  async function deleteChange(id) { db.changes = db.changes.filter(x => x.id !== id); persist(); }
 
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents,
            listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats,
            listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage, updateMessage,
            listEvents, addEvent, deleteEvent, updateEvent,
-           listRecoveries, addRecovery, deleteRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition };
+           listRecoveries, addRecovery, deleteRecovery, updateRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition,
+           listChanges, addChange, updateChange, deleteChange };
 }
 
 const store = USE_PG ? pgStore() : jsonStore();
