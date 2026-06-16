@@ -149,17 +149,20 @@ app.delete('/api/users/:id', auth, need('users'), async (req, res) => {
 app.get('/api/plans', auth, async (req, res) => { res.json(await store.listPlans()); });
 app.post('/api/plans', auth, need('content'), async (req, res) => {
   const b = req.body || {};
-  if (!b.dataBase64) return res.status(400).json({ error: 'Falta el archivo' });
+  if (!b.dataBase64 && !b.url) return res.status(400).json({ error: 'Falta el archivo o el enlace' });
+  const drive = !b.dataBase64 && !!b.url;
   const p = { id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
-    nombre: (b.nombre || b.filename || 'Archivo').toString().slice(0, 200),
+    nombre: (b.nombre || b.filename || b.url || 'Archivo').toString().slice(0, 200),
     filename: b.filename || 'archivo', mime: b.mime || 'application/octet-stream',
-    size: b.size || 0, fecha: new Date().toISOString(), autor: req.user.nombre };
-  await store.addPlan(p, b.dataBase64);
+    size: b.size || 0, fecha: new Date().toISOString(), autor: req.user.nombre,
+    tipo: drive ? 'drive' : 'archivo', url: drive ? String(b.url).slice(0, 1000) : '' };
+  await store.addPlan(p, drive ? '' : b.dataBase64);
   res.json(p);
 });
 app.get('/api/plans/:id/download', auth, async (req, res) => {
   const p = await store.getPlan(req.params.id);
   if (!p) return res.status(404).json({ error: 'No existe' });
+  if (p.meta && p.meta.tipo === 'drive' && p.meta.url) return res.redirect(p.meta.url);
   res.setHeader('Content-Type', (p.meta && p.meta.mime) || 'application/octet-stream');
   res.setHeader('Content-Disposition', 'attachment; filename="' + encodeURIComponent((p.meta && p.meta.filename) || 'archivo') + '"');
   res.send(Buffer.from(p.content || '', 'base64'));
