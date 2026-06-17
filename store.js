@@ -47,6 +47,7 @@ function pgStore() {
     await q(`CREATE TABLE IF NOT EXISTS recoveries (id text PRIMARY KEY, data jsonb NOT NULL)`);
     await q(`CREATE TABLE IF NOT EXISTS competitions (id text PRIMARY KEY, data jsonb NOT NULL)`);
     await q(`CREATE TABLE IF NOT EXISTS changes (id text PRIMARY KEY, data jsonb NOT NULL)`);
+    await q(`CREATE TABLE IF NOT EXISTS group_notes (key text PRIMARY KEY, data jsonb NOT NULL)`);
     const seed = loadSeed();
     if (!(await getConfig())) await setConfig(seed.config || {});
     if ((await countStudents()) === 0 && Array.isArray(seed.students)) {
@@ -106,13 +107,15 @@ function pgStore() {
   async function addChange(c) { await q(`INSERT INTO changes(id,data) VALUES($1,$2)`, [c.id, c]); return c; }
   async function updateChange(c) { await q(`UPDATE changes SET data=$2 WHERE id=$1`, [c.id, c]); return c; }
   async function deleteChange(id) { await q(`DELETE FROM changes WHERE id=$1`, [id]); }
+  async function listGroupNotes() { return (await q(`SELECT data FROM group_notes`)).map(r => r.data); }
+  async function setGroupNote(key, data) { if (!data) { await q(`DELETE FROM group_notes WHERE key=$1`, [key]); return null; } await q(`INSERT INTO group_notes(key,data) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET data=$2`, [key, data]); return data; }
 
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents,
            listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats,
            listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage, updateMessage,
            listEvents, addEvent, deleteEvent, updateEvent,
            listRecoveries, addRecovery, deleteRecovery, updateRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition,
-           listChanges, addChange, updateChange, deleteChange };
+           listChanges, addChange, updateChange, deleteChange, listGroupNotes, setGroupNote };
 }
 
 /* =====================================================================
@@ -121,7 +124,7 @@ function pgStore() {
 function jsonStore() {
   const dir = process.env.DATA_DIR || path.join(__dirname, 'data');
   const file = path.join(dir, 'db.json');
-  let db = { config: null, students: [], users: [], attendance: {}, plans: [], messages: [], events: [], recoveries: [], competitions: [], changes: [] };
+  let db = { config: null, students: [], users: [], attendance: {}, plans: [], messages: [], events: [], recoveries: [], competitions: [], changes: [], groupNotes: {} };
 
   function persist() { fs.writeFileSync(file, JSON.stringify(db)); }
 
@@ -139,6 +142,7 @@ function jsonStore() {
     if (!db.recoveries) db.recoveries = [];
     if (!db.competitions) db.competitions = [];
     if (!db.changes) db.changes = [];
+    if (!db.groupNotes) db.groupNotes = {};
     persist();
   }
 
@@ -192,13 +196,15 @@ function jsonStore() {
   async function addChange(c) { db.changes.push(c); persist(); return c; }
   async function updateChange(c) { const i=db.changes.findIndex(x=>x.id===c.id); if(i>=0)db.changes[i]=c; persist(); return c; }
   async function deleteChange(id) { db.changes = db.changes.filter(x => x.id !== id); persist(); }
+  async function listGroupNotes() { return Object.values(db.groupNotes); }
+  async function setGroupNote(key, data) { if (!data) delete db.groupNotes[key]; else db.groupNotes[key] = data; persist(); return data; }
 
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents,
            listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats,
            listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage, updateMessage,
            listEvents, addEvent, deleteEvent, updateEvent,
            listRecoveries, addRecovery, deleteRecovery, updateRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition,
-           listChanges, addChange, updateChange, deleteChange };
+           listChanges, addChange, updateChange, deleteChange, listGroupNotes, setGroupNote };
 }
 
 const store = USE_PG ? pgStore() : jsonStore();

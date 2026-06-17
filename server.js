@@ -290,6 +290,17 @@ app.put('/api/recoveries/:id', auth, need('attendance'), async (req, res) => {
   res.json(r);
 });
 
+/* ---------------- Observaciones de grupo ---------------- */
+app.get('/api/groupnotes', auth, async (req, res) => { res.json(await store.listGroupNotes()); });
+app.put('/api/groupnotes', auth, need('content'), async (req, res) => {
+  const b = req.body || {};
+  if (!b.dia || !b.hora) return res.status(400).json({ error: 'Faltan datos' });
+  const key = [b.dia, b.hora, b.prof || ''].join('|');
+  const data = b.nota ? { key, dia: String(b.dia), hora: String(b.hora), prof: String(b.prof || ''), nota: String(b.nota), autor: req.user.nombre } : null;
+  await store.setGroupNote(key, data);
+  res.json({ ok: true, key });
+});
+
 app.get('/api/health', (req, res) => res.json({ ok: true, mode: store.MODE }));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
