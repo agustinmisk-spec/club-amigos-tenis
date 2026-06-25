@@ -85,6 +85,7 @@ app.patch('/api/students/:id/obs', auth, need('obs'), async (req, res) => {
   const s = list.find(x => x.id === req.params.id);
   if (!s) return res.status(404).json({ error: 'No existe' });
   s.obs = String((req.body && req.body.obs) || '');
+  if (req.body && req.body.obsColor != null) s.obsColor = String(req.body.obsColor).slice(0, 20);
   res.json(await store.upsertStudent(s));
 });
 app.delete('/api/students/:id', auth, need('delete'), async (req, res) => {
