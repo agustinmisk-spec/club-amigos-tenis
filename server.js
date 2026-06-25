@@ -90,6 +90,7 @@ app.patch('/api/students/:id/obs', auth, need('obs'), async (req, res) => {
     if (req.body.raqueta != null) s.raqueta = String(req.body.raqueta).slice(0, 30);
     if (req.body.raquetaCambiar != null) s.raquetaCambiar = !!req.body.raquetaCambiar;
     if (req.body.fichaTecnica != null) s.fichaTecnica = !!req.body.fichaTecnica;
+    if (req.body.video != null) s.video = !!req.body.video;
   }
   res.json(await store.upsertStudent(s));
 });
