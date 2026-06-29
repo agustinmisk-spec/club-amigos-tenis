@@ -82,6 +82,10 @@ function pgStore() {
     const rows = await q(`SELECT student_id, val, count(*)::int c FROM attendance GROUP BY student_id, val`);
     const m = {}; rows.forEach(r => { const o=(m[r.student_id]=m[r.student_id]||{p:0,a:0,s:0}); if(r.val==='P')o.p=r.c; else if(r.val==='A')o.a=r.c; else if(r.val&&r.val[0]==='S')o.s+=r.c; }); return m;
   }
+  async function getAttendanceRange(from, to) {
+    const rows = await q(`SELECT student_id, dt, val FROM attendance WHERE dt>=$1 AND dt<=$2`, [from, to]);
+    return rows.map(r => ({ studentId: r.student_id, dt: r.dt, val: r.val }));
+  }
 
   async function listPlans() { return (await q(`SELECT meta FROM plans ORDER BY meta->>'fecha' DESC`)).map(r => r.meta); }
   async function addPlan(p, content) { await q(`INSERT INTO plans(id,meta,content) VALUES($1,$2,$3)`, [p.id, p, content]); return p; }
@@ -120,7 +124,7 @@ function pgStore() {
   }
 
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents, storageInfo,
-           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats,
+           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats, getAttendanceRange,
            listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage, updateMessage,
            listEvents, addEvent, deleteEvent, updateEvent,
            listRecoveries, addRecovery, deleteRecovery, updateRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition,
@@ -180,6 +184,9 @@ function jsonStore() {
   async function getAttendanceStats() {
     const m = {}; Object.keys(db.attendance).forEach(k => { const sid=k.split('|')[0]; const v=db.attendance[k]; const o=(m[sid]=m[sid]||{p:0,a:0,s:0}); if(v==='P')o.p++; else if(v==='A')o.a++; else if(v&&v[0]==='S')o.s++; }); return m;
   }
+  async function getAttendanceRange(from, to) {
+    const out = []; Object.keys(db.attendance).forEach(k => { const i=k.indexOf('|'); const sid=k.slice(0,i), dt=k.slice(i+1); if(dt>=from && dt<=to) out.push({ studentId: sid, dt, val: db.attendance[k] }); }); return out;
+  }
 
   async function listPlans() { return db.plans.map(({ content, ...meta }) => meta).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')); }
   async function addPlan(p, content) { db.plans.push({ ...p, content }); persist(); return p; }
@@ -217,7 +224,7 @@ function jsonStore() {
   }
 
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents, storageInfo,
-           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats,
+           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats, getAttendanceRange,
            listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage, updateMessage,
            listEvents, addEvent, deleteEvent, updateEvent,
            listRecoveries, addRecovery, deleteRecovery, updateRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition,
