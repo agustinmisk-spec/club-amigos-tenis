@@ -68,6 +68,10 @@ app.get('/api/bootstrap', auth, async (req, res) => {
 app.put('/api/config', auth, need('config'), async (req, res) => {
   res.json(await store.setConfig(req.body || {}));
 });
+app.get('/api/storage', auth, need('config'), async (req, res) => {
+  try { res.json(await store.storageInfo()); }
+  catch (e) { res.status(500).json({ error: 'No disponible' }); }
+});
 
 /* ---------------- Alumnos ---------------- */
 app.post('/api/students', auth, need('students'), async (req, res) => {

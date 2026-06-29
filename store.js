@@ -109,8 +109,17 @@ function pgStore() {
   async function deleteChange(id) { await q(`DELETE FROM changes WHERE id=$1`, [id]); }
   async function listGroupNotes() { return (await q(`SELECT data FROM group_notes`)).map(r => r.data); }
   async function setGroupNote(key, data) { if (!data) { await q(`DELETE FROM group_notes WHERE key=$1`, [key]); return null; } await q(`INSERT INTO group_notes(key,data) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET data=$2`, [key, data]); return data; }
+  async function storageInfo() {
+    let bytes = 0;
+    try { const r = await q(`SELECT pg_database_size(current_database()) AS s`); bytes = Number(r[0].s) || 0; } catch (e) {}
+    const counts = {};
+    for (const t of ['students', 'attendance', 'plans', 'messages', 'events', 'recoveries', 'competitions', 'changes']) {
+      try { const r = await q(`SELECT count(*)::int AS n FROM ${t}`); counts[t] = r[0].n; } catch (e) { counts[t] = 0; }
+    }
+    return { mode: 'postgres', bytes, counts };
+  }
 
-  return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents,
+  return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents, storageInfo,
            listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats,
            listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage, updateMessage,
            listEvents, addEvent, deleteEvent, updateEvent,
@@ -198,8 +207,16 @@ function jsonStore() {
   async function deleteChange(id) { db.changes = db.changes.filter(x => x.id !== id); persist(); }
   async function listGroupNotes() { return Object.values(db.groupNotes); }
   async function setGroupNote(key, data) { if (!data) delete db.groupNotes[key]; else db.groupNotes[key] = data; persist(); return data; }
+  async function storageInfo() {
+    let bytes = 0; try { bytes = Buffer.byteLength(JSON.stringify(db)); } catch (e) {}
+    return { mode: 'json-file', bytes, counts: {
+      students: db.students.length, attendance: Object.keys(db.attendance || {}).length,
+      plans: (db.plans || []).length, messages: (db.messages || []).length, events: (db.events || []).length,
+      recoveries: (db.recoveries || []).length, competitions: (db.competitions || []).length, changes: (db.changes || []).length
+    } };
+  }
 
-  return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents,
+  return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents, storageInfo,
            listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats,
            listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage, updateMessage,
            listEvents, addEvent, deleteEvent, updateEvent,
