@@ -93,7 +93,17 @@ app.patch('/api/students/:id/obs', auth, need('obs'), async (req, res) => {
     if (req.body.video != null) s.video = !!req.body.video;
     if (req.body.fichaDrive != null) s.fichaDrive = String(req.body.fichaDrive).slice(0, 4000);
     if (req.body.fichaReves != null) s.fichaReves = String(req.body.fichaReves).slice(0, 4000);
+    if (req.body.fichaFecha != null) s.fichaFecha = String(req.body.fichaFecha).slice(0, 10);
     if (req.body.videoUrl != null) s.videoUrl = String(req.body.videoUrl).slice(0, 500);
+    if (Array.isArray(req.body.records)) s.records = req.body.records.slice(0, 60).map(r => ({
+      type: ['ficha', 'video', 'link'].includes(r && r.type) ? r.type : 'link',
+      fecha: String((r && r.fecha) || '').slice(0, 10),
+      drive: String((r && r.drive) || '').slice(0, 4000),
+      reves: String((r && r.reves) || '').slice(0, 4000),
+      titulo: String((r && r.titulo) || '').slice(0, 200),
+      url: String((r && r.url) || '').slice(0, 600),
+      nota: String((r && r.nota) || '').slice(0, 3000)
+    }));
     if (Array.isArray(req.body.extras)) s.extras = req.body.extras.map(x => String(x).slice(0, 40)).slice(0, 30);
   }
   res.json(await store.upsertStudent(s));
