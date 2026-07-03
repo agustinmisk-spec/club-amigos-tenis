@@ -281,6 +281,7 @@ const cleanEval = b => {
   const soc = parseInt(b && b.social, 10);
   return {
     studentId: String((b && b.studentId) || ''),
+    periodo: String((b && b.periodo) || '').slice(0, 60),
     fecha: String((b && b.fecha) || ''),
     nivel: String((b && b.nivel) || '').slice(0, 80),
     scores,
@@ -291,8 +292,14 @@ const cleanEval = b => {
 app.get('/api/evaluations', auth, async (req, res) => { res.json(await store.listEvaluations()); });
 app.post('/api/evaluations', auth, need('obs'), async (req, res) => {
   const b = req.body || {};
-  if (!b.studentId || !b.fecha) return res.status(400).json({ error: 'Faltan alumno y fecha' });
-  const e = Object.assign({ id: 'ev' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) }, cleanEval(b), { autor: req.user.nombre });
+  if (!b.studentId || !(b.periodo || b.fecha)) return res.status(400).json({ error: 'Faltan alumno y período' });
+  const clean = cleanEval(b);
+  if (clean.periodo) {
+    const list = await store.listEvaluations();
+    const ex = list.find(x => x.studentId === clean.studentId && x.periodo === clean.periodo);
+    if (ex) { Object.assign(ex, clean); await store.updateEvaluation(ex); return res.json(ex); }
+  }
+  const e = Object.assign({ id: 'ev' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) }, clean, { autor: req.user.nombre });
   await store.addEvaluation(e);
   res.json(e);
 });
