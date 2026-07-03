@@ -247,6 +247,31 @@ app.put('/api/events/:id', auth, need('content'), async (req, res) => {
 });
 app.delete('/api/events/:id', auth, need('content'), async (req, res) => { await store.deleteEvent(req.params.id); res.json({ ok: true }); });
 
+/* ---------------- Capacitaciones ---------------- */
+const cleanTraining = b => ({
+  fecha: String(b.fecha || ''),
+  contenido: String(b.contenido || '').slice(0, 5000),
+  materiales: Array.isArray(b.materiales) ? b.materiales.map(x => String(x).slice(0, 500)).slice(0, 60) : [],
+  profesores: Array.isArray(b.profesores) ? b.profesores.map(x => String(x).slice(0, 80)).slice(0, 200) : []
+});
+app.get('/api/trainings', auth, async (req, res) => { res.json(await store.listTrainings()); });
+app.post('/api/trainings', auth, need('content'), async (req, res) => {
+  const b = req.body || {};
+  if (!b.fecha) return res.status(400).json({ error: 'Falta la fecha' });
+  const t = Object.assign({ id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) }, cleanTraining(b), { autor: req.user.nombre });
+  await store.addTraining(t);
+  res.json(t);
+});
+app.put('/api/trainings/:id', auth, need('content'), async (req, res) => {
+  const list = await store.listTrainings();
+  const t = list.find(x => x.id === req.params.id);
+  if (!t) return res.status(404).json({ error: 'No existe' });
+  Object.assign(t, cleanTraining(req.body || {}));
+  await store.updateTraining(t);
+  res.json(t);
+});
+app.delete('/api/trainings/:id', auth, need('content'), async (req, res) => { await store.deleteTraining(req.params.id); res.json({ ok: true }); });
+
 /* ---------------- Recuperaciones e invitaciones (por fecha) ---------------- */
 app.get('/api/recoveries', auth, async (req, res) => { res.json(await store.listRecoveries()); });
 app.post('/api/recoveries', auth, need('attendance'), async (req, res) => {
