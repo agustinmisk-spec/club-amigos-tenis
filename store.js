@@ -45,6 +45,7 @@ function pgStore() {
     await q(`CREATE TABLE IF NOT EXISTS messages (id text PRIMARY KEY, data jsonb NOT NULL)`);
     await q(`CREATE TABLE IF NOT EXISTS events (id text PRIMARY KEY, data jsonb NOT NULL)`);
     await q(`CREATE TABLE IF NOT EXISTS trainings (id text PRIMARY KEY, data jsonb NOT NULL)`);
+    await q(`CREATE TABLE IF NOT EXISTS evaluations (id text PRIMARY KEY, data jsonb NOT NULL)`);
     await q(`CREATE TABLE IF NOT EXISTS recoveries (id text PRIMARY KEY, data jsonb NOT NULL)`);
     await q(`CREATE TABLE IF NOT EXISTS competitions (id text PRIMARY KEY, data jsonb NOT NULL)`);
     await q(`CREATE TABLE IF NOT EXISTS changes (id text PRIMARY KEY, data jsonb NOT NULL)`);
@@ -104,6 +105,10 @@ function pgStore() {
   async function addTraining(t) { await q(`INSERT INTO trainings(id,data) VALUES($1,$2)`, [t.id, t]); return t; }
   async function deleteTraining(id) { await q(`DELETE FROM trainings WHERE id=$1`, [id]); }
   async function updateTraining(t) { await q(`UPDATE trainings SET data=$2 WHERE id=$1`, [t.id, t]); return t; }
+  async function listEvaluations() { return (await q(`SELECT data FROM evaluations ORDER BY data->>'fecha' DESC`)).map(r => r.data); }
+  async function addEvaluation(e) { await q(`INSERT INTO evaluations(id,data) VALUES($1,$2)`, [e.id, e]); return e; }
+  async function deleteEvaluation(id) { await q(`DELETE FROM evaluations WHERE id=$1`, [id]); }
+  async function updateEvaluation(e) { await q(`UPDATE evaluations SET data=$2 WHERE id=$1`, [e.id, e]); return e; }
   async function listRecoveries() { return (await q(`SELECT data FROM recoveries ORDER BY data->>'fecha' DESC`)).map(r => r.data); }
   async function addRecovery(r) { await q(`INSERT INTO recoveries(id,data) VALUES($1,$2)`, [r.id, r]); return r; }
   async function deleteRecovery(id) { await q(`DELETE FROM recoveries WHERE id=$1`, [id]); }
@@ -122,7 +127,7 @@ function pgStore() {
     let bytes = 0;
     try { const r = await q(`SELECT pg_database_size(current_database()) AS s`); bytes = Number(r[0].s) || 0; } catch (e) {}
     const counts = {};
-    for (const t of ['students', 'attendance', 'plans', 'messages', 'events', 'recoveries', 'competitions', 'changes', 'trainings']) {
+    for (const t of ['students', 'attendance', 'plans', 'messages', 'events', 'recoveries', 'competitions', 'changes', 'trainings', 'evaluations']) {
       try { const r = await q(`SELECT count(*)::int AS n FROM ${t}`); counts[t] = r[0].n; } catch (e) { counts[t] = 0; }
     }
     return { mode: 'postgres', bytes, counts };
@@ -131,7 +136,7 @@ function pgStore() {
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents, storageInfo,
            listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats, getAttendanceRange,
            listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage, updateMessage,
-           listEvents, addEvent, deleteEvent, updateEvent, listTrainings, addTraining, deleteTraining, updateTraining,
+           listEvents, addEvent, deleteEvent, updateEvent, listTrainings, addTraining, deleteTraining, updateTraining, listEvaluations, addEvaluation, deleteEvaluation, updateEvaluation,
            listRecoveries, addRecovery, deleteRecovery, updateRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition,
            listChanges, addChange, updateChange, deleteChange, listGroupNotes, setGroupNote };
 }
@@ -158,6 +163,7 @@ function jsonStore() {
     if (!db.messages) db.messages = [];
     if (!db.events) db.events = [];
     if (!db.trainings) db.trainings = [];
+    if (!db.evaluations) db.evaluations = [];
     if (!db.recoveries) db.recoveries = [];
     if (!db.competitions) db.competitions = [];
     if (!db.changes) db.changes = [];
@@ -210,6 +216,10 @@ function jsonStore() {
   async function addTraining(t) { db.trainings.push(t); persist(); return t; }
   async function deleteTraining(id) { db.trainings = db.trainings.filter(x => x.id !== id); persist(); }
   async function updateTraining(t) { const i=db.trainings.findIndex(x=>x.id===t.id); if(i>=0)db.trainings[i]=t; persist(); return t; }
+  async function listEvaluations() { return db.evaluations.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')); }
+  async function addEvaluation(e) { db.evaluations.push(e); persist(); return e; }
+  async function deleteEvaluation(id) { db.evaluations = db.evaluations.filter(x => x.id !== id); persist(); }
+  async function updateEvaluation(e) { const i=db.evaluations.findIndex(x=>x.id===e.id); if(i>=0)db.evaluations[i]=e; persist(); return e; }
   async function listRecoveries() { return db.recoveries.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')); }
   async function addRecovery(r) { db.recoveries.push(r); persist(); return r; }
   async function deleteRecovery(id) { db.recoveries = db.recoveries.filter(x => x.id !== id); persist(); }
@@ -236,7 +246,7 @@ function jsonStore() {
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents, storageInfo,
            listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats, getAttendanceRange,
            listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage, updateMessage,
-           listEvents, addEvent, deleteEvent, updateEvent, listTrainings, addTraining, deleteTraining, updateTraining,
+           listEvents, addEvent, deleteEvent, updateEvent, listTrainings, addTraining, deleteTraining, updateTraining, listEvaluations, addEvaluation, deleteEvaluation, updateEvaluation,
            listRecoveries, addRecovery, deleteRecovery, updateRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition,
            listChanges, addChange, updateChange, deleteChange, listGroupNotes, setGroupNote };
 }

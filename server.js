@@ -272,6 +272,40 @@ app.put('/api/trainings/:id', auth, need('content'), async (req, res) => {
 });
 app.delete('/api/trainings/:id', auth, need('content'), async (req, res) => { await store.deleteTraining(req.params.id); res.json({ ok: true }); });
 
+/* ---------------- Evaluaciones ---------------- */
+const cleanEval = b => {
+  const scores = {};
+  if (b && b.scores && typeof b.scores === 'object') {
+    Object.keys(b.scores).slice(0, 300).forEach(k => { const v = parseInt(b.scores[k], 10); if (v >= 1 && v <= 4) scores[String(k).slice(0, 40)] = v; });
+  }
+  const soc = parseInt(b && b.social, 10);
+  return {
+    studentId: String((b && b.studentId) || ''),
+    fecha: String((b && b.fecha) || ''),
+    nivel: String((b && b.nivel) || '').slice(0, 80),
+    scores,
+    social: (soc >= 1 && soc <= 3) ? soc : null,
+    obs: String((b && b.obs) || '').slice(0, 3000)
+  };
+};
+app.get('/api/evaluations', auth, async (req, res) => { res.json(await store.listEvaluations()); });
+app.post('/api/evaluations', auth, need('obs'), async (req, res) => {
+  const b = req.body || {};
+  if (!b.studentId || !b.fecha) return res.status(400).json({ error: 'Faltan alumno y fecha' });
+  const e = Object.assign({ id: 'ev' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) }, cleanEval(b), { autor: req.user.nombre });
+  await store.addEvaluation(e);
+  res.json(e);
+});
+app.put('/api/evaluations/:id', auth, need('obs'), async (req, res) => {
+  const list = await store.listEvaluations();
+  const e = list.find(x => x.id === req.params.id);
+  if (!e) return res.status(404).json({ error: 'No existe' });
+  Object.assign(e, cleanEval(Object.assign({ studentId: e.studentId }, req.body || {})));
+  await store.updateEvaluation(e);
+  res.json(e);
+});
+app.delete('/api/evaluations/:id', auth, need('obs'), async (req, res) => { await store.deleteEvaluation(req.params.id); res.json({ ok: true }); });
+
 /* ---------------- Recuperaciones e invitaciones (por fecha) ---------------- */
 app.get('/api/recoveries', auth, async (req, res) => { res.json(await store.listRecoveries()); });
 app.post('/api/recoveries', auth, need('attendance'), async (req, res) => {
