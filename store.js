@@ -88,6 +88,10 @@ function pgStore() {
     const rows = await q(`SELECT student_id, dt, val FROM attendance WHERE dt>=$1 AND dt<=$2`, [from, to]);
     return rows.map(r => ({ studentId: r.student_id, dt: r.dt, val: r.val }));
   }
+  async function getAttendanceByStudent(studentId) {
+    const rows = await q(`SELECT dt, val FROM attendance WHERE student_id=$1 ORDER BY dt DESC`, [studentId]);
+    return rows.map(r => ({ dt: r.dt, val: r.val }));
+  }
 
   async function listPlans() { return (await q(`SELECT meta FROM plans ORDER BY meta->>'fecha' DESC`)).map(r => r.meta); }
   async function addPlan(p, content) { await q(`INSERT INTO plans(id,meta,content) VALUES($1,$2,$3)`, [p.id, p, content]); return p; }
@@ -134,7 +138,7 @@ function pgStore() {
   }
 
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents, storageInfo,
-           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats, getAttendanceRange,
+           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats, getAttendanceRange, getAttendanceByStudent,
            listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage, updateMessage,
            listEvents, addEvent, deleteEvent, updateEvent, listTrainings, addTraining, deleteTraining, updateTraining, listEvaluations, addEvaluation, deleteEvaluation, updateEvaluation,
            listRecoveries, addRecovery, deleteRecovery, updateRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition,
@@ -199,6 +203,9 @@ function jsonStore() {
   async function getAttendanceRange(from, to) {
     const out = []; Object.keys(db.attendance).forEach(k => { const i=k.indexOf('|'); const sid=k.slice(0,i), dt=k.slice(i+1); if(dt>=from && dt<=to) out.push({ studentId: sid, dt, val: db.attendance[k] }); }); return out;
   }
+  async function getAttendanceByStudent(studentId) {
+    const out = []; Object.keys(db.attendance).forEach(k => { const i=k.indexOf('|'); const sid=k.slice(0,i), dt=k.slice(i+1); if(sid===studentId) out.push({ dt, val: db.attendance[k] }); }); out.sort((a,b)=>(b.dt||'').localeCompare(a.dt||'')); return out;
+  }
 
   async function listPlans() { return db.plans.map(({ content, ...meta }) => meta).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')); }
   async function addPlan(p, content) { db.plans.push({ ...p, content }); persist(); return p; }
@@ -244,7 +251,7 @@ function jsonStore() {
   }
 
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents, storageInfo,
-           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats, getAttendanceRange,
+           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats, getAttendanceRange, getAttendanceByStudent,
            listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage, updateMessage,
            listEvents, addEvent, deleteEvent, updateEvent, listTrainings, addTraining, deleteTraining, updateTraining, listEvaluations, addEvaluation, deleteEvaluation, updateEvaluation,
            listRecoveries, addRecovery, deleteRecovery, updateRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition,

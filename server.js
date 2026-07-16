@@ -129,6 +129,9 @@ app.get('/api/attendance/range', auth, async (req, res) => {
   if (!from || !to) return res.status(400).json({ error: 'Faltan fechas' });
   res.json(await store.getAttendanceRange(from, to));
 });
+app.get('/api/attendance/student/:id', auth, async (req, res) => {
+  res.json(await store.getAttendanceByStudent(String(req.params.id)));
+});
 app.put('/api/attendance', auth, need('attendance'), async (req, res) => {
   const { studentId, date, val } = req.body || {};
   if (!studentId || !date) return res.status(400).json({ error: 'Faltan datos' });
