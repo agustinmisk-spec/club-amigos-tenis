@@ -289,7 +289,8 @@ const cleanEval = b => {
     nivel: String((b && b.nivel) || '').slice(0, 80),
     scores,
     social: (soc >= 1 && soc <= 3) ? soc : null,
-    obs: String((b && b.obs) || '').slice(0, 3000)
+    obs: String((b && b.obs) || '').slice(0, 3000),
+    socV2: true
   };
 };
 app.get('/api/evaluations', auth, async (req, res) => { res.json(await store.listEvaluations()); });
@@ -403,6 +404,26 @@ app.put('/api/groupnotes', auth, need('content'), async (req, res) => {
 app.get('/api/health', (req, res) => res.json({ ok: true, mode: store.MODE }));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
+// Migración única: la escala socio-emocional pasó a 1=Desinteresado, 2=Disfruta, 3=Fanático.
+// Convierte los puntajes ya cargados (1<->3) una sola vez por evaluación (marca socV2).
+async function migrateSocialScale() {
+  try {
+    const evals = await store.listEvaluations();
+    let n = 0;
+    for (const e of evals) {
+      if (e && !e.socV2) {
+        const v = +e.social;
+        if (v === 1 || v === 3) e.social = 4 - v;
+        e.socV2 = true;
+        await store.updateEvaluation(e);
+        n++;
+      }
+    }
+    if (n) console.log(`Migración escala socio-emocional (1<->3): ${n} evaluaciones actualizadas.`);
+  } catch (e) { console.error('Migración escala socio-emocional falló:', e); }
+}
+
 store.init()
+  .then(migrateSocialScale)
   .then(() => app.listen(PORT, () => console.log(`Escuela de Tenis - Club de Amigos\nModo almacenamiento: ${store.MODE}\nServidor en http://localhost:${PORT}`)))
   .catch(e => { console.error('Error al iniciar:', e); process.exit(1); });
