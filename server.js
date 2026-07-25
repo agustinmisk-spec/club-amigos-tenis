@@ -337,7 +337,7 @@ app.post('/api/competitions', auth, need('content'), async (req, res) => {
   const b = req.body || {};
   if (!b.fecha || !b.nombre) return res.status(400).json({ error: 'Faltan fecha y nombre' });
   const c = { id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
-    fecha: String(b.fecha), nombre: String(b.nombre).slice(0, 200), lugar: String(b.lugar || ''),
+    fecha: String(b.fecha), hora: String(b.hora || ''), nombre: String(b.nombre).slice(0, 200), lugar: String(b.lugar || ''),
     nota: String(b.nota || ''), participantes: Array.isArray(b.participantes) ? b.participantes : [], autor: req.user.nombre };
   await store.addCompetition(c);
   res.json(c);
@@ -348,6 +348,7 @@ app.put('/api/competitions/:id', auth, need('content'), async (req, res) => {
   if (!c) return res.status(404).json({ error: 'No existe' });
   const b = req.body || {};
   if (b.fecha != null) c.fecha = String(b.fecha);
+  if (b.hora != null) c.hora = String(b.hora);
   if (b.nombre != null) c.nombre = String(b.nombre).slice(0, 200);
   if (b.lugar != null) c.lugar = String(b.lugar);
   if (b.nota != null) c.nota = String(b.nota);
