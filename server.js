@@ -135,6 +135,9 @@ app.get('/api/attendance/student/:id', auth, async (req, res) => {
 app.get('/api/attendance/lastpresent', auth, async (req, res) => {
   res.json(await store.getLastPresentByStudent());
 });
+app.get('/api/attendance/streaks', auth, async (req, res) => {
+  res.json(await store.getAbsenceStreaks());
+});
 app.put('/api/attendance', auth, need('attendance'), async (req, res) => {
   const { studentId, date, val } = req.body || {};
   if (!studentId || !date) return res.status(400).json({ error: 'Faltan datos' });

@@ -96,6 +96,19 @@ function pgStore() {
     const rows = await q(`SELECT student_id, max(dt) d FROM attendance WHERE val='P' GROUP BY student_id`);
     const m = {}; rows.forEach(r => m[r.student_id] = r.d); return m;
   }
+  async function getAbsenceStreaks() {
+    const rows = await q(`SELECT student_id, dt, val FROM attendance ORDER BY student_id ASC, dt DESC`);
+    const m = {}; let curSid = null, done = false;
+    rows.forEach(r => {
+      if (r.student_id !== curSid) { curSid = r.student_id; m[curSid] = { miss: 0, lastPresent: '' }; done = false; }
+      if (done) return;
+      const v = r.val;
+      if (v === 'P') { m[curSid].lastPresent = r.dt; done = true; }
+      else if (v && v[0] === 'S') { /* suspendida: no cuenta */ }
+      else if (v === 'A') { m[curSid].miss++; }
+    });
+    return m;
+  }
 
   async function listPlans() { return (await q(`SELECT meta FROM plans ORDER BY meta->>'fecha' DESC`)).map(r => r.meta); }
   async function addPlan(p, content) { await q(`INSERT INTO plans(id,meta,content) VALUES($1,$2,$3)`, [p.id, p, content]); return p; }
@@ -142,7 +155,7 @@ function pgStore() {
   }
 
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents, storageInfo,
-           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats, getAttendanceRange, getAttendanceByStudent, getLastPresentByStudent,
+           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats, getAttendanceRange, getAttendanceByStudent, getLastPresentByStudent, getAbsenceStreaks,
            listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage, updateMessage,
            listEvents, addEvent, deleteEvent, updateEvent, listTrainings, addTraining, deleteTraining, updateTraining, listEvaluations, addEvaluation, deleteEvaluation, updateEvaluation,
            listRecoveries, addRecovery, deleteRecovery, updateRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition,
@@ -210,6 +223,11 @@ function jsonStore() {
   async function getAttendanceByStudent(studentId) {
     const out = []; Object.keys(db.attendance).forEach(k => { const i=k.indexOf('|'); const sid=k.slice(0,i), dt=k.slice(i+1); if(sid===studentId) out.push({ dt, val: db.attendance[k] }); }); out.sort((a,b)=>(b.dt||'').localeCompare(a.dt||'')); return out;
   }
+  async function getAbsenceStreaks() {
+    const by = {}; Object.keys(db.attendance).forEach(k => { const i=k.indexOf('|'); const sid=k.slice(0,i), dt=k.slice(i+1); (by[sid]=by[sid]||[]).push({ dt, val: db.attendance[k] }); });
+    const m = {}; Object.keys(by).forEach(sid => { const arr = by[sid].sort((a,b)=>(b.dt||'').localeCompare(a.dt||'')); let miss=0, lastPresent=''; for (const r of arr) { const v=r.val; if (v==='P') { lastPresent=r.dt; break; } else if (v && v[0]==='S') { continue; } else if (v==='A') { miss++; } } m[sid] = { miss, lastPresent }; });
+    return m;
+  }
   async function getLastPresentByStudent() {
     const m = {}; Object.keys(db.attendance).forEach(k => { if (db.attendance[k] !== 'P') return; const i=k.indexOf('|'); const sid=k.slice(0,i), dt=k.slice(i+1); if (!m[sid] || dt > m[sid]) m[sid] = dt; }); return m;
   }
@@ -258,7 +276,7 @@ function jsonStore() {
   }
 
   return { init, getConfig, setConfig, listStudents, upsertStudent, deleteStudent, countStudents, storageInfo,
-           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats, getAttendanceRange, getAttendanceByStudent, getLastPresentByStudent,
+           listUsers, rawUpsertUser, deleteUser, countUsers, getAttendanceByDate, setAttendance, getAttendanceStats, getAttendanceRange, getAttendanceByStudent, getLastPresentByStudent, getAbsenceStreaks,
            listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage, updateMessage,
            listEvents, addEvent, deleteEvent, updateEvent, listTrainings, addTraining, deleteTraining, updateTraining, listEvaluations, addEvaluation, deleteEvaluation, updateEvaluation,
            listRecoveries, addRecovery, deleteRecovery, updateRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition,
