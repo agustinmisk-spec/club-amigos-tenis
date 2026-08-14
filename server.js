@@ -237,7 +237,8 @@ app.post('/api/events', auth, need('content'), async (req, res) => {
   const b = req.body || {};
   if (!b.fecha || !b.titulo) return res.status(400).json({ error: 'Faltan fecha y título' });
   const ev = { id: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
-    fecha: String(b.fecha), titulo: String(b.titulo).slice(0, 200), tipo: String(b.tipo || 'Actividad'),
+    fecha: String(b.fecha), fechaFin: String(b.fechaFin || ''), horaIni: String(b.horaIni || ''), horaFin: String(b.horaFin || ''),
+    titulo: String(b.titulo).slice(0, 200), tipo: String(b.tipo || 'Actividad'),
     nota: String(b.nota || ''), autor: req.user.nombre };
   await store.addEvent(ev);
   res.json(ev);
@@ -248,6 +249,9 @@ app.put('/api/events/:id', auth, need('content'), async (req, res) => {
   if (!e) return res.status(404).json({ error: 'No existe' });
   const b = req.body || {};
   if (b.fecha != null) e.fecha = String(b.fecha);
+  if (b.fechaFin != null) e.fechaFin = String(b.fechaFin);
+  if (b.horaIni != null) e.horaIni = String(b.horaIni);
+  if (b.horaFin != null) e.horaFin = String(b.horaFin);
   if (b.titulo != null) e.titulo = String(b.titulo).slice(0, 200);
   if (b.tipo != null) e.tipo = String(b.tipo);
   if (b.nota != null) e.nota = String(b.nota);
