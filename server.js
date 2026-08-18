@@ -390,6 +390,28 @@ app.patch('/api/changes/:id', auth, need('content'), async (req, res) => {
 });
 app.delete('/api/changes/:id', auth, need('content'), async (req, res) => { await store.deleteChange(req.params.id); res.json({ ok: true }); });
 
+/* ---------------- Tareas (lista compartida) ---------------- */
+app.get('/api/tasks', auth, async (req, res) => { res.json(await store.listTasks()); });
+app.post('/api/tasks', auth, async (req, res) => {
+  const b = req.body || {};
+  if (!b.texto || !String(b.texto).trim()) return res.status(400).json({ error: 'Falta el texto' });
+  const t = { id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+    texto: String(b.texto).slice(0, 500), done: false, fecha: new Date().toISOString(), autor: req.user.nombre };
+  await store.addTask(t);
+  res.json(t);
+});
+app.patch('/api/tasks/:id', auth, async (req, res) => {
+  const list = await store.listTasks();
+  const t = list.find(x => x.id === req.params.id);
+  if (!t) return res.status(404).json({ error: 'No existe' });
+  const b = req.body || {};
+  if (b.done != null) t.done = !!b.done;
+  if (b.texto != null) t.texto = String(b.texto).slice(0, 500);
+  await store.updateTask(t);
+  res.json(t);
+});
+app.delete('/api/tasks/:id', auth, async (req, res) => { await store.deleteTask(req.params.id); res.json({ ok: true }); });
+
 /* ---------------- Editar recuperación ---------------- */
 app.put('/api/recoveries/:id', auth, need('attendance'), async (req, res) => {
   const list = await store.listRecoveries();

@@ -50,6 +50,7 @@ function pgStore() {
     await q(`CREATE TABLE IF NOT EXISTS competitions (id text PRIMARY KEY, data jsonb NOT NULL)`);
     await q(`CREATE TABLE IF NOT EXISTS changes (id text PRIMARY KEY, data jsonb NOT NULL)`);
     await q(`CREATE TABLE IF NOT EXISTS group_notes (key text PRIMARY KEY, data jsonb NOT NULL)`);
+    await q(`CREATE TABLE IF NOT EXISTS tasks (id text PRIMARY KEY, data jsonb NOT NULL)`);
     const seed = loadSeed();
     if (!(await getConfig())) await setConfig(seed.config || {});
     if ((await countStudents()) === 0 && Array.isArray(seed.students)) {
@@ -144,11 +145,15 @@ function pgStore() {
   async function deleteChange(id) { await q(`DELETE FROM changes WHERE id=$1`, [id]); }
   async function listGroupNotes() { return (await q(`SELECT data FROM group_notes`)).map(r => r.data); }
   async function setGroupNote(key, data) { if (!data) { await q(`DELETE FROM group_notes WHERE key=$1`, [key]); return null; } await q(`INSERT INTO group_notes(key,data) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET data=$2`, [key, data]); return data; }
+  async function listTasks() { return (await q(`SELECT data FROM tasks ORDER BY data->>'fecha' ASC`)).map(r => r.data); }
+  async function addTask(t) { await q(`INSERT INTO tasks(id,data) VALUES($1,$2)`, [t.id, t]); return t; }
+  async function deleteTask(id) { await q(`DELETE FROM tasks WHERE id=$1`, [id]); }
+  async function updateTask(t) { await q(`UPDATE tasks SET data=$2 WHERE id=$1`, [t.id, t]); return t; }
   async function storageInfo() {
     let bytes = 0;
     try { const r = await q(`SELECT pg_database_size(current_database()) AS s`); bytes = Number(r[0].s) || 0; } catch (e) {}
     const counts = {};
-    for (const t of ['students', 'attendance', 'plans', 'messages', 'events', 'recoveries', 'competitions', 'changes', 'trainings', 'evaluations']) {
+    for (const t of ['students', 'attendance', 'plans', 'messages', 'events', 'recoveries', 'competitions', 'changes', 'trainings', 'evaluations', 'tasks']) {
       try { const r = await q(`SELECT count(*)::int AS n FROM ${t}`); counts[t] = r[0].n; } catch (e) { counts[t] = 0; }
     }
     return { mode: 'postgres', bytes, counts };
@@ -159,7 +164,7 @@ function pgStore() {
            listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage, updateMessage,
            listEvents, addEvent, deleteEvent, updateEvent, listTrainings, addTraining, deleteTraining, updateTraining, listEvaluations, addEvaluation, deleteEvaluation, updateEvaluation,
            listRecoveries, addRecovery, deleteRecovery, updateRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition,
-           listChanges, addChange, updateChange, deleteChange, listGroupNotes, setGroupNote };
+           listChanges, addChange, updateChange, deleteChange, listGroupNotes, setGroupNote, listTasks, addTask, deleteTask, updateTask };
 }
 
 /* =====================================================================
@@ -189,6 +194,7 @@ function jsonStore() {
     if (!db.competitions) db.competitions = [];
     if (!db.changes) db.changes = [];
     if (!db.groupNotes) db.groupNotes = {};
+    if (!db.tasks) db.tasks = [];
     persist();
   }
 
@@ -266,6 +272,10 @@ function jsonStore() {
   async function deleteChange(id) { db.changes = db.changes.filter(x => x.id !== id); persist(); }
   async function listGroupNotes() { return Object.values(db.groupNotes); }
   async function setGroupNote(key, data) { if (!data) delete db.groupNotes[key]; else db.groupNotes[key] = data; persist(); return data; }
+  async function listTasks() { return db.tasks.slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')); }
+  async function addTask(t) { db.tasks.push(t); persist(); return t; }
+  async function deleteTask(id) { db.tasks = db.tasks.filter(x => x.id !== id); persist(); }
+  async function updateTask(t) { const i=db.tasks.findIndex(x=>x.id===t.id); if(i>=0)db.tasks[i]=t; persist(); return t; }
   async function storageInfo() {
     let bytes = 0; try { bytes = Buffer.byteLength(JSON.stringify(db)); } catch (e) {}
     return { mode: 'json-file', bytes, counts: {
@@ -280,7 +290,7 @@ function jsonStore() {
            listPlans, addPlan, getPlan, deletePlan, listMessages, addMessage, deleteMessage, updateMessage,
            listEvents, addEvent, deleteEvent, updateEvent, listTrainings, addTraining, deleteTraining, updateTraining, listEvaluations, addEvaluation, deleteEvaluation, updateEvaluation,
            listRecoveries, addRecovery, deleteRecovery, updateRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition,
-           listChanges, addChange, updateChange, deleteChange, listGroupNotes, setGroupNote };
+           listChanges, addChange, updateChange, deleteChange, listGroupNotes, setGroupNote, listTasks, addTask, deleteTask, updateTask };
 }
 
 const store = USE_PG ? pgStore() : jsonStore();
