@@ -396,7 +396,7 @@ app.post('/api/tasks', auth, async (req, res) => {
   const b = req.body || {};
   if (!b.texto || !String(b.texto).trim()) return res.status(400).json({ error: 'Falta el texto' });
   const t = { id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
-    texto: String(b.texto).slice(0, 500), done: false, fecha: new Date().toISOString(), autor: req.user.nombre };
+    texto: String(b.texto).slice(0, 500), detalle: String(b.detalle || '').slice(0, 4000), done: false, fecha: new Date().toISOString(), autor: req.user.nombre };
   await store.addTask(t);
   res.json(t);
 });
@@ -407,6 +407,7 @@ app.patch('/api/tasks/:id', auth, async (req, res) => {
   const b = req.body || {};
   if (b.done != null) t.done = !!b.done;
   if (b.texto != null) t.texto = String(b.texto).slice(0, 500);
+  if (b.detalle != null) t.detalle = String(b.detalle).slice(0, 4000);
   await store.updateTask(t);
   res.json(t);
 });
