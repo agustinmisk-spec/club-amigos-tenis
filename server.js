@@ -2,6 +2,7 @@
    Login real (bcrypt + JWT), permisos por rol, base de datos. */
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('zlib');
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -418,9 +419,11 @@ app.get('/api/backup', async (req, res) => {
   const BK = process.env.BACKUP_KEY || '';
   if (!BK || String(req.query.key || '') !== BK) return res.status(403).json({ error: 'No autorizado' });
   try {
+    const cfg = (await store.getConfig()) || {};
+    const { logo, ...cfgNoLogo } = cfg; // el logo (imagen base64) se excluye: es pesado y no es dato crítico
     const dump = {
-      _backup: { fecha: new Date().toISOString(), app: 'Escuela de Tenis - Club de Amigos', version: 1, mode: store.MODE },
-      config: await store.getConfig(),
+      _backup: { fecha: new Date().toISOString(), app: 'Escuela de Tenis - Club de Amigos', version: 1, mode: store.MODE, sinLogo: true },
+      config: cfgNoLogo,
       students: await store.listStudents(),
       users: (await store.listUsers()).map(publicUser),
       attendance: await store.getAttendanceRange('0000-01-01', '9999-12-31'),
@@ -435,9 +438,16 @@ app.get('/api/backup', async (req, res) => {
       groupNotes: await store.listGroupNotes(),
       tasks: await store.listTasks()
     };
+    const json = JSON.stringify(dump);
+    if (String(req.query.gz || '') === '1') {
+      // gzip + base64: entra en una sola descarga sin cortarse
+      const b64 = zlib.gzipSync(Buffer.from(json, 'utf8')).toString('base64');
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.send(b64);
+    }
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="respaldo-club-amigos.json"');
-    res.send(JSON.stringify(dump));
+    res.send(json);
   } catch (e) { console.error('backup', e); res.status(500).json({ error: 'Error al generar el respaldo' }); }
 });
 
