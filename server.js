@@ -413,6 +413,34 @@ app.patch('/api/tasks/:id', auth, async (req, res) => {
 });
 app.delete('/api/tasks/:id', auth, async (req, res) => { await store.deleteTask(req.params.id); res.json({ ok: true }); });
 
+/* ---------------- Respaldo completo (automatizable, protegido por clave BACKUP_KEY) ---------------- */
+app.get('/api/backup', async (req, res) => {
+  const BK = process.env.BACKUP_KEY || '';
+  if (!BK || String(req.query.key || '') !== BK) return res.status(403).json({ error: 'No autorizado' });
+  try {
+    const dump = {
+      _backup: { fecha: new Date().toISOString(), app: 'Escuela de Tenis - Club de Amigos', version: 1, mode: store.MODE },
+      config: await store.getConfig(),
+      students: await store.listStudents(),
+      users: (await store.listUsers()).map(publicUser),
+      attendance: await store.getAttendanceRange('0000-01-01', '9999-12-31'),
+      evaluations: await store.listEvaluations(),
+      recoveries: await store.listRecoveries(),
+      competitions: await store.listCompetitions(),
+      changes: await store.listChanges(),
+      trainings: await store.listTrainings(),
+      plans: await store.listPlans(),
+      messages: await store.listMessages(),
+      events: await store.listEvents(),
+      groupNotes: await store.listGroupNotes(),
+      tasks: await store.listTasks()
+    };
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="respaldo-club-amigos.json"');
+    res.send(JSON.stringify(dump));
+  } catch (e) { console.error('backup', e); res.status(500).json({ error: 'Error al generar el respaldo' }); }
+});
+
 /* ---------------- Editar recuperación ---------------- */
 app.put('/api/recoveries/:id', auth, need('attendance'), async (req, res) => {
   const list = await store.listRecoveries();
