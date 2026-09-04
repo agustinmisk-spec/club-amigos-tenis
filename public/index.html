@@ -183,6 +183,8 @@
   .tecstat{display:inline-block;font-size:11px;font-weight:700;border-radius:20px;padding:1px 9px}
   .tecstat.ok{background:#e7f6ee;color:#0f7a43}
   .tecstat.no{background:#f1f3f5;color:#7a828c}
+  .tecchks{display:flex;flex-wrap:wrap;gap:5px 16px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#fafbfc}
+  .tecchks label{display:flex;align-items:center;gap:5px;font-size:12.5px;font-weight:500;cursor:pointer}
   @media print{.overlay.tecprint{position:static!important;background:#fff!important}.overlay.tecprint .modal{box-shadow:none!important;max-width:none!important;width:100%!important;max-height:none!important}.overlay.tecprint .tecnoprint{display:none!important}.tecnum{border:none}}
   .row-actions{display:flex;gap:5px}
   @media(max-width:640px){.grid2,.grid3,.grid4{grid-template-columns:1fr}.wrap{padding:13px}}
@@ -575,7 +577,7 @@
     <div id="tecDesignBox"></div>
     <div class="toolbar" id="tecScoreBar">
       <label class="small" style="font-weight:600;display:flex;align-items:center;gap:5px">Período <input id="tecPeriodo" style="width:150px;padding:6px 8px;border:1px solid var(--line);border-radius:8px" onchange="tecPeriodChange()"></label>
-      <label class="small" style="font-weight:600;display:flex;align-items:center;gap:5px">Plantilla <select id="tecPlantillaSel" onchange="tecRenderList()" style="min-width:200px"></select></label>
+      <label class="small" style="font-weight:600;display:flex;align-items:center;gap:5px">Plantilla <select id="tecPlantillaSel" onchange="tecPlantillaChange()" style="min-width:200px"></select></label>
       <input type="search" id="tecSearch" placeholder="Buscar alumno…" oninput="tecRenderList()" style="min-width:170px">
       <span id="tecProg"></span>
       <span id="tecNivel"></span>
@@ -1976,7 +1978,11 @@ async function delEval(id){if(!can('obs'))return;if(!confirm('¿Eliminar esta ev
 /* ===== Evaluaciones técnicas (rúbricas a medida) ===== */
 let TECEVALS=[],tecEditPl=null,tecStudentId=null,tecDesignerOpen=false,_tecCfgT=null;
 function tecPlantillas(){const c=DB.config;return Array.isArray(c.evalTecPlantillas)?c.evalTecPlantillas:[];}
-function ensureTecPlantillas(){const c=DB.config;if(!Array.isArray(c.evalTecPlantillas)||!c.evalTecPlantillas.length)c.evalTecPlantillas=defaultTecPlantillas();if(!c.evalTecPeriodo)c.evalTecPeriodo='Octubre 2026';}
+function tecNormalizePl(pl){if(!pl)return pl;if(!Array.isArray(pl.programas))pl.programas=pl.programa?[pl.programa]:[];if(!Array.isArray(pl.niveles))pl.niveles=pl.nivel?[pl.nivel]:[];if(!Array.isArray(pl.rubros))pl.rubros=[];return pl;}
+function tecPlProgramas(pl){return pl?(Array.isArray(pl.programas)?pl.programas:(pl.programa?[pl.programa]:[])):[];}
+function tecPlNiveles(pl){return pl?(Array.isArray(pl.niveles)?pl.niveles:(pl.nivel?[pl.nivel]:[])):[];}
+function ensureTecPlantillas(){const c=DB.config;if(!Array.isArray(c.evalTecPlantillas))c.evalTecPlantillas=[];c.evalTecPlantillas.forEach(tecNormalizePl);if(!c.evalTecPeriodo)c.evalTecPeriodo='Octubre 2026';}
+function tecLoadDefaults(){if(!can('config'))return;const defs=defaultTecPlantillas().map(p=>{p.programas=p.programa?[p.programa]:[];p.niveles=p.nivel?[p.nivel]:[];delete p.programa;delete p.nivel;return p;});DB.config.evalTecPlantillas=tecPlantillas().concat(defs);if(defs.length)tecEditPl=defs[0].id;tecSaveConfig();refreshTecDesigner();}
 function tecSaveConfig(){clearTimeout(_tecCfgT);_tecCfgT=setTimeout(()=>{if(can('config'))api('PUT','/api/config',DB.config).catch(e=>console.warn(e));},500);}
 function tecUID(p){return (p||'x')+Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
 function _tecStroke(pid,key,nombre,subNames){const rid=pid+'/'+key;return {id:rid,nombre,items:[{id:rid+'/prec',nombre:'Precisión',tipo:'simple',min:0,max:12},{id:rid+'/tec',nombre:'Ejecución Técnica',tipo:'suma',sub:subNames.map((n,i)=>({id:rid+'/tec/s'+i,nombre:n,min:1,max:3}))}]};}
@@ -2000,6 +2006,7 @@ async function loadTecEvals(){ensureTecPlantillas();await loadTecEvalsGlobal();c
 function tecCurPeriodo(){const p=document.getElementById('tecPeriodo');return (p&&p.value.trim())||DB.config.evalTecPeriodo||'Octubre 2026';}
 function tecPeriodChange(){DB.config.evalTecPeriodo=tecCurPeriodo();tecSaveConfig();tecRenderList();}
 function tecClearFilters(){const s=document.getElementById('tecSearch');if(s)s.value='';['tecProg','tecNivel','tecProf','tecDia','tecHora'].forEach(msClear);tecRenderList();}
+function tecPlantillaChange(){const sel=document.getElementById('tecPlantillaSel');const pl=sel?tecPlantillaById(sel.value):null;if(pl){msSet('tecProg',tecPlProgramas(pl));msSet('tecNivel',tecPlNiveles(pl));}tecRenderList();}
 /* helpers de puntaje */
 function tecItemTotal(it,vals){if(it.tipo==='suma')return (it.sub||[]).reduce((a,s)=>a+(+vals[s.id]||0),0);return +vals[it.id]||0;}
 function tecRubroTotal(r,vals){return (r.items||[]).reduce((a,it)=>a+tecItemTotal(it,vals),0);}
@@ -2079,7 +2086,7 @@ async function saveTecEval(){
   const vals=tecRecalc();
   if(document.getElementById('tecBody').querySelectorAll('.tecnum.bad').length){alert('Hay valores fuera de rango (marcados en rojo). Corregilos antes de guardar.');return;}
   const total=tecGrandTotal(pl,vals),obs=(document.getElementById('tec_obs').value||'').trim();
-  const b={studentId:sid,periodo:tecCurPeriodo(),plantillaId:plId,plantillaNombre:pl.nombre,programa:pl.programa||'',nivel:pl.nivel||'',valores:vals,total,obs};
+  const b={studentId:sid,periodo:tecCurPeriodo(),plantillaId:plId,plantillaNombre:pl.nombre,programa:tecPlProgramas(pl).join(', '),nivel:tecPlNiveles(pl).join(', '),valores:vals,total,obs};
   try{const saved=await api('POST','/api/tecevals',b);const i=TECEVALS.findIndex(e=>e.studentId===sid&&e.periodo===b.periodo&&e.plantillaId===plId);if(i>=0)TECEVALS[i]=saved;else TECEVALS.push(saved);tecRenderList();closeTecEval();}catch(e){alert(e.message);}
 }
 function closeTecEval(){const ov=document.getElementById('tecOverlay');ov.classList.remove('show');ov.classList.remove('tecprint');tecStudentId=null;}
@@ -2096,10 +2103,14 @@ function renderTecDesigner(){
   const pls=tecPlantillas();
   if(tecEditPl&&!pls.some(p=>p.id===tecEditPl))tecEditPl=null;
   if(!tecEditPl&&pls.length)tecEditPl=pls[0].id;
-  const pl=_tecPl(),progOpts=['',...(DB.config.programas||[])];
-  let inner=`<div class="dh"><select onchange="tecEditPl=this.value;refreshTecDesigner()" style="min-width:210px">${pls.map(p=>`<option value="${esc(p.id)}"${p.id===tecEditPl?' selected':''}>${esc(p.nombre)}</option>`).join('')}</select><button class="btn sm" onclick="tecNewPlantilla()">＋ Nueva</button>${pl?`<button class="btn sm ghost" onclick="tecDupPlantilla()">Duplicar</button><button class="btn sm ghost" onclick="tecDelPlantilla()">Eliminar</button>`:''}</div>`;
+  const pl=_tecPl();
+  let inner=`<div class="dh">${pls.length?`<select onchange="tecEditPl=this.value;refreshTecDesigner()" style="min-width:210px">${pls.map(p=>`<option value="${esc(p.id)}"${p.id===tecEditPl?' selected':''}>${esc(p.nombre)}</option>`).join('')}</select>`:''}<button class="btn sm" onclick="tecNewPlantilla()">＋ Nueva evaluación</button>${pl?`<button class="btn sm ghost" onclick="tecDupPlantilla()">Duplicar</button><button class="btn sm ghost" onclick="tecDelPlantilla()">Eliminar</button>`:''}</div>`;
+  if(!pls.length)inner+=`<p class="small" style="margin:10px 0 6px">Todavía no hay ninguna evaluación. Creá una desde cero con «＋ Nueva evaluación».</p><button class="btn sm ghost" onclick="tecLoadDefaults()">Cargar ejemplos (Mini Deporte / Escuela)</button>`;
   if(pl){
-    inner+=`<div class="grid2" style="margin-bottom:8px"><div class="field"><label>Nombre de la plantilla</label><input value="${esc(pl.nombre)}" onchange="tecPlField('nombre',this.value)"></div><div class="field"><label>Programa (filtra alumnos)</label><select onchange="tecPlField('programa',this.value)">${progOpts.map(o=>`<option value="${esc(o)}"${(pl.programa||'')===o?' selected':''}>${o?esc(o):'— sin filtro —'}</option>`).join('')}</select></div><div class="field"><label>Nivel (etiqueta)</label><input value="${esc(pl.nivel||'')}" onchange="tecPlField('nivel',this.value)"></div></div>`;
+    const progs=DB.config.programas||[],nivs=DB.config.niveles||[],selP=tecPlProgramas(pl),selN=tecPlNiveles(pl);
+    inner+=`<div class="field" style="margin-top:8px"><label>Nombre de la evaluación</label><input value="${esc(pl.nombre)}" onchange="tecPlField('nombre',this.value)" placeholder="Ej: Evaluación técnica"></div>`;
+    inner+=`<div class="grid2"><div class="field"><label>¿Para qué programa(s)? — uno o más</label><div class="tecchks">${progs.length?progs.map(p=>`<label><input type="checkbox" data-k="programas" data-v="${esc(p)}" ${selP.includes(p)?'checked':''} onchange="tecPlToggle(this.dataset.k,this.dataset.v,this.checked)"> ${esc(p)}</label>`).join(''):'<span class="small">No hay programas cargados en Configuración.</span>'}</div></div><div class="field"><label>¿Para qué nivel(es)? — uno o más</label><div class="tecchks">${nivs.length?nivs.map(n=>`<label><input type="checkbox" data-k="niveles" data-v="${esc(n)}" ${selN.includes(n)?'checked':''} onchange="tecPlToggle(this.dataset.k,this.dataset.v,this.checked)"> ${esc(n)}</label>`).join(''):'<span class="small">No hay niveles cargados en Configuración.</span>'}</div></div></div>`;
+    inner+=`<div class="sectitle" style="margin-top:12px">Ítems y subpuntajes</div>`;
     inner+=(pl.rubros||[]).map((r,ri)=>tecRubroEditorHTML(r,ri,pl.rubros.length)).join('');
     inner+=`<button class="btn sm" onclick="tecAddRubro()">＋ Agregar rubro</button>`;
   }
@@ -2122,6 +2133,7 @@ function tecItemEditorHTML(r,it,ii,n){
   return h+`</div>`;
 }
 function tecPlField(k,v){const pl=_tecPl();if(!pl)return;pl[k]=v;tecSaveConfig();tecFillPlantillaSel();tecRenderList();}
+function tecPlToggle(key,val,on){const pl=_tecPl();if(!pl)return;if(!Array.isArray(pl[key]))pl[key]=[];const i=pl[key].indexOf(val);if(on&&i<0)pl[key].push(val);else if(!on&&i>=0)pl[key].splice(i,1);tecSaveConfig();tecFillPlantillaSel();tecRenderList();}
 function tecAddRubro(){const pl=_tecPl();if(!pl)return;pl.rubros=pl.rubros||[];pl.rubros.push({id:tecUID('r'),nombre:'Nuevo rubro',items:[]});tecSaveConfig();refreshTecDesigner();}
 function tecDelRubro(rid){const pl=_tecPl();if(!pl)return;if(!confirm('¿Eliminar este rubro?'))return;pl.rubros=(pl.rubros||[]).filter(r=>r.id!==rid);tecSaveConfig();refreshTecDesigner();}
 function tecRubroName(rid,v){const pl=_tecPl();if(!pl)return;const r=(pl.rubros||[]).find(x=>x.id===rid);if(r){r.nombre=v;tecSaveConfig();tecRenderList();}}
@@ -2136,7 +2148,7 @@ function tecDelSub(itId,sid){const f=_tecFindItem(itId);if(!f)return;f.it.sub=(f
 function tecSubName(itId,sid,v){const f=_tecFindItem(itId);if(!f)return;const s=(f.it.sub||[]).find(x=>x.id===sid);if(s){s.nombre=v;tecSaveConfig();}}
 function tecSubRange(itId,sid,k,v){const f=_tecFindItem(itId);if(!f)return;const s=(f.it.sub||[]).find(x=>x.id===sid);if(s){s[k]=Number(v);tecSaveConfig();}}
 function tecMoveSub(itId,i,d){const f=_tecFindItem(itId);if(!f)return;const a=f.it.sub,j=i+d;if(j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];tecSaveConfig();refreshTecDesigner();}
-function tecNewPlantilla(){const nombre=(prompt('Nombre de la nueva plantilla:','Nueva evaluación')||'').trim();if(!nombre)return;const pl={id:tecUID('pl'),nombre,programa:'',nivel:'',rubros:[]};DB.config.evalTecPlantillas=tecPlantillas().slice();DB.config.evalTecPlantillas.push(pl);tecEditPl=pl.id;tecSaveConfig();refreshTecDesigner();}
+function tecNewPlantilla(){const nombre=(prompt('Nombre de la nueva evaluación:','Nueva evaluación')||'').trim();if(!nombre)return;const pl={id:tecUID('pl'),nombre,programas:[],niveles:[],rubros:[]};DB.config.evalTecPlantillas=tecPlantillas().slice();DB.config.evalTecPlantillas.push(pl);tecEditPl=pl.id;tecDesignerOpen=true;tecSaveConfig();refreshTecDesigner();}
 function tecDupPlantilla(){const pl=_tecPl();if(!pl)return;const copy=JSON.parse(JSON.stringify(pl));copy.id=tecUID('pl');copy.nombre=pl.nombre+' (copia)';(copy.rubros||[]).forEach(r=>{r.id=tecUID('r');(r.items||[]).forEach(it=>{it.id=tecUID('i');(it.sub||[]).forEach(s=>s.id=tecUID('s'));});});DB.config.evalTecPlantillas=tecPlantillas().slice();DB.config.evalTecPlantillas.push(copy);tecEditPl=copy.id;tecSaveConfig();refreshTecDesigner();}
 function tecDelPlantilla(){const pl=_tecPl();if(!pl)return;if(!confirm('¿Eliminar la plantilla "'+pl.nombre+'"? Las evaluaciones ya cargadas se conservan.'))return;DB.config.evalTecPlantillas=tecPlantillas().filter(p=>p.id!==pl.id);tecEditPl=null;tecSaveConfig();refreshTecDesigner();}
 function initUI(){if(!attDate.value)attDate.value=new Date().toISOString().slice(0,10);loadConfigForm();refreshSelects();const cg=document.getElementById('courtGrid');if(cg)cg.addEventListener('pointerdown',onCourtPointerDown);if(TOKEN)bootstrap();else applyPermissions();}
