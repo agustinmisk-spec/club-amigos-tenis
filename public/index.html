@@ -343,7 +343,6 @@
     <button class="tab tabtop" onclick="menuToggle(event,this)">Evaluaciones ▾</button>
     <div class="tabdrop" id="evalPeriodDrop"></div>
   </div>
-  <button class="tab" data-tab="tecevals" onclick="showTab('tecevals')" id="tabbtn-tecevals">Evaluaciones Octubre 2026</button>
   <div class="tabmenu">
     <button class="tab tabtop" onclick="menuToggle(event,this)">Gestión ▾</button>
     <div class="tabdrop">
@@ -1912,7 +1911,22 @@ function currentPeriodLabel(){const n=new Date();return EV_MESES[n.getMonth()]+'
 function evalPeriodos(){const c=DB.config;return Array.isArray(c.evalPeriodos)?c.evalPeriodos:[];}
 async function loadEvalsGlobal(){try{EVALS=await api('GET','/api/evaluations');}catch(e){EVALS=[];}}
 async function loadEvaluations(){await loadEvalsGlobal();if(!evalPeriod||evalPeriodos().indexOf(evalPeriod)<0){const ps=evalPeriodos();evalPeriod=ps[ps.length-1]||'';}renderEvaluaciones();}
-function renderEvalMenu(){const drop=document.getElementById('evalPeriodDrop');if(!drop)return;const ps=evalPeriodos();drop.innerHTML=(ps.length?ps.map(p=>`<button data-tab="evaluaciones" data-p="${esc(p)}" onclick="showEvalPeriod(this.dataset.p)">Evaluaciones ${esc(p)}</button>`).join(''):'<button disabled style="color:var(--muted)">Sin períodos aún</button>')+(can('config')?`<button style="border-top:1px solid var(--line);color:var(--green);font-weight:600" onclick="newEvalPeriod()">＋ Nuevo período…</button>`:'');}
+function renderEvalMenu(){
+  const drop=document.getElementById('evalPeriodDrop');if(!drop)return;
+  const ps=evalPeriodos(),cfg=can('config');
+  const periodHTML=ps.length?ps.map(p=>`<div style="display:flex;align-items:center;gap:2px"><button data-tab="evaluaciones" data-p="${esc(p)}" style="flex:1" onclick="showEvalPeriod(this.dataset.p)">Evaluaciones ${esc(p)}</button>${cfg?`<button title="Eliminar período «${esc(p)}»" data-p="${esc(p)}" style="width:auto;flex:0 0 auto;color:var(--clay);padding:8px 9px" onclick="delEvalPeriod(this.dataset.p)">✕</button>`:''}</div>`).join(''):'<button disabled style="color:var(--muted)">Sin períodos aún</button>';
+  drop.innerHTML=periodHTML
+    +(cfg?`<button style="border-top:1px solid var(--line);color:var(--green);font-weight:600" onclick="newEvalPeriod()">＋ Nuevo período…</button>`:'')
+    +`<button data-tab="tecevals" style="border-top:2px solid var(--line);color:var(--green);font-weight:700" onclick="showTab('tecevals')">🎾 Evaluaciones Octubre 2026 (técnica)</button>`;
+}
+function delEvalPeriod(p){
+  if(!can('config'))return;
+  if(!confirm('¿Eliminar el período «'+p+'» de la lista de evaluaciones?\n\nSe quita del menú. Las evaluaciones cargadas en ese período no se borran: quedan ocultas y podés recuperarlas creando de nuevo el período con el mismo nombre.'))return;
+  const c=DB.config;c.evalPeriodos=evalPeriodos().filter(x=>x!==p);
+  if(evalPeriod===p)evalPeriod=(c.evalPeriodos[c.evalPeriodos.length-1]||'');
+  evalSaveObjetivos();renderEvalMenu();
+  const t=document.getElementById('tab-evaluaciones');if(t&&t.style.display!=='none')renderEvaluaciones();
+}
 function showEvalPeriod(p){evalPeriod=p;showTab('evaluaciones');}
 function newEvalPeriod(){if(!can('config'))return;const name=(prompt('Nombre del período (ej: Julio 2026):',currentPeriodLabel())||'').trim();if(!name)return;const c=DB.config;c.evalPeriodos=evalPeriodos().slice();if(c.evalPeriodos.indexOf(name)<0)c.evalPeriodos.push(name);evalSaveObjetivos();renderEvalMenu();showEvalPeriod(name);}
 function evalObjMap(){const c=DB.config;if(!c.evalObjetivos||typeof c.evalObjetivos!=='object'||Array.isArray(c.evalObjetivos))c.evalObjetivos={};return c.evalObjetivos;}
