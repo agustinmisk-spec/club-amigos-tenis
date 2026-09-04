@@ -577,7 +577,12 @@
       <label class="small" style="font-weight:600;display:flex;align-items:center;gap:5px">Período <input id="tecPeriodo" style="width:150px;padding:6px 8px;border:1px solid var(--line);border-radius:8px" onchange="tecPeriodChange()"></label>
       <label class="small" style="font-weight:600;display:flex;align-items:center;gap:5px">Plantilla <select id="tecPlantillaSel" onchange="tecRenderList()" style="min-width:200px"></select></label>
       <input type="search" id="tecSearch" placeholder="Buscar alumno…" oninput="tecRenderList()" style="min-width:170px">
-      <label class="small" style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="tecAllProg" onchange="tecRenderList()"> Todos los programas</label>
+      <span id="tecProg"></span>
+      <span id="tecNivel"></span>
+      <span id="tecProf"></span>
+      <span id="tecDia"></span>
+      <span id="tecHora"></span>
+      <button class="btn ghost sm" onclick="tecClearFilters()">Borrar filtros</button>
       <div class="spacer"></div>
       <span class="small" id="tecCount"></span>
     </div>
@@ -1247,7 +1252,7 @@ function msInit(key,opts,allLabel,shortLabel){
 }
 function msLabel(key){const el=document.getElementById(key);if(!el)return;const n=MSEL[key].size;const b=el.querySelector('.ms-btn');if(b)b.textContent=(n?el.dataset.short+': '+n:el.dataset.all)+' ▾';}
 function msToggle(key){const pn=document.getElementById('msp-'+key);if(!pn)return;const open=pn.classList.contains('open');document.querySelectorAll('.ms-panel.open').forEach(x=>x.classList.remove('open'));if(!open)pn.classList.add('open');}
-function msChange(key){const pn=document.getElementById('msp-'+key);MSEL[key]=new Set([...pn.querySelectorAll('input:checked')].map(i=>i.value));msLabel(key);if(key.indexOf('att')===0)renderAtt();else if(key.indexOf('rptEv')===0){}else if(key.indexOf('ev')===0)renderEvalList();else render();}
+function msChange(key){const pn=document.getElementById('msp-'+key);MSEL[key]=new Set([...pn.querySelectorAll('input:checked')].map(i=>i.value));msLabel(key);if(key.indexOf('att')===0)renderAtt();else if(key.indexOf('rptEv')===0){}else if(key.indexOf('tec')===0)tecRenderList();else if(key.indexOf('ev')===0)renderEvalList();else render();}
 function msVal(key){return MSEL[key]?[...MSEL[key]]:[];}
 function msClear(key){if(MSEL[key])MSEL[key].clear();const pn=document.getElementById('msp-'+key);if(pn)pn.querySelectorAll('input').forEach(i=>i.checked=false);msLabel(key);}
 function msSet(key,arr){MSEL[key]=new Set(arr||[]);const pn=document.getElementById('msp-'+key);if(pn)pn.querySelectorAll('input').forEach(i=>i.checked=MSEL[key].has(i.value));msLabel(key);}
@@ -1274,6 +1279,11 @@ function refreshSelects(){
   msInit('evProf',O(c.profs),'Todos los profes','Profes');
   msInit('evDia',O(c.dias),'Todos los días','Días');
   msInit('evHora',O(c.horas),'Todos los horarios','Horarios');
+  msInit('tecProg',O(c.programas),'Todos los programas','Programas');
+  msInit('tecNivel',O(c.niveles),'Todos los niveles','Niveles');
+  msInit('tecProf',O(c.profs),'Todos los profes','Profes');
+  msInit('tecDia',O(c.dias),'Todos los días','Días');
+  msInit('tecHora',O(c.horas),'Todos los horarios','Horarios');
 }
 
 function showTab(t){
@@ -1978,6 +1988,7 @@ async function loadTecEvalsGlobal(){try{TECEVALS=await api('GET','/api/tecevals'
 async function loadTecEvals(){ensureTecPlantillas();await loadTecEvalsGlobal();const p=document.getElementById('tecPeriodo');if(p&&!p.value)p.value=DB.config.evalTecPeriodo||'Octubre 2026';renderTecDesigner();tecFillPlantillaSel();tecRenderList();}
 function tecCurPeriodo(){const p=document.getElementById('tecPeriodo');return (p&&p.value.trim())||DB.config.evalTecPeriodo||'Octubre 2026';}
 function tecPeriodChange(){DB.config.evalTecPeriodo=tecCurPeriodo();tecSaveConfig();tecRenderList();}
+function tecClearFilters(){const s=document.getElementById('tecSearch');if(s)s.value='';['tecProg','tecNivel','tecProf','tecDia','tecHora'].forEach(msClear);tecRenderList();}
 /* helpers de puntaje */
 function tecItemTotal(it,vals){if(it.tipo==='suma')return (it.sub||[]).reduce((a,s)=>a+(+vals[s.id]||0),0);return +vals[it.id]||0;}
 function tecRubroTotal(r,vals){return (r.items||[]).reduce((a,it)=>a+tecItemTotal(it,vals),0);}
@@ -1995,14 +2006,16 @@ function tecRenderList(){
   const sel=document.getElementById('tecPlantillaSel');const plId=(sel&&sel.value)||pls[0].id;const pl=tecPlantillaById(plId)||pls[0];
   const periodo=tecCurPeriodo();
   const q=((document.getElementById('tecSearch')||{}).value||'').toLowerCase().trim();
-  const allProg=(document.getElementById('tecAllProg')||{}).checked;
+  const sp=msVal('tecProg'),sn=msVal('tecNivel'),spr=msVal('tecProf'),sd=msVal('tecDia'),sh=msVal('tecHora');
   let list=DB.students.filter(s=>s.estado!=='Baja');
-  if(!allProg&&pl.programa)list=list.filter(s=>s.programa===pl.programa);
+  if(sp.length)list=list.filter(s=>sp.includes(s.programa));
+  if(sn.length)list=list.filter(s=>sn.includes(s.nivel));
+  if(spr.length||sd.length||sh.length)list=list.filter(s=>{const ss=sessionsOf(s);if(spr.length&&!ss.some(x=>spr.includes(x.prof)))return false;if((sd.length||sh.length)&&!ss.some(x=>(!sd.length||sd.includes(x.dia))&&(!sh.length||sh.includes(x.hora))))return false;return true;});
   if(q)list=list.filter(s=>fullName(s).toLowerCase().includes(q));
   list.sort((a,b)=>fullName(a).localeCompare(fullName(b),'es'));
   const done=list.filter(s=>tecEvalFor(s.id,periodo,plId)).length,mx=tecMaxTotal(pl);
   if(cnt)cnt.textContent=list.length+' alumno(s) · '+done+' evaluados · máx '+mx+' pts';
-  if(!list.length){wrap.innerHTML='<div class="card empty"><p>No hay alumnos para esta plantilla.'+(pl.programa&&!allProg?' Filtrando por '+esc(pl.programa)+' — marcá “Todos los programas” para ver el resto.':'')+'</p></div>';return;}
+  if(!list.length){wrap.innerHTML='<div class="card empty"><p>No hay alumnos que coincidan con los filtros.</p></div>';return;}
   const dis=can('obs')?'':'disabled';
   wrap.innerHTML=`<div class="card" style="padding:6px 8px;overflow:auto"><table class="evaltbl"><thead><tr><th style="min-width:190px">Alumno</th><th style="width:96px">Estado</th><th style="width:90px">Total</th><th style="width:130px"></th></tr></thead><tbody>${list.map(s=>{const ev=tecEvalFor(s.id,periodo,plId);return `<tr><td><b class="lnk" onclick="openDetail('${esc(s.id)}')">${esc(fullName(s))}</b><br><span class="small">${esc(s.programa||'')}${s.nivel?' · '+esc(s.nivel):''}</span></td><td><span class="tecstat ${ev?'ok':'no'}">${ev?'✓ Evaluado':'Sin evaluar'}</span></td><td>${ev?('<b>'+ev.total+'</b> / '+mx):'—'}</td><td><button class="btn sm ${ev?'ghost':''}" ${dis} onclick="openTecEval('${esc(s.id)}','${esc(plId)}')">${ev?'Ver / editar':'Evaluar'}</button></td></tr>`;}).join('')}</tbody></table></div>`;
 }
