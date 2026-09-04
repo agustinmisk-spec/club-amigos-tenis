@@ -328,6 +328,43 @@ app.put('/api/evaluations/:id', auth, need('obs'), async (req, res) => {
 });
 app.delete('/api/evaluations/:id', auth, need('obs'), async (req, res) => { await store.deleteEvaluation(req.params.id); res.json({ ok: true }); });
 
+/* ---------------- Evaluaciones técnicas (rúbricas a medida, puntajes numéricos) ---------------- */
+const cleanTecEval = b => {
+  const valores = {};
+  if (b && b.valores && typeof b.valores === 'object') {
+    Object.keys(b.valores).slice(0, 500).forEach(k => {
+      const v = Number(b.valores[k]);
+      if (Number.isFinite(v)) valores[String(k).slice(0, 60)] = Math.max(0, Math.min(999, Math.round(v * 100) / 100));
+    });
+  }
+  const total = Number(b && b.total);
+  return {
+    studentId: String((b && b.studentId) || ''),
+    periodo: String((b && b.periodo) || '').slice(0, 60),
+    plantillaId: String((b && b.plantillaId) || '').slice(0, 60),
+    plantillaNombre: String((b && b.plantillaNombre) || '').slice(0, 120),
+    programa: String((b && b.programa) || '').slice(0, 80),
+    nivel: String((b && b.nivel) || '').slice(0, 80),
+    fecha: String((b && b.fecha) || '').slice(0, 30),
+    valores,
+    total: Number.isFinite(total) ? total : 0,
+    obs: String((b && b.obs) || '').slice(0, 3000)
+  };
+};
+app.get('/api/tecevals', auth, async (req, res) => { res.json(await store.listTecEvals()); });
+app.post('/api/tecevals', auth, need('obs'), async (req, res) => {
+  const b = req.body || {};
+  if (!b.studentId || !b.periodo || !b.plantillaId) return res.status(400).json({ error: 'Faltan alumno, período o plantilla' });
+  const clean = cleanTecEval(b);
+  const list = await store.listTecEvals();
+  const ex = list.find(x => x.studentId === clean.studentId && x.periodo === clean.periodo && x.plantillaId === clean.plantillaId);
+  if (ex) { Object.assign(ex, clean, { autor: req.user.nombre }); await store.updateTecEval(ex); return res.json(ex); }
+  const e = Object.assign({ id: 'te' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) }, clean, { fecha: clean.fecha || new Date().toISOString(), autor: req.user.nombre });
+  await store.addTecEval(e);
+  res.json(e);
+});
+app.delete('/api/tecevals/:id', auth, need('obs'), async (req, res) => { await store.deleteTecEval(req.params.id); res.json({ ok: true }); });
+
 /* ---------------- Recuperaciones e invitaciones (por fecha) ---------------- */
 app.get('/api/recoveries', auth, async (req, res) => { res.json(await store.listRecoveries()); });
 app.post('/api/recoveries', auth, need('attendance'), async (req, res) => {
@@ -444,7 +481,8 @@ app.get('/api/backup', async (req, res) => {
       messages: await store.listMessages(),
       events: await store.listEvents(),
       groupNotes: await store.listGroupNotes(),
-      tasks: await store.listTasks()
+      tasks: await store.listTasks(),
+      tecevals: await store.listTecEvals()
     };
     const json = JSON.stringify(dump);
     if (String(req.query.gz || '') === '1') {
