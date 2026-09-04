@@ -783,6 +783,7 @@ const DEF_CONFIG={
   evalPeriodos:[],
   evalTecPlantillas:[],
   evalTecPeriodo:'Octubre 2026',
+  evalTecHidden:false,
   courts:['MC1','MC2','MC3','MC4','C2','C3','C4','C5','C6','C7','C8'],
   courtView:'single',courtRow2:['C5','C6','C7','C8'],
   capMini:5,capGeneral:6,
@@ -1923,12 +1924,22 @@ async function loadEvalsGlobal(){try{EVALS=await api('GET','/api/evaluations');}
 async function loadEvaluations(){await loadEvalsGlobal();if(!evalPeriod||evalPeriodos().indexOf(evalPeriod)<0){const ps=evalPeriodos();evalPeriod=ps[ps.length-1]||'';}renderEvaluaciones();}
 function renderEvalMenu(){
   const drop=document.getElementById('evalPeriodDrop');if(!drop)return;
-  const ps=evalPeriodos(),cfg=can('config');
-  const periodHTML=ps.length?ps.map(p=>`<div style="display:flex;align-items:center;gap:2px"><button data-tab="evaluaciones" data-p="${esc(p)}" style="flex:1" onclick="showEvalPeriod(this.dataset.p)">Evaluaciones ${esc(p)}</button>${cfg?`<button title="Eliminar período «${esc(p)}»" data-p="${esc(p)}" style="width:auto;flex:0 0 auto;color:var(--clay);padding:8px 9px" onclick="delEvalPeriod(this.dataset.p)">✕</button>`:''}</div>`).join(''):'<button disabled style="color:var(--muted)">Sin períodos aún</button>';
-  drop.innerHTML=periodHTML
+  const ps=evalPeriodos(),cfg=can('config'),tecHidden=!!DB.config.evalTecHidden;
+  let rows='';
+  ps.forEach(p=>{rows+=`<div style="display:flex;align-items:center;gap:2px"><button data-tab="evaluaciones" data-p="${esc(p)}" style="flex:1" onclick="showEvalPeriod(this.dataset.p)">Evaluaciones ${esc(p)}</button>${cfg?`<button title="Eliminar «Evaluaciones ${esc(p)}»" data-p="${esc(p)}" style="width:auto;flex:0 0 auto;color:var(--clay);padding:8px 9px" onclick="delEvalPeriod(this.dataset.p)">✕</button>`:''}</div>`;});
+  if(!tecHidden)rows+=`<div style="display:flex;align-items:center;gap:2px"><button data-tab="tecevals" style="flex:1" onclick="showTab('tecevals')">Evaluaciones Octubre 2026</button>${cfg?`<button title="Quitar «Evaluaciones Octubre 2026» del menú" style="width:auto;flex:0 0 auto;color:var(--clay);padding:8px 9px" onclick="delTecEvalPeriod()">✕</button>`:''}</div>`;
+  if(!rows)rows='<button disabled style="color:var(--muted)">Sin evaluaciones aún</button>';
+  drop.innerHTML=rows
     +(cfg?`<button style="border-top:1px solid var(--line);color:var(--green);font-weight:600" onclick="newEvalPeriod()">＋ Nuevo período…</button>`:'')
-    +`<button data-tab="tecevals" style="border-top:2px solid var(--line);color:var(--green);font-weight:700" onclick="showTab('tecevals')">🎾 Evaluaciones Octubre 2026</button>`;
+    +((cfg&&tecHidden)?`<button style="color:var(--green);font-weight:600" onclick="showTecEvalPeriod()">＋ Mostrar Evaluaciones Octubre 2026 (técnica)</button>`:'');
 }
+function delTecEvalPeriod(){
+  if(!can('config'))return;
+  if(!confirm('¿Quitar «Evaluaciones Octubre 2026» (técnica) del menú?\n\nLas notas y plantillas cargadas no se borran: podés volver a mostrarla cuando quieras con «＋ Mostrar Evaluaciones Octubre 2026».'))return;
+  DB.config.evalTecHidden=true;tecSaveConfig();renderEvalMenu();
+  const t=document.getElementById('tab-tecevals');if(t&&t.style.display!=='none')showTab('alumnos');
+}
+function showTecEvalPeriod(){if(!can('config'))return;DB.config.evalTecHidden=false;tecSaveConfig();renderEvalMenu();showTab('tecevals');}
 function delEvalPeriod(p){
   if(!can('config'))return;
   if(!confirm('¿Eliminar el período «'+p+'» de la lista de evaluaciones?\n\nSe quita del menú. Las evaluaciones cargadas en ese período no se borran: quedan ocultas y podés recuperarlas creando de nuevo el período con el mismo nombre.'))return;
