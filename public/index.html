@@ -1917,7 +1917,7 @@ function renderEvalMenu(){
   const periodHTML=ps.length?ps.map(p=>`<div style="display:flex;align-items:center;gap:2px"><button data-tab="evaluaciones" data-p="${esc(p)}" style="flex:1" onclick="showEvalPeriod(this.dataset.p)">Evaluaciones ${esc(p)}</button>${cfg?`<button title="Eliminar período «${esc(p)}»" data-p="${esc(p)}" style="width:auto;flex:0 0 auto;color:var(--clay);padding:8px 9px" onclick="delEvalPeriod(this.dataset.p)">✕</button>`:''}</div>`).join(''):'<button disabled style="color:var(--muted)">Sin períodos aún</button>';
   drop.innerHTML=periodHTML
     +(cfg?`<button style="border-top:1px solid var(--line);color:var(--green);font-weight:600" onclick="newEvalPeriod()">＋ Nuevo período…</button>`:'')
-    +`<button data-tab="tecevals" style="border-top:2px solid var(--line);color:var(--green);font-weight:700" onclick="showTab('tecevals')">🎾 Evaluaciones Octubre 2026 (técnica)</button>`;
+    +`<button data-tab="tecevals" style="border-top:2px solid var(--line);color:var(--green);font-weight:700" onclick="showTab('tecevals')">🎾 Evaluaciones Octubre 2026</button>`;
 }
 function delEvalPeriod(p){
   if(!can('config'))return;
