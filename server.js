@@ -435,7 +435,8 @@ app.post('/api/tasks', auth, async (req, res) => {
   const b = req.body || {};
   if (!b.texto || !String(b.texto).trim()) return res.status(400).json({ error: 'Falta el texto' });
   const t = { id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
-    texto: String(b.texto).slice(0, 500), detalle: String(b.detalle || '').slice(0, 4000), done: false, fecha: new Date().toISOString(), autor: req.user.nombre, owner: req.user.id };
+    texto: String(b.texto).slice(0, 500), detalle: String(b.detalle || '').slice(0, 4000), done: false, fecha: new Date().toISOString(), autor: req.user.nombre, owner: req.user.id,
+    cat: String(b.cat || '').slice(0, 60), catColor: String(b.catColor || '').slice(0, 20) };
   await store.addTask(t);
   res.json(t);
 });
@@ -448,6 +449,8 @@ app.patch('/api/tasks/:id', auth, async (req, res) => {
   if (b.done != null) t.done = !!b.done;
   if (b.texto != null) t.texto = String(b.texto).slice(0, 500);
   if (b.detalle != null) t.detalle = String(b.detalle).slice(0, 4000);
+  if (b.cat != null) t.cat = String(b.cat).slice(0, 60);
+  if (b.catColor != null) t.catColor = String(b.catColor).slice(0, 20);
   await store.updateTask(t);
   res.json(t);
 });
