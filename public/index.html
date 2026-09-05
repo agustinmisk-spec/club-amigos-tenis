@@ -1791,17 +1791,26 @@ function buildEvaluacionesTec(period,plId,filt,mode){
   if(!pl)return h+'<p>Elegí una evaluación válida.</p>';
   const act=DB.students.filter(s=>{if(s.estado==='Baja')return false;const ss=sessionsOf(s);if(filt.prog.length&&!filt.prog.includes(s.programa))return false;if(filt.nivel.length&&!filt.nivel.includes(s.nivel))return false;if(filt.prof.length&&!ss.some(x=>filt.prof.includes(x.prof)))return false;if((filt.dia.length||filt.hora.length)&&!ss.some(x=>(!filt.dia.length||filt.dia.includes(x.dia))&&(!filt.hora.length||filt.hora.includes(x.hora))))return false;return true;});
   if(!act.length)return h+'<p>No hay alumnos para los filtros seleccionados.</p>';
+  if(mode==='det')h='<style>@page{size:A4 landscape;margin:9mm}</style>'+h+'<p style="font-size:11px">Referencia: <b style="color:#1558b0">Precisión</b> · <b style="color:#0f7a43">Suma de subpuntajes</b> (ejecución técnica / situación de juego).</p>';
   const rubros=pl.rubros||[],mx=tecMaxTotal(pl);
   const groups={};act.forEach(s=>{const k=s.nivel||'(sin nivel)';(groups[k]=groups[k]||[]).push(s);});
   const niveles=(DB.config.niveles||[]).filter(n=>groups[n]);Object.keys(groups).forEach(k=>{if(niveles.indexOf(k)<0)niveles.push(k);});
   const findEv=s=>(TECEVALS||[]).find(x=>x.studentId===s.id&&x.periodo===period&&x.plantillaId===plId);
   niveles.forEach(nivel=>{const studs=groups[nivel].slice().sort((a,b)=>fullName(a).localeCompare(fullName(b),'es'));h+=`<h2>${esc(nivel)}</h2>`;
-    if(mode==='det'){studs.forEach(s=>{h+=tecReportDetalle(s,findEv(s),pl);});}
+    if(mode==='det'){h+=tecReportTablaDet(pl,studs,findEv);}
     else{h+=rptTbl(['Alumno'].concat(rubros.map(r=>esc(r.nombre)+' (/'+tecRubroMax(r)+')')).concat(['Total (/'+mx+')']),studs.map(s=>{const e=findEv(s);const vals=e?(e.valores||{}):null;return [esc(fullName(s))].concat(rubros.map(r=>vals?('<b>'+tecRubroTotal(r,vals)+'</b>'):'—')).concat([vals?('<b>'+e.total+'</b>'):'—']);}));}
   });
   return h;
 }
-function tecReportDetalle(s,e,pl){const vals=e?(e.valores||{}):{};let rows='';(pl.rubros||[]).forEach(r=>{rows+=`<tr><td colspan="2" style="background:#eef1f8;font-weight:bold">${esc(r.nombre)} — ${e?tecRubroTotal(r,vals):'—'} / ${tecRubroMax(r)}</td></tr>`;(r.items||[]).forEach(it=>{if(it.tipo==='suma'){if(it.nombre)rows+=`<tr><td style="padding-left:16px"><i>${esc(it.nombre)}</i></td><td style="text-align:right"><i>${e?tecItemTotal(it,vals):'—'}</i></td></tr>`;(it.sub||[]).forEach(sb=>{rows+=`<tr><td style="padding-left:28px">${esc(sb.nombre)} <span style="color:#888">(${sb.min}–${sb.max})</span></td><td style="text-align:right">${vals[sb.id]!=null?vals[sb.id]:'—'}</td></tr>`;});}else{rows+=`<tr><td style="padding-left:16px">${esc(it.nombre)} <span style="color:#888">(${it.min}–${it.max})</span></td><td style="text-align:right">${vals[it.id]!=null?vals[it.id]:'—'}</td></tr>`;}});});return `<div style="page-break-inside:avoid;margin:6px 0 12px"><p style="font-weight:bold;margin:0 0 3px">${esc(fullName(s))} — Total ${e?e.total:'—'} / ${tecMaxTotal(pl)}${e&&e.obs?' · '+esc(e.obs):''}</p><table style="max-width:540px">${rows}</table></div>`;}
+function tecReportTablaDet(pl,studs,findEv){
+  const PC='#1558b0',SC='#0f7a43',cols=[];let h1='<tr><th rowspan="2" style="text-align:left;vertical-align:bottom">Alumno</th>',h2='<tr>';
+  (pl.rubros||[]).forEach(r=>{const parts=[];(r.items||[]).forEach(it=>{if(it.tipo==='suma'){(it.sub||[]).forEach(sb=>parts.push({kind:'sub',id:sb.id,label:sb.nombre,max:sb.max}));parts.push({kind:'suma',item:it,label:it.nombre||'Suma',max:(it.sub||[]).reduce((a,s)=>a+(+s.max||0),0)});}else{parts.push({kind:'prec',id:it.id,label:it.nombre,max:it.max});}});
+    h1+=`<th colspan="${parts.length}" style="text-align:center;background:#e7edf5">${esc(r.nombre)}</th>`;
+    parts.forEach(p=>{cols.push(p);const col=p.kind==='prec'?PC:(p.kind==='suma'?SC:'#333'),wt=p.kind==='sub'?'400':'700';h2+=`<th style="font-size:9.5px;color:${col};font-weight:${wt};vertical-align:bottom">${esc(p.label)}<br><span style="color:#aaa;font-weight:400">/${p.max}</span></th>`;});});
+  h1+=`<th rowspan="2" style="vertical-align:bottom">Total<br><span style="color:#aaa;font-weight:400">/${tecMaxTotal(pl)}</span></th></tr>`;h2+='</tr>';
+  let body='';studs.forEach(s=>{const e=findEv(s),vals=e?(e.valores||{}):null;let tds='';cols.forEach(p=>{if(p.kind==='prec'){const v=vals&&vals[p.id]!=null?vals[p.id]:'—';tds+=`<td style="text-align:center;color:${PC};font-weight:600">${v}</td>`;}else if(p.kind==='suma'){const v=vals?tecItemTotal(p.item,vals):'—';tds+=`<td style="text-align:center;color:${SC};font-weight:700">${v}</td>`;}else{const v=vals&&vals[p.id]!=null?vals[p.id]:'—';tds+=`<td style="text-align:center">${v}</td>`;}});body+=`<tr><td style="text-align:left;white-space:nowrap">${esc(fullName(s))}</td>${tds}<td style="text-align:center;font-weight:700">${e?e.total:'—'}</td></tr>`;});
+  return `<table style="font-size:10.5px"><thead>${h1}${h2}</thead><tbody>${body}</tbody></table>`;
+}
 function rptFillRaq(){const O=arr=>arr.map(x=>({v:x,t:x}));const c=DB.config;msInit('rptRqProg',O(c.programas||[]),'Programas','Programas');msInit('rptRqNivel',O(c.niveles||[]),'Niveles','Niveles');msInit('rptRqProf',O(c.profs||[]),'Profes','Profes');msInit('rptRqDia',O(c.dias||[]),'Días','Días');msInit('rptRqHora',O(c.horas||[]),'Horarios','Horarios');}
 function rptFillAt(){const O=arr=>arr.map(x=>({v:x,t:x}));msInit('rptAtHora',O(DB.config.horas||[]),'Horarios','Horarios');}
 function rptFillAus(){const O=arr=>arr.map(x=>({v:x,t:x}));msInit('rptAusProg',O(DB.config.programas||[]),'Programas','Programas');}
