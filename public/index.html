@@ -385,6 +385,7 @@
       <span id="fProg"></span>
       <span id="fNivel"></span>
       <span id="fCat"></span>
+      <span id="fSexo"></span>
       <span id="fAnio"></span>
       <span id="fDia"></span>
       <span id="fHora"></span>
@@ -1285,6 +1286,7 @@ function refreshSelects(){
   msInit('fProg',O(c.programas),'Todos los programas','Programas');
   msInit('fNivel',O(c.niveles),'Todos los niveles','Niveles');
   msInit('fCat',O(c.categorias),'Todas las categorías','Categorías');
+  msInit('fSexo',[{v:'M',t:'Masculino'},{v:'F',t:'Femenino'}],'Ambos sexos','Sexo');
   msInit('fAnio',O([...new Set(DB.students.map(s=>s.anioNac).filter(Boolean))].sort()),'Todos los años nac.','Años');
   msInit('fDia',O(c.dias),'Todos los días','Días');
   msInit('fHora',O(c.horas),'Todos los horarios','Horarios');
@@ -1414,10 +1416,11 @@ function filtered(){
   const q=search.value.toLowerCase().trim();
   return DB.students.filter(s=>{
     if(q&&!fullName(s).toLowerCase().includes(q))return false;
-    const sp=msVal('fProg'),sn=msVal('fNivel'),sca=msVal('fCat'),sd=msVal('fDia'),sh=msVal('fHora'),spr=msVal('fProf'),sc=msVal('fCourt'),sa=msVal('fAnio'),sf=msVal('fFreq');
+    const sp=msVal('fProg'),sn=msVal('fNivel'),sca=msVal('fCat'),sd=msVal('fDia'),sh=msVal('fHora'),spr=msVal('fProf'),sc=msVal('fCourt'),sa=msVal('fAnio'),sf=msVal('fFreq'),sx=msVal('fSexo');
     if(sp.length&&!sp.includes(s.programa))return false;
     if(sn.length&&!sn.includes(s.nivel))return false;
     if(sca.length&&!sca.includes(s.categoria))return false;
+    if(sx.length&&!sx.includes(s.sexo))return false;
     if(sa.length&&!sa.includes(s.anioNac))return false;
     if(fEstado.value&&s.estado!==fEstado.value)return false;
     const ss=sessionsOf(s);
@@ -1768,7 +1771,7 @@ async function clearAllMarks(){
   attPushUndo();
   try{await Promise.all(list.map(s=>api('PUT','/api/attendance',{studentId:s.id,date:attDate.value,val:null})));attCache=await api('GET','/api/attendance?date='+encodeURIComponent(attDate.value));renderAttList();checkAttendanceReminder();}catch(e){alert(e.message);}
 }
-function clearFilters(){search.value='';['fProg','fNivel','fCat','fAnio','fDia','fHora','fProf','fCourt','fFreq'].forEach(msClear);fEstado.value='Activo';render();}
+function clearFilters(){search.value='';['fProg','fNivel','fCat','fSexo','fAnio','fDia','fHora','fProf','fCourt','fFreq'].forEach(msClear);fEstado.value='Activo';render();}
 
 /* Config */
 function loadConfigForm(){const c=DB.config;cfgName.value=c.name;cfgProg.value=c.programas.join(', ');cfgNivel.value=c.niveles.join(', ');cfgCat.value=c.categorias.join(', ');cfgRaquetas.value=(c.raquetas||DEF_CONFIG.raquetas).join(', ');cfgExtras.value=(c.extras||[]).join(', ');cfgRankCats.value=(c.rankCats||DEF_CONFIG.rankCats).join(', ');cfgCourts.value=c.courts.join(', ');document.getElementById('cfgCourtView').value=c.courtView||'single';document.getElementById('cfgCourtRow2').value=(c.courtRow2||DEF_CONFIG.courtRow2||[]).join(', ');cfgCapMini.value=c.capMini;cfgCapGen.value=c.capGeneral;cfgDias.value=c.dias.join(', ');cfgHoras.value=c.horas.join(', ');cfgProf.value=c.profs.join(', ');if(document.getElementById('cfgLogoPrev'))document.getElementById('cfgLogoPrev').innerHTML=c.logo?`<img src="${c.logo}" style="height:46px;max-width:160px;object-fit:contain;border:1px solid var(--line);border-radius:8px;padding:4px;background:#fff">`:'<span class="small">Sin logo (se usa el por defecto)</span>';}
