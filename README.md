@@ -62,7 +62,9 @@ Las tres tienen plan gratuito suficiente para una escuela. No hace falta tarjeta
 | Crear / editar alumnos | ✅ | ✅ | — |
 | Eliminar alumnos | ✅ | — | — |
 | Tomar asistencia | ✅ | ✅ | ✅ |
-| Cargar observaciones | ✅ | ✅ | ✅ |
+| Ver observaciones, fichas técnicas, videos y evaluaciones | ✅ | ✅ | ✅ (solo lectura) |
+| Cargar/editar observaciones, fichas técnicas, videos y evaluaciones | ✅ | ✅ | — |
+| Datos de la escuela (estadísticas) e Informes (PDF) | ✅ | ✅ | — |
 | Configuración (canchas, profes, etc.) | ✅ | — | — |
 | Gestionar usuarios | ✅ | — | — |
 | Respaldar (descargar copia) | ✅ | ✅ | — |
