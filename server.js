@@ -17,9 +17,9 @@ const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('he
 
 /* Permisos por rol (idénticos al frontend) */
 const ROLES = {
-  director: { label: 'Director / Coordinador', students: true, config: true, users: true, backup: true, import: true, attendance: true, obs: true, delete: true, content: true },
-  admin:    { label: 'Administrativo',         students: true, config: false, users: false, backup: true, import: false, attendance: true, obs: true, delete: false, content: true },
-  profesor: { label: 'Profesor/a',             students: false, config: false, users: false, backup: false, import: false, attendance: true, obs: true, delete: false, content: false }
+  director: { label: 'Director / Coordinador', students: true, config: true, users: true, backup: true, import: true, attendance: true, obs: true, delete: true, content: true, reports: true },
+  admin:    { label: 'Administrativo',         students: true, config: false, users: false, backup: true, import: false, attendance: true, obs: true, delete: false, content: true, reports: true },
+  profesor: { label: 'Profesor/a',             students: false, config: false, users: false, backup: false, import: false, attendance: true, obs: false, delete: false, content: false, reports: false }
 };
 const cap = (role, k) => !!(ROLES[role] && ROLES[role][k]);
 const publicUser = u => ({ id: u.id, nombre: u.nombre, usuario: u.usuario, rol: u.rol, prof: u.prof || '' });
