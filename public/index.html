@@ -643,6 +643,7 @@
       <span id="tecDia"></span>
       <span id="tecHora"></span>
       <button class="btn ghost sm" onclick="tecClearFilters()">Borrar filtros</button>
+      <span id="tecMigBtnWrap"></span>
       <div class="spacer"></div>
       <span class="small" id="tecCount"></span>
     </div>
@@ -654,6 +655,14 @@
       <h2 id="tecTitle">Evaluación</h2>
       <div class="body" id="tecBody"></div>
       <div class="foot" id="tecFoot"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="tecMigOverlay">
+    <div class="modal" style="max-width:760px">
+      <h2 id="tecMigTitle">Convertir evaluaciones a otro formato</h2>
+      <div class="body" id="tecMigBody"></div>
+      <div class="foot" id="tecMigFoot"></div>
     </div>
   </div>
 
@@ -2253,6 +2262,7 @@ function tecEvalsOfStudent(sid){return TECEVALS.filter(e=>e.studentId===sid).sli
 /* lista de puntuación */
 function tecFillPlantillaSel(){const sel=document.getElementById('tecPlantillaSel');if(!sel)return;const pls=tecPlantillas();const cur=sel.value;sel.innerHTML=pls.map(p=>`<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join('');if(cur&&pls.some(p=>p.id===cur))sel.value=cur;}
 function tecRenderList(){
+  const migWrap=document.getElementById('tecMigBtnWrap');if(migWrap)migWrap.innerHTML=can('config')?`<button class="btn ghost sm" onclick="tecMigOpen()">🔁 Convertir a otro formato</button>`:'';
   const wrap=document.getElementById('tecListWrap');if(!wrap)return;
   const pls=tecPlantillas();const cnt=document.getElementById('tecCount');
   if(!pls.length){wrap.innerHTML='<div class="card empty"><p>No hay plantillas. '+(can('config')?'Creá una en el diseñador de arriba.':'Pedile al coordinador que las cargue.')+'</p></div>';if(cnt)cnt.textContent='';return;}
@@ -2327,6 +2337,93 @@ async function saveTecEval(){
 function closeTecEval(){const ov=document.getElementById('tecOverlay');ov.classList.remove('show');ov.classList.remove('tecprint');tecStudentId=null;}
 async function delTecEval(id){if(!can('obs'))return;if(!confirm('¿Eliminar esta evaluación?'))return;try{await api('DELETE','/api/tecevals/'+id);TECEVALS=TECEVALS.filter(e=>e.id!==id);tecRenderList();closeTecEval();}catch(e){alert(e.message);}}
 function printTecEval(){const ov=document.getElementById('tecOverlay');ov.classList.add('tecprint');window.print();setTimeout(()=>ov.classList.remove('tecprint'),600);}
+/* ===== Convertir evaluaciones a otro formato de plantilla ===== */
+function tecNormName(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim();}
+function tecLeafItems(pl){
+  const out=[];
+  (pl&&pl.rubros||[]).forEach(r=>{
+    (r.items||[]).forEach(it=>{
+      if(it.tipo==='suma'){(it.sub||[]).forEach(sb=>out.push({id:sb.id,label:r.nombre+' › '+(it.nombre||'')+' › '+sb.nombre,deep:sb.nombre}));}
+      else{out.push({id:it.id,label:r.nombre+' › '+it.nombre,deep:it.nombre});}
+    });
+  });
+  return out;
+}
+let TECMIG={srcPeriodo:'',srcPlId:'',dstPlId:'',map:{}};
+function tecMigPeriods(){return [...new Set((TECEVALS||[]).map(e=>e.periodo).filter(Boolean))].sort();}
+function tecMigOpen(){
+  if(!can('config'))return;
+  const periods=tecMigPeriods();
+  if(!periods.length){alert('Todavía no hay evaluaciones cargadas en ningún período.');return;}
+  const cur=tecCurPeriodo();
+  TECMIG={srcPeriodo:(periods.length>1?(periods.find(p=>p!==cur)||periods[0]):periods[0]),srcPlId:'',dstPlId:'',map:{}};
+  tecMigStep1();
+  document.getElementById('tecMigOverlay').classList.add('show');
+}
+function tecMigClose(){document.getElementById('tecMigOverlay').classList.remove('show');}
+function tecMigStep1(){
+  document.getElementById('tecMigTitle').textContent='Convertir evaluaciones a otro formato';
+  const periods=tecMigPeriods();
+  const pls=tecPlantillas();
+  const srcPlsInPeriod=pls.filter(p=>(TECEVALS||[]).some(e=>e.periodo===TECMIG.srcPeriodo&&e.plantillaId===p.id));
+  const srcOptions=srcPlsInPeriod.length?srcPlsInPeriod:pls;
+  if(!TECMIG.srcPlId||!srcOptions.some(p=>p.id===TECMIG.srcPlId))TECMIG.srcPlId=(srcOptions[0]||{}).id||'';
+  if(!TECMIG.dstPlId||TECMIG.dstPlId===TECMIG.srcPlId){const alt=pls.find(p=>p.id!==TECMIG.srcPlId);TECMIG.dstPlId=alt?alt.id:'';}
+  const n=(TECEVALS||[]).filter(e=>e.periodo===TECMIG.srcPeriodo&&e.plantillaId===TECMIG.srcPlId).length;
+  document.getElementById('tecMigBody').innerHTML=`<p class="small">Convertí las evaluaciones de un período/plantilla (formato viejo) para que pasen a otra plantilla (formato nuevo), sin perder los puntajes ya cargados. En el próximo paso elegís a qué campo del formato nuevo corresponde cada campo del formato viejo.</p>
+    <div class="field"><label>Período a convertir</label><select id="tm_period" onchange="tecMigPeriodChange()">${periods.map(p=>`<option value="${esc(p)}" ${p===TECMIG.srcPeriodo?'selected':''}>${esc(p)}</option>`).join('')}</select></div>
+    <div class="grid2">
+      <div class="field"><label>Plantilla de origen (formato viejo)</label><select id="tm_srcpl" onchange="tecMigSrcPlChange()">${srcOptions.map(p=>`<option value="${esc(p.id)}" ${p.id===TECMIG.srcPlId?'selected':''}>${esc(p.nombre)}</option>`).join('')}</select></div>
+      <div class="field"><label>Plantilla de destino (formato nuevo)</label><select id="tm_dstpl" onchange="tecMigDstPlChange()">${pls.map(p=>`<option value="${esc(p.id)}" ${p.id===TECMIG.dstPlId?'selected':''}>${esc(p.nombre)}</option>`).join('')}</select></div>
+    </div>
+    <p class="small" id="tm_count">${n} alumno(s) evaluado(s) en ese período con esa plantilla.</p>`;
+  document.getElementById('tecMigFoot').innerHTML=`<button class="btn" onclick="tecMigStep2()">Continuar →</button><button class="btn ghost" onclick="tecMigClose()">Cancelar</button>`;
+}
+function tecMigPeriodChange(){TECMIG.srcPeriodo=document.getElementById('tm_period').value;TECMIG.srcPlId='';tecMigStep1();}
+function tecMigSrcPlChange(){TECMIG.srcPlId=document.getElementById('tm_srcpl').value;const n=(TECEVALS||[]).filter(e=>e.periodo===TECMIG.srcPeriodo&&e.plantillaId===TECMIG.srcPlId).length;const c=document.getElementById('tm_count');if(c)c.textContent=n+' alumno(s) evaluado(s) en ese período con esa plantilla.';}
+function tecMigDstPlChange(){TECMIG.dstPlId=document.getElementById('tm_dstpl').value;}
+function tecMigStep2(){
+  TECMIG.srcPeriodo=document.getElementById('tm_period').value;
+  TECMIG.srcPlId=document.getElementById('tm_srcpl').value;
+  TECMIG.dstPlId=document.getElementById('tm_dstpl').value;
+  if(!TECMIG.srcPlId||!TECMIG.dstPlId){alert('Elegí ambas plantillas.');return;}
+  if(TECMIG.srcPlId===TECMIG.dstPlId){alert('Elegí dos plantillas distintas.');return;}
+  const srcPl=tecPlantillaById(TECMIG.srcPlId),dstPl=tecPlantillaById(TECMIG.dstPlId);
+  if(!srcPl||!dstPl)return;
+  const srcLeaves=tecLeafItems(srcPl),dstLeaves=tecLeafItems(dstPl);
+  if(!dstLeaves.length){alert('La plantilla de destino no tiene campos cargados todavía.');return;}
+  const srcByName={};srcLeaves.forEach(l=>{const k=tecNormName(l.deep);if(!(k in srcByName))srcByName[k]=l.id;});
+  TECMIG.map={};
+  dstLeaves.forEach(dl=>{const k=tecNormName(dl.deep);TECMIG.map[dl.id]=srcByName[k]||'';});
+  const n=(TECEVALS||[]).filter(e=>e.periodo===TECMIG.srcPeriodo&&e.plantillaId===TECMIG.srcPlId).length;
+  document.getElementById('tecMigTitle').textContent='Emparejar campos: '+srcPl.nombre+' → '+dstPl.nombre;
+  document.getElementById('tecMigBody').innerHTML=`<p class="small">Para cada campo del formato nuevo (<b>${esc(dstPl.nombre)}</b>), elegí de qué campo del formato viejo (<b>${esc(srcPl.nombre)}</b>) viene el puntaje. "— sin dato —" lo deja vacío. Se emparejaron automáticamente los campos con el mismo nombre; revisá y ajustá el resto.</p>
+    <div id="tm_maprows">${dstLeaves.map(dl=>`<div class="field" style="flex-direction:row;align-items:center;gap:8px;margin-bottom:6px"><span style="flex:1;min-width:220px;font-size:13px">${esc(dl.label)}</span><span style="font-size:16px;color:var(--muted)">←</span><select data-dst="${esc(dl.id)}" onchange="TECMIG.map['${esc(dl.id)}']=this.value" style="flex:1;min-width:220px"><option value="">— sin dato —</option>${srcLeaves.map(sl=>`<option value="${esc(sl.id)}" ${TECMIG.map[dl.id]===sl.id?'selected':''}>${esc(sl.label)}</option>`).join('')}</select></div>`).join('')}</div>
+    <p class="small" style="margin-top:8px">Se van a convertir <b>${n}</b> evaluación(es) del período <b>${esc(TECMIG.srcPeriodo)}</b>. Cada evaluación original se reemplaza por la nueva (mismo período, formato nuevo); no queda duplicada. La observación de cada alumno se conserva tal cual.</p>`;
+  document.getElementById('tecMigFoot').innerHTML=`<button class="btn" onclick="tecMigRun()">Convertir ${n} evaluación(es)</button><button class="btn ghost" onclick="tecMigStep1()">← Atrás</button><button class="btn ghost" onclick="tecMigClose()">Cancelar</button>`;
+}
+async function tecMigRun(){
+  if(!can('config')||!can('obs'))return;
+  const srcPl=tecPlantillaById(TECMIG.srcPlId),dstPl=tecPlantillaById(TECMIG.dstPlId);
+  if(!srcPl||!dstPl)return;
+  const evs=(TECEVALS||[]).filter(e=>e.periodo===TECMIG.srcPeriodo&&e.plantillaId===TECMIG.srcPlId);
+  if(!evs.length){alert('No hay evaluaciones para convertir.');tecMigClose();return;}
+  if(!confirm('¿Convertir '+evs.length+' evaluación(es) de «'+srcPl.nombre+'» a «'+dstPl.nombre+'»? Esto reemplaza el formato de esas evaluaciones; no se puede deshacer desde acá (podés restaurar desde un respaldo si algo sale mal).'))return;
+  const map=TECMIG.map;
+  let ok=0,fail=0;
+  for(const ev of evs){
+    const oldVals=ev.valores||{};
+    const newVals={};
+    Object.keys(map).forEach(dstId=>{const srcId=map[dstId];if(srcId&&oldVals[srcId]!=null)newVals[dstId]=oldVals[srcId];});
+    const total=tecGrandTotal(dstPl,newVals);
+    const body={studentId:ev.studentId,periodo:ev.periodo,plantillaId:dstPl.id,plantillaNombre:dstPl.nombre,programa:tecPlProgramas(dstPl).join(', '),nivel:tecPlNiveles(dstPl).join(', '),valores:newVals,total,obs:ev.obs||''};
+    try{await api('POST','/api/tecevals',body);await api('DELETE','/api/tecevals/'+ev.id);ok++;}catch(e){fail++;console.warn(e);}
+  }
+  try{TECEVALS=await api('GET','/api/tecevals');}catch(e){}
+  tecMigClose();
+  refreshTecDesigner();
+  alert('Listo: '+ok+' evaluación(es) convertida(s)'+(fail?' · '+fail+' con error':'')+'.');
+}
 function tecEvalDetailHTML(sid){const es=tecEvalsOfStudent(sid);if(!es.length)return '<span class="small">Sin evaluaciones técnicas.</span>';return es.map(e=>{const pl=tecPlantillaById(e.plantillaId),mx=pl?tecMaxTotal(pl):null,vals=e.valores||{};const rub=pl?(pl.rubros||[]).map(r=>`${esc(r.nombre)}: <b>${tecRubroTotal(r,vals)}</b>/${tecRubroMax(r)}`).join(' &nbsp;·&nbsp; '):'';return `<div style="margin-bottom:8px;padding-left:8px;border-left:3px solid var(--green-l)"><b>${esc(e.periodo||'')}</b> · ${esc(e.plantillaNombre||'')} — Total <b>${e.total}${mx?(' / '+mx):''}</b>${rub?'<br><span class="small">'+rub+'</span>':''}${e.obs?'<br><span class="small">'+esc(e.obs)+'</span>':''}</div>`;}).join('');}
 function evalAllDetailHTML(sid){const a=evalDetailHTML(sid),b=tecEvalDetailHTML(sid);const aE=a.indexOf('Sin evaluaciones')>=0,bE=b.indexOf('Sin evaluaciones')>=0;if(aE&&bE)return '<span class="small">Sin evaluaciones cargadas.</span>';return (aE?'':a)+(bE?'':b);}
 function rptEvalsAlumno(s){let out='';const objE=(EVALS||[]).filter(e=>e.studentId===s.id).slice().sort((a,b)=>String(b.periodo||b.fecha||'').localeCompare(String(a.periodo||a.fecha||'')));objE.forEach(e=>{const objs=evalObjOf(e.nivel);const lines=objs.map(o=>{const v=e.scores&&e.scores[o.id];return v?`${esc(o.texto)}: ${v} · ${EV_FORM[v-1][1]}`:null;}).filter(Boolean);out+=`<p style="margin:3px 0"><b>${esc(e.periodo||(e.fecha?fmtFecha(e.fecha):'')||'')}</b>${e.nivel?' · '+esc(e.nivel):''}${lines.length?'<br>'+lines.join(' · '):''}${e.social?'<br>Social/emoc.: '+e.social+' · '+EV_SOC[e.social-1][1]:''}${e.obs?'<br><i>'+esc(e.obs)+'</i>':''}</p>`;});const tecE=(TECEVALS||[]).filter(e=>e.studentId===s.id).slice().sort((a,b)=>String(b.periodo||'').localeCompare(String(a.periodo||'')));tecE.forEach(e=>{const pl=tecPlantillaById(e.plantillaId),vals=e.valores||{};const rub=pl?(pl.rubros||[]).map(r=>`${esc(r.nombre)}: ${tecRubroTotal(r,vals)}/${tecRubroMax(r)}`).join(' · '):'';out+=`<p style="margin:3px 0"><b>${esc(e.periodo||'')}</b> · ${esc(e.plantillaNombre||'')} — Total <b>${e.total}${pl?(' / '+tecMaxTotal(pl)):''}</b>${rub?'<br>'+rub:''}${e.obs?'<br><i>'+esc(e.obs)+'</i>':''}</p>`;});return (objE.length||tecE.length)?out:'<p style="color:#777">Sin evaluaciones cargadas.</p>';}
