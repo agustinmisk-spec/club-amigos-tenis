@@ -348,9 +348,9 @@
 
 <div class="tabs">
   <button class="tab active" data-tab="alumnos" onclick="showTab('alumnos')">Alumnos</button>
-  <div class="tabmenu">
+  <div class="tabmenu" id="menuCanchas">
     <button class="tab tabtop" onclick="menuToggle(event,this)">Canchas ▾</button>
-    <div class="tabdrop">
+    <div class="tabdrop" id="canchasDrop">
       <button data-tab="canchas" onclick="showTab('canchas')">Distribución por cancha</button>
       <button data-tab="recuperaciones" onclick="showTab('recuperaciones')">Recuperaciones e invitaciones</button>
       <button data-tab="historial" onclick="showTab('historial')">Historial de cambios</button>
@@ -362,9 +362,9 @@
     <button class="tab tabtop" onclick="menuToggle(event,this)">Evaluaciones ▾</button>
     <div class="tabdrop" id="evalPeriodDrop"></div>
   </div>
-  <div class="tabmenu">
+  <div class="tabmenu" id="menuGestion">
     <button class="tab tabtop" onclick="menuToggle(event,this)">Gestión ▾</button>
-    <div class="tabdrop">
+    <div class="tabdrop" id="gestionDrop">
       <button data-tab="calendario" onclick="showTab('calendario')">Calendario</button>
       <button data-tab="capacitaciones" onclick="showTab('capacitaciones')">Capacitaciones</button>
       <button data-tab="comunicaciones" onclick="showTab('comunicaciones')">Comunicaciones</button>
@@ -675,6 +675,17 @@
       <div class="sectitle" style="margin-top:18px">Uso de almacenamiento</div>
       <div id="cfgStorage"><span class="small">Calculando…</span></div>
     </div>
+    <div class="card" style="padding:20px;max-width:700px;margin-top:14px">
+      <div class="sectitle">Diseño · Colores</div>
+      <p class="small" style="margin:2px 0 10px">Cambiá los colores de la página. Se aplican al instante para todos los usuarios.</p>
+      <div id="themeEditor" class="grid2"></div>
+      <button class="btn sm ghost" type="button" style="margin-top:10px" onclick="resetTheme()">Restablecer colores por defecto</button>
+    </div>
+    <div class="card" style="padding:20px;max-width:700px;margin-top:14px">
+      <div class="sectitle">Diseño · Pestañas del menú</div>
+      <p class="small" style="margin:2px 0 10px">Elegí qué pestañas se ven y en qué orden aparecen dentro de cada menú. "Alumnos", "Evaluaciones" y "Admin" no se pueden ocultar.</p>
+      <div id="tabsManager"></div>
+    </div>
   </section>
 
   <section id="tab-usuarios" style="display:none">
@@ -819,7 +830,10 @@ const DEF_CONFIG={
   capMini:5,capGeneral:6,
   dias:['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'],
   horas:['10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','17:30','18:30'],
-  profs:['AGUSTIN MACRINA','CAMILA MORENO','EMILIANO SOTO','FEDERICO AUER','FERNANDO SAENZ','FLORENCIA CRESPI','JOSE MULLINGS','JUAN BOTTA','LINO LOMBARDINO','LUCIANO GIUPPONI','MARTIN PRIETO','MAURICIO MORENO','VIVIANA TURLES']
+  profs:['AGUSTIN MACRINA','CAMILA MORENO','EMILIANO SOTO','FEDERICO AUER','FERNANDO SAENZ','FLORENCIA CRESPI','JOSE MULLINGS','JUAN BOTTA','LINO LOMBARDINO','LUCIANO GIUPPONI','MARTIN PRIETO','MAURICIO MORENO','VIVIANA TURLES'],
+  theme:{green:'#1b3a6b',greenD:'#12284d',greenL:'#e6ecf6',bg:'#f4f6f5',card:'#ffffff',line:'#e2e8e4',txt:'#1c2b24',muted:'#5f6f67',clay:'#c2613f'},
+  tabsHidden:[],
+  tabsOrder:[]
 };
 let DB={config:{...DEF_CONFIG},students:[],attendance:{},users:[]};
 let sortKey='apellido',sortDir=1;
@@ -1198,9 +1212,10 @@ function applyPermissions(){
   const cf=document.getElementById('chatFab');if(cf)cf.style.display='flex';const tf=document.getElementById('taskFab');if(tf)tf.style.display='flex';
   document.getElementById('userBox').innerHTML=`<span><b>${esc(currentUser.nombre)}</b><br><span class="ur">${esc(ROLELABELS[currentUser.rol]||currentUser.rol)}</span></span><button class="btn sec tiny" onclick="logout()">Salir</button>`;
   const tg=(id,show)=>{const e=document.getElementById(id);if(e)e.style.display=show?'':'none';};
-  tg('tabbtn-config',can('config'));tg('tabbtn-usuarios',can('users'));tg('tabbtn-estadisticas',can('reports'));tg('tabbtn-informes',can('reports'));
+  tg('tabbtn-config',can('config'));tg('tabbtn-usuarios',can('users'));
   tg('btnBackup',can('backup'));tg('btnCSV',can('backup'));tg('btnNew',can('students'));tg('btnNewCourt',can('students'));tg('menuAdmin',can('config')||can('users'));
   const active=document.querySelector('.tab.active');
+  applyTabsConfig();
   if(active&&((active.dataset.tab==='config'&&!can('config'))||(active.dataset.tab==='usuarios'&&!can('users'))||((active.dataset.tab==='estadisticas'||active.dataset.tab==='informes')&&!can('reports'))))showTab('alumnos');
   else render();
 }
@@ -1323,6 +1338,7 @@ function refreshSelects(){
 function showTab(t){
   if(t==='config'&&!can('config'))return;if(t==='usuarios'&&!can('users'))return;
   if((t==='estadisticas'||t==='informes')&&!can('reports'))return;
+  if(DB.config.tabsHidden&&DB.config.tabsHidden.includes(t))return;
   document.querySelectorAll('.tabdrop.open').forEach(d=>d.classList.remove('open'));
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   const top=document.querySelector('.tab[data-tab="'+t+'"]');
@@ -1787,10 +1803,120 @@ async function clearAllMarks(){
 function clearFilters(){search.value='';['fProg','fNivel','fCat','fSexo','fAnio','fDia','fHora','fProf','fCourt','fFreq'].forEach(msClear);fEstado.value='Activo';render();}
 
 /* Config */
-function loadConfigForm(){const c=DB.config;cfgName.value=c.name;cfgProg.value=c.programas.join(', ');cfgNivel.value=c.niveles.join(', ');cfgCat.value=c.categorias.join(', ');cfgRaquetas.value=(c.raquetas||DEF_CONFIG.raquetas).join(', ');cfgExtras.value=(c.extras||[]).join(', ');cfgRankCats.value=(c.rankCats||DEF_CONFIG.rankCats).join(', ');cfgCourts.value=c.courts.join(', ');document.getElementById('cfgCourtView').value=c.courtView||'single';document.getElementById('cfgCourtRow2').value=(c.courtRow2||DEF_CONFIG.courtRow2||[]).join(', ');cfgCapMini.value=c.capMini;cfgCapGen.value=c.capGeneral;cfgDias.value=c.dias.join(', ');cfgHoras.value=c.horas.join(', ');cfgProf.value=c.profs.join(', ');if(document.getElementById('cfgLogoPrev'))document.getElementById('cfgLogoPrev').innerHTML=c.logo?`<img src="${c.logo}" style="height:46px;max-width:160px;object-fit:contain;border:1px solid var(--line);border-radius:8px;padding:4px;background:#fff">`:'<span class="small">Sin logo (se usa el por defecto)</span>';}
+function loadConfigForm(){const c=DB.config;cfgName.value=c.name;cfgProg.value=c.programas.join(', ');cfgNivel.value=c.niveles.join(', ');cfgCat.value=c.categorias.join(', ');cfgRaquetas.value=(c.raquetas||DEF_CONFIG.raquetas).join(', ');cfgExtras.value=(c.extras||[]).join(', ');cfgRankCats.value=(c.rankCats||DEF_CONFIG.rankCats).join(', ');cfgCourts.value=c.courts.join(', ');document.getElementById('cfgCourtView').value=c.courtView||'single';document.getElementById('cfgCourtRow2').value=(c.courtRow2||DEF_CONFIG.courtRow2||[]).join(', ');cfgCapMini.value=c.capMini;cfgCapGen.value=c.capGeneral;cfgDias.value=c.dias.join(', ');cfgHoras.value=c.horas.join(', ');cfgProf.value=c.profs.join(', ');if(document.getElementById('cfgLogoPrev'))document.getElementById('cfgLogoPrev').innerHTML=c.logo?`<img src="${c.logo}" style="height:46px;max-width:160px;object-fit:contain;border:1px solid var(--line);border-radius:8px;padding:4px;background:#fff">`:'<span class="small">Sin logo (se usa el por defecto)</span>';applyTheme();renderThemeEditor();renderTabsManager();}
 async function loadStorageInfo(){const el=document.getElementById('cfgStorage');if(!el)return;if(!can('config')){el.innerHTML='';return;}el.innerHTML='<span class="small">Calculando…</span>';try{const d=await api('GET','/api/storage');const limitMb=512;const mb=(d.bytes||0)/1048576;const pct=Math.min(100,mb/limitMb*100);const col=pct>80?'#c0392b':(pct>50?'#b46410':'#1f7a4d');const used=mb<0.1?((d.bytes||0)/1024).toFixed(0)+' KB':mb.toFixed(mb<10?2:1)+' MB';const pctTxt=pct<0.1?'menos de 0,1':pct.toFixed(1).replace('.',',');const c=d.counts||{};el.innerHTML=`<div style="font-weight:600;margin-bottom:5px">${used} usados de ~512 MB</div><div style="height:13px;background:#eef0f4;border-radius:7px;overflow:hidden;max-width:380px"><div style="height:100%;width:${pct<1.2?1.2:pct}%;background:${col}"></div></div><div class="small" style="margin-top:6px">${pctTxt}% del plan gratuito de Neon · ${c.students||0} alumnos · ${c.attendance||0} registros de asistencia${d.mode==='json-file'?' · <i>modo local de prueba</i>':''}</div><div class="small" style="margin-top:4px;color:var(--muted)">Tip: subí planificaciones y videos como <b>enlaces de Drive</b> (no como archivos) para que el espacio se mantenga mínimo.</div>`;}catch(e){el.innerHTML='<span class="small">No se pudo calcular el uso ahora. Probá recargar.</span>';}}
 function pl(v){return v.split(',').map(x=>x.trim()).filter(Boolean);}
-let _cfgT=null;function saveConfig(){if(!can('config'))return;const c=DB.config;c.name=cfgName.value||'ESCUELA DE TENIS - CLUB DE AMIGOS';c.programas=pl(cfgProg.value);c.niveles=pl(cfgNivel.value);c.categorias=pl(cfgCat.value);c.raquetas=pl(cfgRaquetas.value);c.extras=pl(cfgExtras.value);c.rankCats=pl(cfgRankCats.value);c.courts=pl(cfgCourts.value);c.courtView=document.getElementById('cfgCourtView').value;c.courtRow2=pl(document.getElementById('cfgCourtRow2').value);c.capMini=Math.max(1,parseInt(cfgCapMini.value)||5);c.capGeneral=Math.max(1,parseInt(cfgCapGen.value)||6);c.dias=pl(cfgDias.value);c.horas=pl(cfgHoras.value);c.profs=pl(cfgProf.value);schoolName.textContent=c.name;refreshSelects();render();clearTimeout(_cfgT);_cfgT=setTimeout(()=>api('PUT','/api/config',DB.config).catch(e=>console.warn(e)),600);}
+let _cfgT=null;function queueSaveConfig(){clearTimeout(_cfgT);_cfgT=setTimeout(()=>api('PUT','/api/config',DB.config).catch(e=>console.warn(e)),600);}
+function saveConfig(){if(!can('config'))return;const c=DB.config;c.name=cfgName.value||'ESCUELA DE TENIS - CLUB DE AMIGOS';c.programas=pl(cfgProg.value);c.niveles=pl(cfgNivel.value);c.categorias=pl(cfgCat.value);c.raquetas=pl(cfgRaquetas.value);c.extras=pl(cfgExtras.value);c.rankCats=pl(cfgRankCats.value);c.courts=pl(cfgCourts.value);c.courtView=document.getElementById('cfgCourtView').value;c.courtRow2=pl(document.getElementById('cfgCourtRow2').value);c.capMini=Math.max(1,parseInt(cfgCapMini.value)||5);c.capGeneral=Math.max(1,parseInt(cfgCapGen.value)||6);c.dias=pl(cfgDias.value);c.horas=pl(cfgHoras.value);c.profs=pl(cfgProf.value);schoolName.textContent=c.name;refreshSelects();render();queueSaveConfig();}
+
+/* ===== Diseño: colores del tema ===== */
+const THEME_VARS=[
+  {k:'green',label:'Color principal (botones, pestaña activa)',css:'--green'},
+  {k:'greenD',label:'Color principal · oscuro (hover)',css:'--green-d'},
+  {k:'greenL',label:'Color principal · claro (fondos suaves)',css:'--green-l'},
+  {k:'bg',label:'Fondo de la página',css:'--bg'},
+  {k:'card',label:'Fondo de tarjetas',css:'--card'},
+  {k:'line',label:'Bordes',css:'--line'},
+  {k:'txt',label:'Texto principal',css:'--txt'},
+  {k:'muted',label:'Texto secundario',css:'--muted'},
+  {k:'clay',label:'Color de alerta / eliminar',css:'--clay'}
+];
+function applyTheme(){
+  const t={...DEF_CONFIG.theme,...(DB.config.theme||{})};
+  THEME_VARS.forEach(v=>document.documentElement.style.setProperty(v.css,t[v.k]||DEF_CONFIG.theme[v.k]));
+}
+function renderThemeEditor(){
+  const box=document.getElementById('themeEditor');if(!box)return;
+  if(!can('config')){box.innerHTML='';return;}
+  const t={...DEF_CONFIG.theme,...(DB.config.theme||{})};
+  box.innerHTML=THEME_VARS.map(v=>`<div class="field"><label>${esc(v.label)}</label><input type="color" value="${esc(t[v.k]||DEF_CONFIG.theme[v.k])}" onchange="setThemeColor('${v.k}',this.value)"></div>`).join('');
+}
+function setThemeColor(k,val){
+  if(!can('config'))return;
+  DB.config.theme={...DEF_CONFIG.theme,...(DB.config.theme||{})};
+  DB.config.theme[k]=val;
+  applyTheme();queueSaveConfig();
+}
+function resetTheme(){
+  if(!can('config'))return;
+  DB.config.theme={...DEF_CONFIG.theme};
+  applyTheme();renderThemeEditor();queueSaveConfig();
+}
+
+/* ===== Diseño: orden y visibilidad de pestañas ===== */
+const TAB_MANAGE_DOMAINS=[
+  {key:'flat', label:'Fila principal', containerSel:'.tabs', anchorSel:'#menuEval', menuSel:null,
+    items:[{id:'asistencia',label:'Asistencia'},{id:'competencias',label:'Competencias'}]},
+  {key:'canchas', label:'Menú "Canchas ▾"', containerSel:'#canchasDrop', anchorSel:null, menuSel:'#menuCanchas',
+    items:[{id:'canchas',label:'Distribución por cancha'},{id:'recuperaciones',label:'Recuperaciones e invitaciones'},{id:'historial',label:'Historial de cambios'}]},
+  {key:'gestion', label:'Menú "Gestión ▾"', containerSel:'#gestionDrop', anchorSel:null, menuSel:'#menuGestion',
+    items:[{id:'calendario',label:'Calendario'},{id:'capacitaciones',label:'Capacitaciones'},{id:'comunicaciones',label:'Comunicaciones'},{id:'estadisticas',label:'Datos de la escuela',perm:'reports'},{id:'informes',label:'Informes (PDF)',perm:'reports'},{id:'planificaciones',label:'Planificaciones'},{id:'ranking',label:'Ranking por año'}]}
+];
+function orderedDomainItems(domain){
+  const order=DB.config.tabsOrder||[];
+  const idxOf=id=>{const i=order.indexOf(id);return i<0?9999:i;};
+  return domain.items.slice().sort((a,b)=>(idxOf(a.id)-idxOf(b.id))||(domain.items.indexOf(a)-domain.items.indexOf(b)));
+}
+function applyTabsConfig(){
+  const hidden=DB.config.tabsHidden||[];
+  TAB_MANAGE_DOMAINS.forEach(domain=>{
+    const container=document.querySelector(domain.containerSel);
+    if(!container)return;
+    const anchor=domain.anchorSel?document.querySelector(domain.anchorSel):null;
+    let visibleCount=0;
+    orderedDomainItems(domain).forEach(it=>{
+      const el=document.querySelector('[data-tab="'+it.id+'"]');
+      if(!el)return;
+      if(anchor)container.insertBefore(el,anchor);else container.appendChild(el);
+      const permOk=!it.perm||can(it.perm);
+      const isVisible=permOk&&!hidden.includes(it.id);
+      el.style.display=isVisible?'':'none';
+      if(isVisible)visibleCount++;
+    });
+    if(domain.menuSel){const menu=document.querySelector(domain.menuSel);if(menu)menu.style.display=visibleCount?'':'none';}
+  });
+  const active=document.querySelector('.tab.active');
+  if(active&&hidden.includes(active.dataset.tab))showTab('alumnos');
+}
+function renderTabsManager(){
+  const box=document.getElementById('tabsManager');if(!box)return;
+  if(!can('config')){box.innerHTML='';return;}
+  const hidden=new Set(DB.config.tabsHidden||[]);
+  box.innerHTML=TAB_MANAGE_DOMAINS.map(domain=>{
+    const items=orderedDomainItems(domain);
+    return `<div class="sectitle" style="margin-top:14px;font-size:13px">${esc(domain.label)}</div>`+
+      items.map((it,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+        <input type="checkbox" ${hidden.has(it.id)?'':'checked'} onchange="tabToggleHidden('${it.id}',this.checked)">
+        <span style="flex:1">${esc(it.label)}</span>
+        <button type="button" class="btn sm ghost" ${i===0?'disabled':''} onclick="tabMove('${domain.key}','${it.id}',-1)">↑</button>
+        <button type="button" class="btn sm ghost" ${i===items.length-1?'disabled':''} onclick="tabMove('${domain.key}','${it.id}',1)">↓</button>
+      </div>`).join('');
+  }).join('')+`<button class="btn sm ghost" type="button" style="margin-top:10px" onclick="resetTabs()">Restablecer orden y visibilidad</button>`;
+}
+function tabToggleHidden(id,checked){
+  if(!can('config'))return;
+  const set=new Set(DB.config.tabsHidden||[]);
+  if(checked)set.delete(id);else set.add(id);
+  DB.config.tabsHidden=[...set];
+  applyPermissions();queueSaveConfig();
+}
+function tabMove(domainKey,id,dir){
+  if(!can('config'))return;
+  const domain=TAB_MANAGE_DOMAINS.find(d=>d.key===domainKey);if(!domain)return;
+  const ids=orderedDomainItems(domain).map(x=>x.id);
+  const i=ids.indexOf(id),j=i+dir;
+  if(i<0||j<0||j>=ids.length)return;
+  [ids[i],ids[j]]=[ids[j],ids[i]];
+  const newOrder=[];
+  TAB_MANAGE_DOMAINS.forEach(d=>newOrder.push(...(d.key===domainKey?ids:orderedDomainItems(d).map(x=>x.id))));
+  DB.config.tabsOrder=newOrder;
+  renderTabsManager();applyTabsConfig();queueSaveConfig();
+}
+function resetTabs(){
+  if(!can('config'))return;
+  DB.config.tabsHidden=[];DB.config.tabsOrder=[];
+  applyPermissions();renderTabsManager();queueSaveConfig();
+}
 
 /* Import/Export */
 function exportJSON(){if(!can('backup'))return;const b=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='escuela-tenis-respaldo-'+new Date().toISOString().slice(0,10)+'.json';a.click();}
