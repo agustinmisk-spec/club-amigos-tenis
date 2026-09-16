@@ -1743,7 +1743,7 @@ function lpGeneratePDF(p){
   const blocksHTML=(p.bloques||[]).map(b=>{
     const st=LP_BLOCK_STYLE[b.tipo]||LP_BLOCK_STYLE.custom;
     const n=(b.graficos||[]).length;
-    const gw=n<=1?250:(n===2?195:150);
+    const gw=n<=1?195:(n===2?152:118);
     const graphsHTML=(b.graficos||[]).map(g=>{
       const shapesSvg=(g.shapes||[]).map(s=>{
         if(s.type==='flechaCurva'){const c=lpCurveCtrl(s.x1,s.y1,s.x2,s.y2);return `<path d="M${s.x1},${s.y1} Q${c.cx},${c.cy} ${s.x2},${s.y2}" fill="none" stroke="#c0392b" stroke-width="0.9" marker-start="url(#lppArrow)" marker-end="url(#lppArrow)"/>`;}
@@ -1754,7 +1754,7 @@ function lpGeneratePDF(p){
       }).join('');
       const elsSvg=(g.elements||[]).map(e=>`<g transform="translate(${e.x},${e.y}) rotate(${e.rot||0}) scale(${e.scale||1})">${lpElGlyph(e.kind,e.color,e.label,e.id)}</g>`).join('');
       const courtSvg=lpCourtBg(g.court,g.courtScale||1,g.courtWidth||1);
-      return `<svg viewBox="0 0 100 ${LP_CH}" class="lppg" style="width:${gw}px">${courtSvg}${shapesSvg}${elsSvg}</svg>`;
+      return `<svg viewBox="0 0 100 ${LP_CH}" class="lppg" style="width:calc(${gw}px * var(--s))">${courtSvg}${shapesSvg}${elsSvg}</svg>`;
     }).join('');
     return `<div class="blk">
       <div class="blkhd"><span>${st.icon}</span><b>${esc(b.titulo||'')}</b>${b.minutos?`<span class="blkmin">${esc(String(b.minutos))}′</span>`:''}</div>
@@ -1768,26 +1768,26 @@ function lpGeneratePDF(p){
   const html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+esc(safeTitle)+'</title><style>'
     +'@page{size:A4 portrait;margin:9mm}*{box-sizing:border-box}html,body{margin:0;padding:0}'
     +'body{font-family:"Segoe UI",Arial,Helvetica,sans-serif;color:#26313a;width:192mm}'
-    +'#wrap{transform-origin:top left}'
-    +'.hd{display:flex;align-items:center;gap:10px;border-bottom:3px solid '+LP_PDF_COLOR+';padding-bottom:8px;margin-bottom:10px}'
-    +'.hd img,.hd svg{height:42px;width:auto;flex:0 0 auto}'
-    +'.hd h1{font-size:24px;margin:0;color:'+LP_PDF_COLOR+';letter-spacing:.2px}'
-    +'.hdsub{font-size:14px;color:'+LP_PDF_COLOR+';font-weight:600;margin-top:1px}'
-    +'.hdmeta{font-size:12.5px;color:#667685;margin-top:2px}'
-    +'.fields{display:flex;gap:10px;margin-bottom:13px}'
-    +'.fields .f{flex:1;background:#f2f6f4;border-left:3px solid '+LP_PDF_COLOR+';border-radius:0 6px 6px 0;padding:7px 11px;font-size:12.5px;line-height:1.5}'
-    +'.fields .f b{color:'+LP_PDF_COLOR+';display:block;font-size:10px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px}'
-    +'.blocks{display:flex;flex-direction:column;gap:9px}'
+    +'#wrap{--s:1}'
+    +'.hd{display:flex;align-items:center;gap:calc(9px * var(--s));border-bottom:3px solid '+LP_PDF_COLOR+';padding-bottom:calc(7px * var(--s));margin-bottom:calc(9px * var(--s))}'
+    +'.hd img,.hd svg{height:calc(38px * var(--s));width:auto;flex:0 0 auto}'
+    +'.hd h1{font-size:calc(19px * var(--s));margin:0;color:'+LP_PDF_COLOR+';letter-spacing:.2px}'
+    +'.hdsub{font-size:calc(12px * var(--s));color:'+LP_PDF_COLOR+';font-weight:600;margin-top:1px}'
+    +'.hdmeta{font-size:calc(10.5px * var(--s));color:#667685;margin-top:2px}'
+    +'.fields{display:flex;gap:calc(9px * var(--s));margin-bottom:calc(10px * var(--s))}'
+    +'.fields .f{flex:1;background:#f2f6f4;border-left:3px solid '+LP_PDF_COLOR+';border-radius:0 6px 6px 0;padding:calc(6px * var(--s)) calc(10px * var(--s));font-size:calc(11px * var(--s));line-height:1.45}'
+    +'.fields .f b{color:'+LP_PDF_COLOR+';display:block;font-size:calc(9px * var(--s));text-transform:uppercase;letter-spacing:.4px;margin-bottom:calc(2px * var(--s))}'
+    +'.blocks{display:flex;flex-direction:column;gap:calc(8px * var(--s))}'
     +'.blk{border:1px solid #dfe4e6;border-radius:8px;overflow:hidden;break-inside:avoid;box-shadow:0 1px 2px rgba(0,0,0,.05)}'
-    +'.blkhd{display:flex;align-items:center;gap:7px;padding:6px 12px;color:#fff;font-size:14.5px;background:'+LP_PDF_COLOR+'}'
+    +'.blkhd{display:flex;align-items:center;gap:calc(7px * var(--s));padding:calc(5px * var(--s)) calc(11px * var(--s));color:#fff;font-size:calc(12px * var(--s));background:'+LP_PDF_COLOR+'}'
     +'.blkhd b{font-weight:700}'
-    +'.blkmin{margin-left:auto;background:rgba(255,255,255,.25);border-radius:10px;padding:1px 10px;font-size:12.5px;font-weight:600}'
-    +'.blkbody{display:flex;gap:14px;padding:10px 12px;align-items:flex-start}'
-    +'.blkdesc{flex:1;font-size:13.5px;line-height:1.5;min-width:0}'
+    +'.blkmin{margin-left:auto;background:rgba(255,255,255,.25);border-radius:10px;padding:calc(1px * var(--s)) calc(9px * var(--s));font-size:calc(10.5px * var(--s));font-weight:600}'
+    +'.blkbody{display:flex;gap:calc(12px * var(--s));padding:calc(8px * var(--s)) calc(11px * var(--s));align-items:flex-start}'
+    +'.blkdesc{flex:1;font-size:calc(11.5px * var(--s));line-height:1.48;min-width:0}'
     +'.blkdesc-empty{color:#aab2b8}'
-    +'.blkgraphs{display:flex;flex-wrap:wrap;gap:8px;flex:0 0 auto;justify-content:flex-end}'
+    +'.blkgraphs{display:flex;flex-wrap:wrap;gap:calc(6px * var(--s));flex:0 0 auto;justify-content:flex-end}'
     +'.lppg{background:#fff;border:1px solid #dde3de;border-radius:5px}'
-    +'.ft{margin-top:10px;font-size:9.5px;color:#9aa4ab;text-align:right}'
+    +'.ft{margin-top:calc(9px * var(--s));font-size:calc(8.5px * var(--s));color:#9aa4ab;text-align:right}'
     +'</style></head><body>'
     +'<svg width="0" height="0" style="position:absolute"><defs><marker id="lppArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#c0392b"/></marker></defs></svg>'
     +'<div id="wrap">'
@@ -1804,12 +1804,14 @@ function lpGeneratePDF(p){
     +'<scr'+'ipt>window.onload=function(){'
     +'var wrap=document.getElementById("wrap");'
     +'var pxPerMM=document.body.getBoundingClientRect().width/192;'
-    +'var zoom=1;'
-    +'for(var i=0;i<5;i++){'
+    +'var s=1,target=277;'
+    +'for(var i=0;i<8;i++){'
     +'var hMM=wrap.getBoundingClientRect().height/pxPerMM;'
-    +'if(hMM<=278)break;'
-    +'zoom=Math.max(0.3,zoom*(278/hMM)*0.96);'
-    +'wrap.style.zoom=zoom;'
+    +'var diff=Math.abs(hMM-target)/target;'
+    +'if(diff<0.015)break;'
+    +'var ratio=target/hMM;'
+    +'s=Math.min(1.4,Math.max(0.62,s*ratio*(ratio>1?0.97:0.985)));'
+    +'wrap.style.setProperty("--s",s);'
     +'}'
     +'setTimeout(function(){window.print();},350);'
     +'};</scr'+'ipt>'
