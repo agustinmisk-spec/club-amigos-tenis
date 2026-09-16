@@ -1375,7 +1375,7 @@ function lpBlockCardHTML(block){
 function lpAddGraphic(blockId){
   const b=lpFindBlock(blockId);if(!b)return;
   b.graficos=b.graficos||[];
-  b.graficos.push({id:'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),court:'none',courtScale:1,courtWidth:1,elements:[],shapes:[]});
+  b.graficos.push({id:'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),court:'none',courtScale:1,courtWidth:1.4,elements:[],shapes:[]});
   lpRenderBlock(blockId);
 }
 function lpRemoveGraphic(blockId,graphId){
@@ -1410,7 +1410,7 @@ function lpSetCourtWidth(blockId,graphId,val){
 function lpAddElement(blockId,graphId,kind,label){
   const g=lpFindGraphic(blockId,graphId);if(!g)return;
   g.elements=g.elements||[];
-  g.elements.push({id:'el'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),kind,x:50,y:LP_CY,rot:0,scale:1,color:LP_DEFAULT_COLOR[kind]||'',label:label||''});
+  g.elements.push({id:'el'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),kind,x:50,y:LP_CY,rot:0,scale:0.7,color:LP_DEFAULT_COLOR[kind]||'',label:label||''});
   lpRenderGraphic(blockId,graphId);
 }
 function lpArmDraw(blockId,graphId,type){LP_DRAW={blockId,graphId,type};lpRenderGraphic(blockId,graphId);}
@@ -1682,7 +1682,8 @@ document.addEventListener('keydown',e=>{
   else if(k==='v'){if(LP_CLIPBOARD&&LP_ACTIVE_GRAPHIC){lpPasteClipboard(LP_ACTIVE_GRAPHIC.blockId,LP_ACTIVE_GRAPHIC.graphId);e.preventDefault();}}
 });
 function lpPrintPlanById(id){const p=LESSONPLANS.find(x=>x.id===id);if(p)lpGeneratePDF(p);}
-const LP_BLOCK_STYLE={inicio:{color:'#2563eb',icon:'🏁'},calentamiento:{color:'#ff7a1a',icon:'🔥'},drill:{color:'#1f8a4d',icon:'🎯'},saques:{color:'#7c3aed',icon:'🎾'},juego:{color:'#c0392b',icon:'🏆'},cierre:{color:'#111827',icon:'✅'},custom:{color:'#8a94a6',icon:'📌'}};
+const LP_PDF_COLOR='#1b3a6b';
+const LP_BLOCK_STYLE={inicio:{icon:'🏁'},calentamiento:{icon:'🔥'},drill:{icon:'🎯'},saques:{icon:'🎾'},juego:{icon:'🏆'},cierre:{icon:'✅'},custom:{icon:'📌'}};
 function lpGeneratePDF(p){
   if(!p)return;
   const w=window.open('','_blank');
@@ -1708,7 +1709,7 @@ function lpGeneratePDF(p){
       return `<svg viewBox="0 0 100 ${LP_CH}" class="lppg" style="width:${gw}px">${courtSvg}${shapesSvg}${elsSvg}</svg>`;
     }).join('');
     return `<div class="blk">
-      <div class="blkhd" style="background:${st.color}"><span>${st.icon}</span><b>${esc(b.titulo||'')}</b>${b.minutos?`<span class="blkmin">${esc(String(b.minutos))}′</span>`:''}</div>
+      <div class="blkhd"><span>${st.icon}</span><b>${esc(b.titulo||'')}</b>${b.minutos?`<span class="blkmin">${esc(String(b.minutos))}′</span>`:''}</div>
       <div class="blkbody">
         ${b.descripcion?`<div class="blkdesc">${fmtRaw(b.descripcion)}</div>`:'<div class="blkdesc blkdesc-empty">—</div>'}
         ${graphsHTML?`<div class="blkgraphs">${graphsHTML}</div>`:''}
@@ -1720,24 +1721,24 @@ function lpGeneratePDF(p){
     +'@page{size:A4 portrait;margin:9mm}*{box-sizing:border-box}html,body{margin:0;padding:0}'
     +'body{font-family:"Segoe UI",Arial,Helvetica,sans-serif;color:#26313a;width:192mm}'
     +'#wrap{transform-origin:top left}'
-    +'.hd{display:flex;align-items:center;gap:10px;border-bottom:3px solid #1b3a6b;padding-bottom:7px;margin-bottom:8px}'
-    +'.hd img,.hd svg{height:38px;width:auto;flex:0 0 auto}'
-    +'.hd h1{font-size:17px;margin:0;color:#1b3a6b;letter-spacing:.2px}'
-    +'.hdmeta{font-size:9.5px;color:#667685;margin-top:2px}'
-    +'.fields{display:flex;gap:8px;margin-bottom:9px}'
-    +'.fields .f{flex:1;background:#f2f6f4;border-left:3px solid #1b3a6b;border-radius:0 6px 6px 0;padding:5px 9px;font-size:9px;line-height:1.35}'
-    +'.fields .f b{color:#1b3a6b;display:block;font-size:8px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:1px}'
-    +'.blocks{display:flex;flex-direction:column;gap:6px}'
+    +'.hd{display:flex;align-items:center;gap:10px;border-bottom:3px solid '+LP_PDF_COLOR+';padding-bottom:8px;margin-bottom:10px}'
+    +'.hd img,.hd svg{height:42px;width:auto;flex:0 0 auto}'
+    +'.hd h1{font-size:20px;margin:0;color:'+LP_PDF_COLOR+';letter-spacing:.2px}'
+    +'.hdmeta{font-size:11px;color:#667685;margin-top:2px}'
+    +'.fields{display:flex;gap:9px;margin-bottom:11px}'
+    +'.fields .f{flex:1;background:#f2f6f4;border-left:3px solid '+LP_PDF_COLOR+';border-radius:0 6px 6px 0;padding:6px 10px;font-size:10.5px;line-height:1.4}'
+    +'.fields .f b{color:'+LP_PDF_COLOR+';display:block;font-size:8.5px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px}'
+    +'.blocks{display:flex;flex-direction:column;gap:7px}'
     +'.blk{border:1px solid #dfe4e6;border-radius:8px;overflow:hidden;break-inside:avoid;box-shadow:0 1px 2px rgba(0,0,0,.05)}'
-    +'.blkhd{display:flex;align-items:center;gap:7px;padding:4px 10px;color:#fff;font-size:10.5px}'
+    +'.blkhd{display:flex;align-items:center;gap:7px;padding:5px 11px;color:#fff;font-size:12px;background:'+LP_PDF_COLOR+'}'
     +'.blkhd b{font-weight:700}'
-    +'.blkmin{margin-left:auto;background:rgba(255,255,255,.25);border-radius:10px;padding:1px 8px;font-size:9px;font-weight:600}'
-    +'.blkbody{display:flex;gap:10px;padding:7px 10px;align-items:flex-start}'
-    +'.blkdesc{flex:1;font-size:9.5px;line-height:1.4;min-width:0}'
+    +'.blkmin{margin-left:auto;background:rgba(255,255,255,.25);border-radius:10px;padding:1px 9px;font-size:10.5px;font-weight:600}'
+    +'.blkbody{display:flex;gap:12px;padding:8px 11px;align-items:flex-start}'
+    +'.blkdesc{flex:1;font-size:11px;line-height:1.45;min-width:0}'
     +'.blkdesc-empty{color:#aab2b8}'
-    +'.blkgraphs{display:flex;flex-wrap:wrap;gap:5px;flex:0 0 auto;justify-content:flex-end}'
+    +'.blkgraphs{display:flex;flex-wrap:wrap;gap:6px;flex:0 0 auto;justify-content:flex-end}'
     +'.lppg{background:#fff;border:1px solid #dde3de;border-radius:5px}'
-    +'.ft{margin-top:8px;font-size:7.5px;color:#9aa4ab;text-align:right}'
+    +'.ft{margin-top:9px;font-size:8.5px;color:#9aa4ab;text-align:right}'
     +'</style></head><body>'
     +'<svg width="0" height="0" style="position:absolute"><defs><marker id="lppArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#c0392b"/></marker></defs></svg>'
     +'<div id="wrap">'
