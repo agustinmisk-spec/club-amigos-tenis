@@ -52,6 +52,7 @@ function pgStore() {
     await q(`CREATE TABLE IF NOT EXISTS group_notes (key text PRIMARY KEY, data jsonb NOT NULL)`);
     await q(`CREATE TABLE IF NOT EXISTS tasks (id text PRIMARY KEY, data jsonb NOT NULL)`);
     await q(`CREATE TABLE IF NOT EXISTS tecevals (id text PRIMARY KEY, data jsonb NOT NULL)`);
+    await q(`CREATE TABLE IF NOT EXISTS lessonplans (id text PRIMARY KEY, data jsonb NOT NULL)`);
     const seed = loadSeed();
     if (!(await getConfig())) await setConfig(seed.config || {});
     if ((await countStudents()) === 0 && Array.isArray(seed.students)) {
@@ -154,11 +155,15 @@ function pgStore() {
   async function addTecEval(e) { await q(`INSERT INTO tecevals(id,data) VALUES($1,$2)`, [e.id, e]); return e; }
   async function deleteTecEval(id) { await q(`DELETE FROM tecevals WHERE id=$1`, [id]); }
   async function updateTecEval(e) { await q(`UPDATE tecevals SET data=$2 WHERE id=$1`, [e.id, e]); return e; }
+  async function listLessonPlans() { return (await q(`SELECT data FROM lessonplans ORDER BY data->>'fechaDesde' DESC`)).map(r => r.data); }
+  async function addLessonPlan(p) { await q(`INSERT INTO lessonplans(id,data) VALUES($1,$2)`, [p.id, p]); return p; }
+  async function deleteLessonPlan(id) { await q(`DELETE FROM lessonplans WHERE id=$1`, [id]); }
+  async function updateLessonPlan(p) { await q(`UPDATE lessonplans SET data=$2 WHERE id=$1`, [p.id, p]); return p; }
   async function storageInfo() {
     let bytes = 0;
     try { const r = await q(`SELECT pg_database_size(current_database()) AS s`); bytes = Number(r[0].s) || 0; } catch (e) {}
     const counts = {};
-    for (const t of ['students', 'attendance', 'plans', 'messages', 'events', 'recoveries', 'competitions', 'changes', 'trainings', 'evaluations', 'tasks', 'tecevals']) {
+    for (const t of ['students', 'attendance', 'plans', 'messages', 'events', 'recoveries', 'competitions', 'changes', 'trainings', 'evaluations', 'tasks', 'tecevals', 'lessonplans']) {
       try { const r = await q(`SELECT count(*)::int AS n FROM ${t}`); counts[t] = r[0].n; } catch (e) { counts[t] = 0; }
     }
     return { mode: 'postgres', bytes, counts };
@@ -170,7 +175,8 @@ function pgStore() {
            listEvents, addEvent, deleteEvent, updateEvent, listTrainings, addTraining, deleteTraining, updateTraining, listEvaluations, addEvaluation, deleteEvaluation, updateEvaluation,
            listRecoveries, addRecovery, deleteRecovery, updateRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition,
            listChanges, addChange, updateChange, deleteChange, listGroupNotes, setGroupNote, listTasks, addTask, deleteTask, updateTask,
-           listTecEvals, addTecEval, deleteTecEval, updateTecEval };
+           listTecEvals, addTecEval, deleteTecEval, updateTecEval,
+           listLessonPlans, addLessonPlan, deleteLessonPlan, updateLessonPlan };
 }
 
 /* =====================================================================
@@ -202,6 +208,7 @@ function jsonStore() {
     if (!db.groupNotes) db.groupNotes = {};
     if (!db.tasks) db.tasks = [];
     if (!db.tecevals) db.tecevals = [];
+    if (!db.lessonPlans) db.lessonPlans = [];
     persist();
   }
 
@@ -287,12 +294,17 @@ function jsonStore() {
   async function addTecEval(e) { db.tecevals.push(e); persist(); return e; }
   async function deleteTecEval(id) { db.tecevals = db.tecevals.filter(x => x.id !== id); persist(); }
   async function updateTecEval(e) { const i=db.tecevals.findIndex(x=>x.id===e.id); if(i>=0)db.tecevals[i]=e; persist(); return e; }
+  async function listLessonPlans() { return db.lessonPlans.slice().sort((a,b)=>(b.fechaDesde||'').localeCompare(a.fechaDesde||'')); }
+  async function addLessonPlan(p) { db.lessonPlans.push(p); persist(); return p; }
+  async function deleteLessonPlan(id) { db.lessonPlans = db.lessonPlans.filter(x => x.id !== id); persist(); }
+  async function updateLessonPlan(p) { const i=db.lessonPlans.findIndex(x=>x.id===p.id); if(i>=0)db.lessonPlans[i]=p; persist(); return p; }
   async function storageInfo() {
     let bytes = 0; try { bytes = Buffer.byteLength(JSON.stringify(db)); } catch (e) {}
     return { mode: 'json-file', bytes, counts: {
       students: db.students.length, attendance: Object.keys(db.attendance || {}).length,
       plans: (db.plans || []).length, messages: (db.messages || []).length, events: (db.events || []).length,
-      recoveries: (db.recoveries || []).length, competitions: (db.competitions || []).length, changes: (db.changes || []).length
+      recoveries: (db.recoveries || []).length, competitions: (db.competitions || []).length, changes: (db.changes || []).length,
+      lessonplans: (db.lessonPlans || []).length
     } };
   }
 
@@ -302,7 +314,8 @@ function jsonStore() {
            listEvents, addEvent, deleteEvent, updateEvent, listTrainings, addTraining, deleteTraining, updateTraining, listEvaluations, addEvaluation, deleteEvaluation, updateEvaluation,
            listRecoveries, addRecovery, deleteRecovery, updateRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition,
            listChanges, addChange, updateChange, deleteChange, listGroupNotes, setGroupNote, listTasks, addTask, deleteTask, updateTask,
-           listTecEvals, addTecEval, deleteTecEval, updateTecEval };
+           listTecEvals, addTecEval, deleteTecEval, updateTecEval,
+           listLessonPlans, addLessonPlan, deleteLessonPlan, updateLessonPlan };
 }
 
 const store = USE_PG ? pgStore() : jsonStore();

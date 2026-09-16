@@ -17,9 +17,9 @@ const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('he
 
 /* Permisos por rol (idénticos al frontend) */
 const ROLES = {
-  director: { label: 'Director / Coordinador', students: true, config: true, users: true, backup: true, import: true, attendance: true, obs: true, delete: true, content: true, reports: true },
-  admin:    { label: 'Administrativo',         students: true, config: false, users: false, backup: true, import: false, attendance: true, obs: true, delete: false, content: true, reports: true },
-  profesor: { label: 'Profesor/a',             students: false, config: false, users: false, backup: false, import: false, attendance: true, obs: false, delete: false, content: false, reports: false }
+  director: { label: 'Director / Coordinador', students: true, config: true, users: true, backup: true, import: true, attendance: true, obs: true, delete: true, content: true, reports: true, planner: true },
+  admin:    { label: 'Administrativo',         students: true, config: false, users: false, backup: true, import: false, attendance: true, obs: true, delete: false, content: true, reports: true, planner: false },
+  profesor: { label: 'Profesor/a',             students: false, config: false, users: false, backup: false, import: false, attendance: true, obs: false, delete: false, content: false, reports: false, planner: false }
 };
 const cap = (role, k) => !!(ROLES[role] && ROLES[role][k]);
 const publicUser = u => ({ id: u.id, nombre: u.nombre, usuario: u.usuario, rol: u.rol, prof: u.prof || '' });
@@ -208,6 +208,65 @@ app.get('/api/plans/:id/download', auth, async (req, res) => {
   res.send(Buffer.from(p.content || '', 'base64'));
 });
 app.delete('/api/plans/:id', auth, need('content'), async (req, res) => { await store.deletePlan(req.params.id); res.json({ ok: true }); });
+
+/* ---------------- Planificador de clases (planificaciones estructuradas) ---------------- */
+const cleanLessonPlan = b => {
+  const num = (v, min, max, def) => { const n = Number(v); return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : def; };
+  const cleanEl = e => ({
+    id: String((e && e.id) || '').slice(0, 40),
+    kind: String((e && e.kind) || '').slice(0, 30),
+    x: num(e && e.x, 0, 100, 50), y: num(e && e.y, 0, 100, 50),
+    rot: num(e && e.rot, -360, 360, 0),
+    label: String((e && e.label) || '').slice(0, 10)
+  });
+  const cleanShape = s => ({
+    id: String((s && s.id) || '').slice(0, 40),
+    type: ['linea', 'flecha', 'flechaPunteada', 'flechaDoble'].includes(s && s.type) ? s.type : 'linea',
+    x1: num(s && s.x1, 0, 100, 10), y1: num(s && s.y1, 0, 100, 10),
+    x2: num(s && s.x2, 0, 100, 90), y2: num(s && s.y2, 0, 100, 90)
+  });
+  const cleanGraph = g => ({
+    id: String((g && g.id) || '').slice(0, 40),
+    court: ['none', 'mini', 'full'].includes(g && g.court) ? g.court : 'none',
+    elements: Array.isArray(g && g.elements) ? g.elements.slice(0, 60).map(cleanEl) : [],
+    shapes: Array.isArray(g && g.shapes) ? g.shapes.slice(0, 60).map(cleanShape) : []
+  });
+  const cleanBlock = bl => ({
+    id: String((bl && bl.id) || '').slice(0, 40),
+    tipo: String((bl && bl.tipo) || '').slice(0, 30),
+    titulo: String((bl && bl.titulo) || '').slice(0, 80),
+    minutos: num(bl && bl.minutos, 0, 300, 0),
+    descripcion: String((bl && bl.descripcion) || '').slice(0, 4000),
+    graficos: Array.isArray(bl && bl.graficos) ? bl.graficos.slice(0, 10).map(cleanGraph) : []
+  });
+  return {
+    programa: String((b && b.programa) || '').slice(0, 80),
+    nivel: String((b && b.nivel) || '').slice(0, 80),
+    fechaDesde: String((b && b.fechaDesde) || '').slice(0, 10),
+    fechaHasta: String((b && b.fechaHasta) || '').slice(0, 10),
+    objetivo: String((b && b.objetivo) || '').slice(0, 2000),
+    contenido: String((b && b.contenido) || '').slice(0, 4000),
+    bloques: Array.isArray(b && b.bloques) ? b.bloques.slice(0, 12).map(cleanBlock) : []
+  };
+};
+app.get('/api/lessonplans', auth, async (req, res) => { res.json(await store.listLessonPlans()); });
+app.post('/api/lessonplans', auth, need('planner'), async (req, res) => {
+  const b = req.body || {};
+  if (!b.programa || !b.fechaDesde) return res.status(400).json({ error: 'Faltan programa y fecha desde' });
+  const clean = cleanLessonPlan(b);
+  const p = Object.assign({ id: 'lp' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) }, clean, { autor: req.user.nombre, fecha: new Date().toISOString() });
+  await store.addLessonPlan(p);
+  res.json(p);
+});
+app.put('/api/lessonplans/:id', auth, need('planner'), async (req, res) => {
+  const list = await store.listLessonPlans();
+  const p = list.find(x => x.id === req.params.id);
+  if (!p) return res.status(404).json({ error: 'No existe' });
+  Object.assign(p, cleanLessonPlan(req.body || {}));
+  await store.updateLessonPlan(p);
+  res.json(p);
+});
+app.delete('/api/lessonplans/:id', auth, need('planner'), async (req, res) => { await store.deleteLessonPlan(req.params.id); res.json({ ok: true }); });
 
 /* ---------------- Comunicaciones (mensajes) ---------------- */
 app.get('/api/messages', auth, async (req, res) => { res.json(await store.listMessages()); });
@@ -485,7 +544,8 @@ app.get('/api/backup', async (req, res) => {
       events: await store.listEvents(),
       groupNotes: await store.listGroupNotes(),
       tasks: await store.listTasks(),
-      tecevals: await store.listTecEvals()
+      tecevals: await store.listTecEvals(),
+      lessonPlans: await store.listLessonPlans()
     };
     const json = JSON.stringify(dump);
     if (String(req.query.gz || '') === '1') {
