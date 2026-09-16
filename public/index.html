@@ -1744,18 +1744,21 @@ function lpGeneratePDF(p){
     const st=LP_BLOCK_STYLE[b.tipo]||LP_BLOCK_STYLE.custom;
     const n=(b.graficos||[]).length;
     const textLen=String(b.descripcion||'').replace(/<[^>]+>/g,'').trim().length;
-    const gw=n<=1?195:(n===2?152:118);
-    let stacked=false;
-    if(n>0){
+    const gwRow=n<=1?195:(n===2?152:118);
+    const gwCol=175;
+    let colstack=false;
+    if(n>1){
       const W=700,charW=6,lineH=17;
-      const rowW=n*gw+(n-1)*6;
-      const charsSide=Math.max(20,W-rowW-12)/charW;
-      const charsFull=W/charW;
-      const gh=0.9*gw;
-      const sideTotal=Math.max(Math.ceil(textLen/charsSide)*lineH,gh);
-      const stackTotal=Math.ceil(textLen/charsFull)*lineH+gh+4;
-      stacked=stackTotal<sideTotal;
+      const rowGW=n*gwRow+(n-1)*6;
+      const charsRow=Math.max(20,W-rowGW-12)/charW;
+      const charsCol=Math.max(20,W-gwCol-12)/charW;
+      const rowGH=0.9*gwRow;
+      const colGH=n*(0.9*gwCol)+(n-1)*6;
+      const rowTotal=Math.max(Math.ceil(textLen/charsRow)*lineH,rowGH);
+      const colTotal=Math.max(Math.ceil(textLen/charsCol)*lineH,colGH);
+      colstack=colTotal<rowTotal;
     }
+    const gw=colstack?gwCol:gwRow;
     const graphsHTML=(b.graficos||[]).map(g=>{
       const shapesSvg=(g.shapes||[]).map(s=>{
         if(s.type==='flechaCurva'){const c=lpCurveCtrl(s.x1,s.y1,s.x2,s.y2);return `<path d="M${s.x1},${s.y1} Q${c.cx},${c.cy} ${s.x2},${s.y2}" fill="none" stroke="#c0392b" stroke-width="0.9" marker-start="url(#lppArrow)" marker-end="url(#lppArrow)"/>`;}
@@ -1770,9 +1773,9 @@ function lpGeneratePDF(p){
     }).join('');
     return `<div class="blk">
       <div class="blkhd"><span>${st.icon}</span><b>${esc(b.titulo||'')}</b>${b.minutos?`<span class="blkmin">${esc(String(b.minutos))}′</span>`:''}</div>
-      <div class="blkbody${stacked?' stacked':''}">
+      <div class="blkbody">
         ${b.descripcion?`<div class="blkdesc">${fmtRaw(b.descripcion)}</div>`:'<div class="blkdesc blkdesc-empty">—</div>'}
-        ${graphsHTML?`<div class="blkgraphs">${graphsHTML}</div>`:''}
+        ${graphsHTML?`<div class="blkgraphs${colstack?' colstack':''}">${graphsHTML}</div>`:''}
       </div>
     </div>`;
   }).join('');
@@ -1795,11 +1798,10 @@ function lpGeneratePDF(p){
     +'.blkhd b{font-weight:700}'
     +'.blkmin{margin-left:auto;background:rgba(255,255,255,.25);border-radius:10px;padding:calc(1px * var(--s)) calc(9px * var(--s));font-size:calc(10.5px * var(--s));font-weight:600}'
     +'.blkbody{display:flex;gap:calc(12px * var(--s));padding:calc(8px * var(--s) * var(--g)) calc(11px * var(--s));align-items:flex-start}'
-    +'.blkbody.stacked{flex-direction:column}'
     +'.blkdesc{flex:1;font-size:calc(11.5px * var(--s));line-height:calc(1.48 + 0.1 * (var(--g) - 1));min-width:0}'
     +'.blkdesc-empty{color:#aab2b8}'
     +'.blkgraphs{display:flex;flex-wrap:wrap;gap:calc(6px * var(--s));flex:0 0 auto;justify-content:flex-end}'
-    +'.blkbody.stacked .blkgraphs{justify-content:flex-start;margin-top:calc(4px * var(--s) * var(--g));width:100%}'
+    +'.blkgraphs.colstack{flex-direction:column;flex-wrap:nowrap;justify-content:flex-start}'
     +'.lppg{background:#fff;border:1px solid #dde3de;border-radius:5px}'
     +'.ft{margin-top:calc(9px * var(--s) * var(--g));font-size:calc(8.5px * var(--s));color:#9aa4ab;text-align:right}'
     +'</style></head><body>'
