@@ -53,6 +53,7 @@ function pgStore() {
     await q(`CREATE TABLE IF NOT EXISTS tasks (id text PRIMARY KEY, data jsonb NOT NULL)`);
     await q(`CREATE TABLE IF NOT EXISTS tecevals (id text PRIMARY KEY, data jsonb NOT NULL)`);
     await q(`CREATE TABLE IF NOT EXISTS lessonplans (id text PRIMARY KEY, data jsonb NOT NULL)`);
+    await q(`CREATE TABLE IF NOT EXISTS libraryitems (id text PRIMARY KEY, data jsonb NOT NULL)`);
     const seed = loadSeed();
     if (!(await getConfig())) await setConfig(seed.config || {});
     if ((await countStudents()) === 0 && Array.isArray(seed.students)) {
@@ -159,11 +160,15 @@ function pgStore() {
   async function addLessonPlan(p) { await q(`INSERT INTO lessonplans(id,data) VALUES($1,$2)`, [p.id, p]); return p; }
   async function deleteLessonPlan(id) { await q(`DELETE FROM lessonplans WHERE id=$1`, [id]); }
   async function updateLessonPlan(p) { await q(`UPDATE lessonplans SET data=$2 WHERE id=$1`, [p.id, p]); return p; }
+  async function listLibraryItems() { return (await q(`SELECT data FROM libraryitems ORDER BY data->>'fecha' DESC`)).map(r => r.data); }
+  async function addLibraryItem(it) { await q(`INSERT INTO libraryitems(id,data) VALUES($1,$2)`, [it.id, it]); return it; }
+  async function deleteLibraryItem(id) { await q(`DELETE FROM libraryitems WHERE id=$1`, [id]); }
+  async function updateLibraryItem(it) { await q(`UPDATE libraryitems SET data=$2 WHERE id=$1`, [it.id, it]); return it; }
   async function storageInfo() {
     let bytes = 0;
     try { const r = await q(`SELECT pg_database_size(current_database()) AS s`); bytes = Number(r[0].s) || 0; } catch (e) {}
     const counts = {};
-    for (const t of ['students', 'attendance', 'plans', 'messages', 'events', 'recoveries', 'competitions', 'changes', 'trainings', 'evaluations', 'tasks', 'tecevals', 'lessonplans']) {
+    for (const t of ['students', 'attendance', 'plans', 'messages', 'events', 'recoveries', 'competitions', 'changes', 'trainings', 'evaluations', 'tasks', 'tecevals', 'lessonplans', 'libraryitems']) {
       try { const r = await q(`SELECT count(*)::int AS n FROM ${t}`); counts[t] = r[0].n; } catch (e) { counts[t] = 0; }
     }
     return { mode: 'postgres', bytes, counts };
@@ -176,7 +181,8 @@ function pgStore() {
            listRecoveries, addRecovery, deleteRecovery, updateRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition,
            listChanges, addChange, updateChange, deleteChange, listGroupNotes, setGroupNote, listTasks, addTask, deleteTask, updateTask,
            listTecEvals, addTecEval, deleteTecEval, updateTecEval,
-           listLessonPlans, addLessonPlan, deleteLessonPlan, updateLessonPlan };
+           listLessonPlans, addLessonPlan, deleteLessonPlan, updateLessonPlan,
+           listLibraryItems, addLibraryItem, deleteLibraryItem, updateLibraryItem };
 }
 
 /* =====================================================================
@@ -209,6 +215,7 @@ function jsonStore() {
     if (!db.tasks) db.tasks = [];
     if (!db.tecevals) db.tecevals = [];
     if (!db.lessonPlans) db.lessonPlans = [];
+    if (!db.libraryItems) db.libraryItems = [];
     persist();
   }
 
@@ -298,13 +305,17 @@ function jsonStore() {
   async function addLessonPlan(p) { db.lessonPlans.push(p); persist(); return p; }
   async function deleteLessonPlan(id) { db.lessonPlans = db.lessonPlans.filter(x => x.id !== id); persist(); }
   async function updateLessonPlan(p) { const i=db.lessonPlans.findIndex(x=>x.id===p.id); if(i>=0)db.lessonPlans[i]=p; persist(); return p; }
+  async function listLibraryItems() { return db.libraryItems.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')); }
+  async function addLibraryItem(it) { db.libraryItems.push(it); persist(); return it; }
+  async function deleteLibraryItem(id) { db.libraryItems = db.libraryItems.filter(x => x.id !== id); persist(); }
+  async function updateLibraryItem(it) { const i=db.libraryItems.findIndex(x=>x.id===it.id); if(i>=0)db.libraryItems[i]=it; persist(); return it; }
   async function storageInfo() {
     let bytes = 0; try { bytes = Buffer.byteLength(JSON.stringify(db)); } catch (e) {}
     return { mode: 'json-file', bytes, counts: {
       students: db.students.length, attendance: Object.keys(db.attendance || {}).length,
       plans: (db.plans || []).length, messages: (db.messages || []).length, events: (db.events || []).length,
       recoveries: (db.recoveries || []).length, competitions: (db.competitions || []).length, changes: (db.changes || []).length,
-      lessonplans: (db.lessonPlans || []).length
+      lessonplans: (db.lessonPlans || []).length, libraryitems: (db.libraryItems || []).length
     } };
   }
 
@@ -315,7 +326,8 @@ function jsonStore() {
            listRecoveries, addRecovery, deleteRecovery, updateRecovery, listCompetitions, addCompetition, updateCompetition, deleteCompetition,
            listChanges, addChange, updateChange, deleteChange, listGroupNotes, setGroupNote, listTasks, addTask, deleteTask, updateTask,
            listTecEvals, addTecEval, deleteTecEval, updateTecEval,
-           listLessonPlans, addLessonPlan, deleteLessonPlan, updateLessonPlan };
+           listLessonPlans, addLessonPlan, deleteLessonPlan, updateLessonPlan,
+           listLibraryItems, addLibraryItem, deleteLibraryItem, updateLibraryItem };
 }
 
 const store = USE_PG ? pgStore() : jsonStore();

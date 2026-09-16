@@ -809,6 +809,17 @@
   </div>
 </div>
 
+<div class="overlay" id="libOverlay">
+  <div class="modal" style="max-width:640px">
+    <h2>Biblioteca de ejercicios</h2>
+    <div class="body">
+      <input type="search" id="libSearch" placeholder="Buscar ejercicio…" oninput="libRenderList()" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:10px">
+      <div id="libList" style="max-height:56vh;overflow:auto"></div>
+    </div>
+    <div class="foot"><button class="btn ghost" onclick="closeLib()">Cerrar</button></div>
+  </div>
+</div>
+
 <div class="overlay" id="detailOverlay">
   <div class="modal" style="max-width:560px">
     <h2 id="detailTitle">Alumno</h2>
@@ -1042,6 +1053,7 @@ async function delEvent(id){if(!confirm('¿Eliminar esta actividad?'))return;try
 /* ===== Recuperaciones / Invitaciones / Competencias ===== */
 let RECOVERIES=[],COMPS=[],PLANS=[],GROUPNOTES=[],LESSONPLANS=[];
 let planSubTab='planificador',LP_EDIT=null,LP_SELECTED=null,LP_DRAW=null,LP_CLIPBOARD=null,LP_ACTIVE_GRAPHIC=null;
+let LIBRARY=[],LIB_TARGET_BLOCK=null;
 const LP_CH=90,LP_CY=45;
 const LP_BLOCK_CATALOG=[{tipo:'inicio',label:'Inicio de clase'},{tipo:'calentamiento',label:'Calentamiento'},{tipo:'drill',label:'Drill'},{tipo:'saques',label:'Saques'},{tipo:'juego',label:'Juego final'},{tipo:'cierre',label:'Cierre de clase'}];
 const LP_COLORS=['#111827','#c0392b','#1f8a4d','#2563eb','#ff7a1a','#f1c40f'];
@@ -1364,7 +1376,7 @@ function lpBlocksChecklistHTML(){
   const editable=can('planner');
   return `<div style="display:flex;flex-wrap:wrap;gap:10px;margin:8px 0">
     ${LP_BLOCK_CATALOG.map(c=>`<label style="display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:500"><input type="checkbox" ${included.has(c.tipo)?'checked':''} ${editable?'':'disabled'} onchange="lpToggleBlock('${c.tipo}','${esc(c.label)}',this.checked)">${esc(c.label)}</label>`).join('')}
-  </div>${editable?'<button type="button" class="btn sm ghost" onclick="lpAddCustomBlock()">+ Agregar bloque personalizado</button>':''}`;
+  </div>${editable?'<button type="button" class="btn sm ghost" onclick="lpAddCustomBlock()">+ Agregar bloque personalizado</button> <button type="button" class="btn sm ghost" onclick="openLibPicker()">📚 Desde biblioteca</button>':''}`;
 }
 function lpSortBlocks(){
   const order=LP_BLOCK_CATALOG.map(c=>c.tipo);
@@ -1417,7 +1429,11 @@ function lpBlockCardHTML(block){
     </div>
     <div class="field" style="margin-top:8px"><label>Descripción del ejercicio</label>${editable?rteBox('','',block.descripcion,60,'Descripción del ejercicio…',`lpSetBlockField('${block.id}','descripcion',rteGet(this))`):`<div class="rte" style="border:1px solid var(--line);border-radius:8px;background:var(--card)">${fmtRaw(block.descripcion||'')}</div>`}</div>
     ${graphs}
-    ${editable?`<button type="button" class="btn sm ghost" style="margin-top:6px" onclick="lpAddGraphic('${block.id}')">+ Agregar gráfico</button>`:''}
+    ${editable?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+      <button type="button" class="btn sm ghost" onclick="lpAddGraphic('${block.id}')">+ Agregar gráfico</button>
+      <button type="button" class="btn sm ghost" onclick="openLibPicker('${block.id}')">📚 Desde biblioteca</button>
+      <button type="button" class="btn sm ghost" onclick="libSaveBlock('${block.id}')">💾 Guardar en biblioteca</button>
+    </div>`:''}
   </div>`;
 }
 function lpAddGraphic(blockId){
@@ -1431,6 +1447,66 @@ function lpRemoveGraphic(blockId,graphId){
   b.graficos=(b.graficos||[]).filter(x=>x.id!==graphId);
   if(LP_SELECTED&&LP_SELECTED.graphId===graphId)LP_SELECTED=null;
   lpRenderBlock(blockId);
+}
+async function openLibPicker(blockId){
+  LIB_TARGET_BLOCK=blockId||null;
+  document.getElementById('libSearch').value='';
+  try{LIBRARY=await api('GET','/api/library');}catch(e){LIBRARY=[];}
+  libRenderList();
+  document.getElementById('libOverlay').classList.add('show');
+}
+function closeLib(){document.getElementById('libOverlay').classList.remove('show');LIB_TARGET_BLOCK=null;}
+function libRenderList(){
+  const wrap=document.getElementById('libList');if(!wrap)return;
+  const q=(document.getElementById('libSearch').value||'').toLowerCase().trim();
+  const items=LIBRARY.filter(it=>!q||(it.nombre||'').toLowerCase().includes(q));
+  if(!items.length){wrap.innerHTML='<p class="small">No hay ejercicios guardados'+(q?' que coincidan con la búsqueda':' todavía. Guardá uno desde un bloque con el botón "💾 Guardar en biblioteca"')+'.</p>';return;}
+  const editable=can('planner');
+  wrap.innerHTML=items.map(it=>{
+    const ng=(it.graficos||[]).length;
+    const preview=String(it.descripcion||'').replace(/<[^>]+>/g,'').trim();
+    return `<div class="card" style="padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
+      <div style="flex:1;min-width:0">
+        <b>${esc(it.nombre)}</b>
+        <div class="small" style="color:var(--muted)">${ng?ng+' gráfico(s)'+(preview?' · ':''):''}${esc(preview.slice(0,90))}${preview.length>90?'…':''}</div>
+      </div>
+      <button type="button" class="btn sm" onclick="libUseItem('${it.id}')">Usar</button>
+      ${editable?`<button type="button" class="att-btn" title="Eliminar de la biblioteca" onclick="libDeleteItem('${it.id}')">🗑</button>`:''}
+    </div>`;
+  }).join('');
+}
+function libUseItem(id){
+  const it=LIBRARY.find(x=>x.id===id);if(!it)return;
+  const graficos=(it.graficos||[]).map(g=>Object.assign({},JSON.parse(JSON.stringify(g)),{id:'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)}));
+  if(LIB_TARGET_BLOCK){
+    const b=lpFindBlock(LIB_TARGET_BLOCK);
+    if(b){
+      b.descripcion=it.descripcion||'';
+      b.graficos=graficos;
+      if(b.tipo==='custom'&&it.nombre)b.titulo=it.nombre;
+      lpRenderBlock(LIB_TARGET_BLOCK);
+    }
+  }else{
+    LP_EDIT.bloques=LP_EDIT.bloques||[];
+    LP_EDIT.bloques.push({id:'blk'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),tipo:'custom',titulo:it.nombre||'Bloque personalizado',minutos:0,descripcion:it.descripcion||'',graficos});
+    lpRenderBlockCards();
+  }
+  closeLib();
+}
+async function libDeleteItem(id){
+  if(!can('planner'))return;
+  if(!confirm('¿Eliminar este ejercicio de la biblioteca?'))return;
+  try{await api('DELETE','/api/library/'+id);LIBRARY=LIBRARY.filter(x=>x.id!==id);libRenderList();}catch(e){alert(e.message);}
+}
+async function libSaveBlock(blockId){
+  const b=lpFindBlock(blockId);if(!b)return;
+  const nombre=(prompt('Nombre para guardar este ejercicio en la biblioteca:',b.titulo||'')||'').trim();
+  if(!nombre)return;
+  try{
+    const saved=await api('POST','/api/library',{nombre,tipo:b.tipo,descripcion:b.descripcion||'',graficos:b.graficos||[]});
+    LIBRARY.unshift(saved);
+    alert('Ejercicio guardado en la biblioteca.');
+  }catch(e){alert(e.message);}
 }
 function lpRenderGraphic(blockId,graphId){
   const el=document.getElementById('lpGraph-'+graphId),block=lpFindBlock(blockId),g=block&&(block.graficos||[]).find(x=>x.id===graphId);

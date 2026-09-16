@@ -210,39 +210,39 @@ app.get('/api/plans/:id/download', auth, async (req, res) => {
 app.delete('/api/plans/:id', auth, need('content'), async (req, res) => { await store.deletePlan(req.params.id); res.json({ ok: true }); });
 
 /* ---------------- Planificador de clases (planificaciones estructuradas) ---------------- */
+const num = (v, min, max, def) => { const n = Number(v); return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : def; };
+const cleanEl = e => ({
+  id: String((e && e.id) || '').slice(0, 40),
+  kind: String((e && e.kind) || '').slice(0, 30),
+  x: num(e && e.x, 0, 100, 50), y: num(e && e.y, 0, 100, 50),
+  rot: num(e && e.rot, -360, 360, 0),
+  scale: num(e && e.scale, 0.4, 2.5, 1),
+  label: String((e && e.label) || '').slice(0, 10),
+  color: /^#[0-9a-fA-F]{3,8}$/.test(e && e.color) ? e.color : ''
+});
+const cleanShape = s => ({
+  id: String((s && s.id) || '').slice(0, 40),
+  type: ['linea', 'flecha', 'flechaPunteada', 'flechaDoble', 'flechaCurva'].includes(s && s.type) ? s.type : 'linea',
+  x1: num(s && s.x1, 0, 100, 10), y1: num(s && s.y1, 0, 100, 10),
+  x2: num(s && s.x2, 0, 100, 90), y2: num(s && s.y2, 0, 100, 90)
+});
+const cleanGraph = g => ({
+  id: String((g && g.id) || '').slice(0, 40),
+  court: ['none', 'mini', 'full'].includes(g && g.court) ? g.court : 'none',
+  courtScale: num(g && g.courtScale, 0.5, 1.5, 1),
+  courtWidth: num(g && g.courtWidth, 0.5, 2.2, 1),
+  elements: Array.isArray(g && g.elements) ? g.elements.slice(0, 60).map(cleanEl) : [],
+  shapes: Array.isArray(g && g.shapes) ? g.shapes.slice(0, 60).map(cleanShape) : []
+});
+const cleanBlock = bl => ({
+  id: String((bl && bl.id) || '').slice(0, 40),
+  tipo: String((bl && bl.tipo) || '').slice(0, 30),
+  titulo: String((bl && bl.titulo) || '').slice(0, 80),
+  minutos: num(bl && bl.minutos, 0, 300, 0),
+  descripcion: String((bl && bl.descripcion) || '').slice(0, 4000),
+  graficos: Array.isArray(bl && bl.graficos) ? bl.graficos.slice(0, 10).map(cleanGraph) : []
+});
 const cleanLessonPlan = b => {
-  const num = (v, min, max, def) => { const n = Number(v); return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : def; };
-  const cleanEl = e => ({
-    id: String((e && e.id) || '').slice(0, 40),
-    kind: String((e && e.kind) || '').slice(0, 30),
-    x: num(e && e.x, 0, 100, 50), y: num(e && e.y, 0, 100, 50),
-    rot: num(e && e.rot, -360, 360, 0),
-    scale: num(e && e.scale, 0.4, 2.5, 1),
-    label: String((e && e.label) || '').slice(0, 10),
-    color: /^#[0-9a-fA-F]{3,8}$/.test(e && e.color) ? e.color : ''
-  });
-  const cleanShape = s => ({
-    id: String((s && s.id) || '').slice(0, 40),
-    type: ['linea', 'flecha', 'flechaPunteada', 'flechaDoble', 'flechaCurva'].includes(s && s.type) ? s.type : 'linea',
-    x1: num(s && s.x1, 0, 100, 10), y1: num(s && s.y1, 0, 100, 10),
-    x2: num(s && s.x2, 0, 100, 90), y2: num(s && s.y2, 0, 100, 90)
-  });
-  const cleanGraph = g => ({
-    id: String((g && g.id) || '').slice(0, 40),
-    court: ['none', 'mini', 'full'].includes(g && g.court) ? g.court : 'none',
-    courtScale: num(g && g.courtScale, 0.5, 1.5, 1),
-    courtWidth: num(g && g.courtWidth, 0.5, 2.2, 1),
-    elements: Array.isArray(g && g.elements) ? g.elements.slice(0, 60).map(cleanEl) : [],
-    shapes: Array.isArray(g && g.shapes) ? g.shapes.slice(0, 60).map(cleanShape) : []
-  });
-  const cleanBlock = bl => ({
-    id: String((bl && bl.id) || '').slice(0, 40),
-    tipo: String((bl && bl.tipo) || '').slice(0, 30),
-    titulo: String((bl && bl.titulo) || '').slice(0, 80),
-    minutos: num(bl && bl.minutos, 0, 300, 0),
-    descripcion: String((bl && bl.descripcion) || '').slice(0, 4000),
-    graficos: Array.isArray(bl && bl.graficos) ? bl.graficos.slice(0, 10).map(cleanGraph) : []
-  });
   return {
     titulo: String((b && b.titulo) || '').slice(0, 150),
     programa: String((b && b.programa) || '').slice(0, 80),
@@ -273,6 +273,33 @@ app.put('/api/lessonplans/:id', auth, need('planner'), async (req, res) => {
   res.json(p);
 });
 app.delete('/api/lessonplans/:id', auth, need('planner'), async (req, res) => { await store.deleteLessonPlan(req.params.id); res.json({ ok: true }); });
+
+/* ---------------- Biblioteca de ejercicios (bloques reutilizables) ---------------- */
+const cleanLibraryItem = b => ({
+  nombre: String((b && b.nombre) || '').slice(0, 120),
+  tipo: String((b && b.tipo) || 'custom').slice(0, 30),
+  descripcion: String((b && b.descripcion) || '').slice(0, 4000),
+  graficos: Array.isArray(b && b.graficos) ? b.graficos.slice(0, 10).map(cleanGraph) : []
+});
+app.get('/api/library', auth, async (req, res) => { res.json(await store.listLibraryItems()); });
+app.post('/api/library', auth, need('planner'), async (req, res) => {
+  const b = req.body || {};
+  if (!b.nombre) return res.status(400).json({ error: 'Falta el nombre' });
+  const clean = cleanLibraryItem(b);
+  const it = Object.assign({ id: 'lib' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) }, clean, { autor: req.user.nombre, fecha: new Date().toISOString() });
+  await store.addLibraryItem(it);
+  res.json(it);
+});
+app.put('/api/library/:id', auth, need('planner'), async (req, res) => {
+  const list = await store.listLibraryItems();
+  const it = list.find(x => x.id === req.params.id);
+  if (!it) return res.status(404).json({ error: 'No existe' });
+  if (req.body && !req.body.nombre) return res.status(400).json({ error: 'Falta el nombre' });
+  Object.assign(it, cleanLibraryItem(req.body || {}));
+  await store.updateLibraryItem(it);
+  res.json(it);
+});
+app.delete('/api/library/:id', auth, need('planner'), async (req, res) => { await store.deleteLibraryItem(req.params.id); res.json({ ok: true }); });
 
 /* ---------------- Comunicaciones (mensajes) ---------------- */
 app.get('/api/messages', auth, async (req, res) => { res.json(await store.listMessages()); });
@@ -551,7 +578,8 @@ app.get('/api/backup', async (req, res) => {
       groupNotes: await store.listGroupNotes(),
       tasks: await store.listTasks(),
       tecevals: await store.listTecEvals(),
-      lessonPlans: await store.listLessonPlans()
+      lessonPlans: await store.listLessonPlans(),
+      libraryItems: await store.listLibraryItems()
     };
     const json = JSON.stringify(dump);
     if (String(req.query.gz || '') === '1') {
