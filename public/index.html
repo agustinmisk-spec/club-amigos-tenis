@@ -1371,7 +1371,7 @@ function lpBlockCardHTML(block){
 function lpAddGraphic(blockId){
   const b=lpFindBlock(blockId);if(!b)return;
   b.graficos=b.graficos||[];
-  b.graficos.push({id:'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),court:'none',elements:[],shapes:[]});
+  b.graficos.push({id:'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),court:'none',courtScale:1,elements:[],shapes:[]});
   lpRenderBlock(blockId);
 }
 function lpRemoveGraphic(blockId,graphId){
@@ -1385,6 +1385,15 @@ function lpRenderGraphic(blockId,graphId){
   if(el&&block&&g)el.outerHTML=lpGraphicCardHTML(block,g);
 }
 function lpSetCourt(blockId,graphId,court){const g=lpFindGraphic(blockId,graphId);if(!g)return;g.court=court;lpRenderGraphic(blockId,graphId);}
+function lpSetCourtScale(blockId,graphId,val){
+  const g=lpFindGraphic(blockId,graphId);if(!g)return;
+  const scale=Math.max(0.5,Math.min(1.5,parseFloat(val)||1));
+  g.courtScale=scale;
+  const bg=document.getElementById('lpCourtBgGroup-'+graphId);
+  if(bg)bg.innerHTML=lpCourtBg(g.court,scale);
+  const lbl=document.getElementById('lpCourtScaleLbl-'+graphId);
+  if(lbl)lbl.textContent=Math.round(scale*100)+'%';
+}
 function lpAddElement(blockId,graphId,kind,label){
   const g=lpFindGraphic(blockId,graphId);if(!g)return;
   g.elements=g.elements||[];
@@ -1417,9 +1426,16 @@ function lpMiniCourtLines(x,y,w,h){
     <line x1="${midx}" y1="${midY0}" x2="${midx}" y2="${midY1}" stroke="${col}" stroke-width="0.45"/>
     <line x1="${x-ext}" y1="${netY}" x2="${x+w+ext}" y2="${netY}" stroke="${col}" stroke-width="0.7"/>`;
 }
-function lpCourtBg(court){
-  if(court==='mini')return lpMiniCourtLines(43.5,10,13,36);
-  if(court==='full')return lpCourtLines(38,2,24,52);
+function lpCourtDims(baseW,baseH,scale){
+  let w=baseW*scale,h=baseH*scale;
+  if(h>54){const f=54/h;w*=f;h=54;}
+  if(w>94){const f=94/w;h*=f;w=94;}
+  return{w,h};
+}
+function lpCourtBg(court,scale){
+  const s=Math.max(0.4,Math.min(2,scale||1));
+  if(court==='mini'){const d=lpCourtDims(13,36,s);return lpMiniCourtLines(50-d.w/2,28-d.h/2,d.w,d.h);}
+  if(court==='full'){const d=lpCourtDims(22,47.7,s);return lpCourtLines(50-d.w/2,28-d.h/2,d.w,d.h);}
   return '';
 }
 function lpElGlyph(kind,color,label,elId){
@@ -1504,9 +1520,10 @@ function lpGraphicCardHTML(block,g){
       ${editable?`<button type="button" class="btn sm ghost" onclick="lpRemoveGraphic('${block.id}','${g.id}')">🗑 Eliminar gráfico</button>`:''}
     </div>
     ${editable?`<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px"><span class="small" style="align-self:center;color:var(--muted)">Fondo:</span>${courtBtn('none','Sin cancha')}${courtBtn('mini','Mini cancha')}${courtBtn('full','Cancha completa')}</div>
+    ${g.court!=='none'?`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><span class="small" style="color:var(--muted)">Tamaño:</span><input type="range" min="0.5" max="1.5" step="0.05" value="${g.courtScale||1}" oninput="lpSetCourtScale('${block.id}','${g.id}',this.value)" style="width:140px"><span class="small" id="lpCourtScaleLbl-${g.id}">${Math.round((g.courtScale||1)*100)}%</span></div>`:''}
     <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px"><span class="small" style="align-self:center;color:var(--muted)">Agregar:</span>${iconBtn('jugador','🧍 Jugador','A')}${iconBtn('jugador','🧑‍🏫 Profesor','P')}${iconBtn('raqueta','🎾 Raqueta')}${iconBtn('pelota','🟡 Pelota')}${iconBtn('canasto','🧺 Canasto')}${iconBtn('cono','🔶 Cono')}${iconBtn('conobajo','🔻 Cono bajo')}${iconBtn('aro','⭕ Aro')}${iconBtn('escalera','🪜 Escalera')}${iconBtn('pisada','👣 Pisada')}${iconBtn('soga','➰ Soga')}${iconBtn('red','🥅 Red')}</div>
     <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px"><span class="small" style="align-self:center;color:var(--muted)">Dibujar:</span>${drawBtn('linea','— Línea')}${drawBtn('flecha','→ Flecha')}${drawBtn('flechaPunteada','⇢ Flecha punteada')}${drawBtn('flechaDoble','⇔ Flecha doble')}${drawBtn('flechaCurva','⤳ Flecha curva')}${drawHere?'<span class="small" style="color:#c0392b">Tocá y arrastrá sobre el gráfico…</span>':''}</div>`:''}
-    <svg viewBox="0 0 100 56" style="width:100%;max-width:480px;display:block;background:#fff;border:1px solid var(--line);border-radius:8px;touch-action:none" onpointerdown="lpCanvasPointerDown(event,'${block.id}','${g.id}')">${lpCourtBg(g.court)}${shapesSvg}${elsSvg}</svg>
+    <svg viewBox="0 0 100 56" style="width:100%;max-width:480px;display:block;background:#fff;border:1px solid var(--line);border-radius:8px;touch-action:none" onpointerdown="lpCanvasPointerDown(event,'${block.id}','${g.id}')"><g id="lpCourtBgGroup-${g.id}">${lpCourtBg(g.court,g.courtScale||1)}</g>${shapesSvg}${elsSvg}</svg>
     ${selHere?`<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px">
       ${selEl&&LP_COLORABLE.has(selEl.kind)?LP_COLORS.map(cl=>`<button type="button" title="Color" onclick="lpSetElColor('${cl}')" style="width:20px;height:20px;border-radius:50%;border:2px solid ${selEl.color===cl?'#111':'#fff'};box-shadow:0 0 0 1px var(--line);background:${cl};cursor:pointer;padding:0"></button>`).join(''):''}
       ${selEl&&selEl.kind==='jugador'?`<input value="${esc(selEl.label||'')}" maxlength="4" oninput="lpSetElLabel(this.value)" placeholder="Etiqueta" style="width:64px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px">`:''}
