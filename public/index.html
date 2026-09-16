@@ -1240,7 +1240,7 @@ function lpListHTML(){
   return '<div class="feed">'+LESSONPLANS.map(p=>{
     const mins=(p.bloques||[]).reduce((a,b)=>a+(b.minutos||0),0);
     const niveles=(p.niveles&&p.niveles.length)?p.niveles:(p.nivel?[p.nivel]:[]);
-    return `<div class="item"><div class="top"><span class="ti">📅 ${esc(p.programa||'—')}${niveles.length?' · '+esc(niveles.join(', ')):''}</span><span>${can('planner')?`<button class="att-btn" title="Eliminar" onclick="lpDeletePlan('${p.id}')">🗑</button> `:''}<button class="btn sec sm" onclick="lpEditPlan('${p.id}')">${can('planner')?'Editar':'Ver'}</button></span></div><div class="meta2">${esc(fmtFecha(p.fechaDesde))}${p.fechaHasta?' a '+esc(fmtFecha(p.fechaHasta)):''} · ${(p.bloques||[]).length} bloque(s) · ${mins} min · ${esc(p.autor||'')}</div>${p.objetivo?`<div class="small" style="margin-top:4px">${fmt(p.objetivo)}</div>`:''}</div>`;
+    return `<div class="item"><div class="top"><span class="ti">📅 ${esc(p.programa||'—')}${niveles.length?' · '+esc(niveles.join(', ')):''}</span><span>${can('planner')?`<button class="att-btn" title="Eliminar" onclick="lpDeletePlan('${p.id}')">🗑</button> `:''}<button class="btn sec sm" onclick="lpPrintPlanById('${p.id}')">📄 PDF</button> <button class="btn sec sm" onclick="lpEditPlan('${p.id}')">${can('planner')?'Editar':'Ver'}</button></span></div><div class="meta2">${esc(fmtFecha(p.fechaDesde))}${p.fechaHasta?' a '+esc(fmtFecha(p.fechaHasta)):''} · ${(p.bloques||[]).length} bloque(s) · ${mins} min · ${esc(p.autor||'')}</div>${p.objetivo?`<div class="small" style="margin-top:4px">${fmt(p.objetivo)}</div>`:''}</div>`;
   }).join('')+'</div>';
 }
 function lpNewPlan(){
@@ -1282,6 +1282,7 @@ function lpEditorHTML(){
   return `<div class="toolbar" style="margin-bottom:10px">
     <button class="btn sm ghost" onclick="lpBackToList()">← Volver al listado</button>
     <div class="spacer"></div>
+    <button class="btn sec" onclick="lpGeneratePDF(LP_EDIT)">📄 Generar PDF</button>
     ${editable?`<button class="btn" onclick="lpSavePlan()">💾 ${isNew?'Crear planificación':'Guardar cambios'}</button>`:''}
     ${editable&&!isNew?`<button class="btn sec" onclick="lpDeletePlan('${LP_EDIT.id}')">🗑 Eliminar</button>`:''}
   </div>
@@ -1680,6 +1681,71 @@ document.addEventListener('keydown',e=>{
   else if(k==='x'){if(LP_SELECTED){lpCutSel();e.preventDefault();}}
   else if(k==='v'){if(LP_CLIPBOARD&&LP_ACTIVE_GRAPHIC){lpPasteClipboard(LP_ACTIVE_GRAPHIC.blockId,LP_ACTIVE_GRAPHIC.graphId);e.preventDefault();}}
 });
+function lpPrintPlanById(id){const p=LESSONPLANS.find(x=>x.id===id);if(p)lpGeneratePDF(p);}
+function lpGeneratePDF(p){
+  if(!p)return;
+  const w=window.open('','_blank');
+  if(!w){alert('Tu navegador bloqueó la ventana emergente. Permitila para generar el PDF.');return;}
+  const niveles=(p.niveles&&p.niveles.length)?p.niveles.join(', '):(p.nivel||'');
+  const mins=(p.bloques||[]).reduce((a,b)=>a+(b.minutos||0),0);
+  const blocksHTML=(p.bloques||[]).map(b=>{
+    const graphsHTML=(b.graficos||[]).map(g=>{
+      const shapesSvg=(g.shapes||[]).map(s=>{
+        if(s.type==='flechaCurva'){const c=lpCurveCtrl(s.x1,s.y1,s.x2,s.y2);return `<path d="M${s.x1},${s.y1} Q${c.cx},${c.cy} ${s.x2},${s.y2}" fill="none" stroke="#c0392b" stroke-width="0.9" marker-start="url(#lppArrow)" marker-end="url(#lppArrow)"/>`;}
+        const dash=s.type==='flechaPunteada'?' stroke-dasharray="1.6,1.2"':'';
+        const mEnd=s.type!=='linea'?' marker-end="url(#lppArrow)"':'';
+        const mStart=s.type==='flechaDoble'?' marker-start="url(#lppArrow)"':'';
+        return `<line x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}" stroke="#c0392b" stroke-width="0.9"${dash}${mEnd}${mStart}/>`;
+      }).join('');
+      const elsSvg=(g.elements||[]).map(e=>`<g transform="translate(${e.x},${e.y}) rotate(${e.rot||0}) scale(${e.scale||1})">${lpElGlyph(e.kind,e.color,e.label,e.id)}</g>`).join('');
+      const courtSvg=lpCourtBg(g.court,g.courtScale||1,g.courtWidth||1);
+      return `<svg viewBox="0 0 100 ${LP_CH}" class="lppg">${courtSvg}${shapesSvg}${elsSvg}</svg>`;
+    }).join('');
+    return `<div class="lpb">
+      <div class="lpbh"><b>${esc(b.titulo||'')}</b>${b.minutos?' · '+esc(String(b.minutos))+"'":''}</div>
+      ${b.descripcion?`<div class="lpbd">${fmtRaw(b.descripcion)}</div>`:''}
+      ${graphsHTML?`<div class="lpbg">${graphsHTML}</div>`:''}
+    </div>`;
+  }).join('');
+  const safeTitle=String(p.programa||'Planificación').replace(/[<>]/g,'');
+  const html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+esc(safeTitle)+'</title><style>'
+    +'@page{size:A4 landscape;margin:8mm}*{box-sizing:border-box}html,body{margin:0;padding:0}'
+    +'body{font-family:Arial,Helvetica,sans-serif;color:#222;width:281mm}'
+    +'#wrap{transform-origin:top left}'
+    +'h1{font-size:15px;margin:0 0 2px;color:#1b3a6b}'
+    +'.meta{font-size:10px;color:#666;margin-bottom:6px}'
+    +'.fld{font-size:9.5px;margin-bottom:3px}'
+    +'.blocks{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}'
+    +'.lpb{border:1px solid #bbb;border-radius:5px;padding:5px;flex:1 1 200px;max-width:240px}'
+    +'.lpbh{font-size:10px;border-bottom:1px solid #eee;padding-bottom:2px;margin-bottom:3px}'
+    +'.lpbd{font-size:8.5px;line-height:1.25;margin-bottom:4px}'
+    +'.lpbg{display:flex;flex-wrap:wrap;gap:3px}'
+    +'.lppg{width:100px;background:#fff;border:1px solid #ddd;border-radius:3px}'
+    +'</style></head><body>'
+    +'<svg width="0" height="0" style="position:absolute"><defs><marker id="lppArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#c0392b"/></marker></defs></svg>'
+    +'<div id="wrap">'
+    +'<h1>'+esc(p.programa||'Planificación')+(niveles?' · '+esc(niveles):'')+'</h1>'
+    +'<div class="meta">'+esc(fmtFecha(p.fechaDesde||''))+(p.fechaHasta?' a '+esc(fmtFecha(p.fechaHasta)):'')+' · '+mins+' min total · '+(p.bloques||[]).length+' bloque(s)</div>'
+    +(p.objetivo?'<div class="fld"><b>Objetivo:</b> '+fmtRaw(p.objetivo)+'</div>':'')
+    +(p.contenido?'<div class="fld"><b>Contenido:</b> '+fmtRaw(p.contenido)+'</div>':'')
+    +'<div class="blocks">'+blocksHTML+'</div>'
+    +'</div>'
+    +'<scr'+'ipt>window.onload=function(){'
+    +'var wrap=document.getElementById("wrap");'
+    +'var pxPerMM=document.body.getBoundingClientRect().width/281;'
+    +'var zoom=1;'
+    +'for(var i=0;i<5;i++){'
+    +'var hMM=wrap.getBoundingClientRect().height/pxPerMM;'
+    +'if(hMM<=193)break;'
+    +'zoom=Math.max(0.3,zoom*(193/hMM)*0.96);'
+    +'wrap.style.zoom=zoom;'
+    +'}'
+    +'setTimeout(function(){window.print();},350);'
+    +'};</scr'+'ipt>'
+    +'</body></html>';
+  w.document.write(html);
+  w.document.close();
+}
 async function renderMessages(){
   const post=document.getElementById('msgPost'),w=document.getElementById('msgsWrap');
   w.innerHTML='<div class="card empty"><p>Cargando…</p></div>';
