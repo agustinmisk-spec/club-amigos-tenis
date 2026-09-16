@@ -1041,7 +1041,8 @@ async function delEvent(id){if(!confirm('¿Eliminar esta actividad?'))return;try
 
 /* ===== Recuperaciones / Invitaciones / Competencias ===== */
 let RECOVERIES=[],COMPS=[],PLANS=[],GROUPNOTES=[],LESSONPLANS=[];
-let planSubTab='planificador',LP_EDIT=null,LP_SELECTED=null,LP_DRAW=null;
+let planSubTab='planificador',LP_EDIT=null,LP_SELECTED=null,LP_DRAW=null,LP_CLIPBOARD=null,LP_ACTIVE_GRAPHIC=null;
+const LP_CH=90,LP_CY=45;
 const LP_BLOCK_CATALOG=[{tipo:'inicio',label:'Inicio de clase'},{tipo:'calentamiento',label:'Calentamiento'},{tipo:'drill',label:'Drill'},{tipo:'saques',label:'Saques'},{tipo:'juego',label:'Juego final'},{tipo:'cierre',label:'Cierre de clase'}];
 const LP_COLORS=['#111827','#c0392b','#1f8a4d','#2563eb','#ff7a1a','#f1c40f'];
 const LP_DEFAULT_COLOR={jugador:'#111827',raqueta:'#111827',pelota:'#cfe61c',canasto:'#e9c46a',cono:'#ff7a1a',conobajo:'#ff7a1a',aro:'#e0338c'};
@@ -1408,7 +1409,7 @@ function lpSetCourtWidth(blockId,graphId,val){
 function lpAddElement(blockId,graphId,kind,label){
   const g=lpFindGraphic(blockId,graphId);if(!g)return;
   g.elements=g.elements||[];
-  g.elements.push({id:'el'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),kind,x:50,y:28,rot:0,scale:1,color:LP_DEFAULT_COLOR[kind]||'',label:label||''});
+  g.elements.push({id:'el'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),kind,x:50,y:LP_CY,rot:0,scale:1,color:LP_DEFAULT_COLOR[kind]||'',label:label||''});
   lpRenderGraphic(blockId,graphId);
 }
 function lpArmDraw(blockId,graphId,type){LP_DRAW={blockId,graphId,type};lpRenderGraphic(blockId,graphId);}
@@ -1438,14 +1439,14 @@ function lpMiniCourtLines(x,y,w,h){
     <line x1="${x-ext}" y1="${netY}" x2="${x+w+ext}" y2="${netY}" stroke="${col}" stroke-width="0.7"/>`;
 }
 function lpCourtDims(baseW,baseH,scale,wScale){
-  const h=Math.min(baseH*scale,54);
+  const h=Math.min(baseH*scale,LP_CH-2);
   const w=Math.min(baseW*scale*(wScale||1),94);
   return{w,h};
 }
 function lpCourtBg(court,scale,wScale){
   const s=Math.max(0.4,Math.min(2,scale||1)),ws=Math.max(0.5,Math.min(2.2,wScale||1));
-  if(court==='mini'){const d=lpCourtDims(13,36,s,ws);return lpMiniCourtLines(50-d.w/2,28-d.h/2,d.w,d.h);}
-  if(court==='full'){const d=lpCourtDims(22,47.7,s,ws);return lpCourtLines(50-d.w/2,28-d.h/2,d.w,d.h);}
+  if(court==='mini'){const d=lpCourtDims(13,36,s,ws);return lpMiniCourtLines(50-d.w/2,LP_CY-d.h/2,d.w,d.h);}
+  if(court==='full'){const d=lpCourtDims(22,47.7,s,ws);return lpCourtLines(50-d.w/2,LP_CY-d.h/2,d.w,d.h);}
   return '';
 }
 function lpElGlyph(kind,color,label,elId){
@@ -1535,12 +1536,16 @@ function lpGraphicCardHTML(block,g){
       <span class="small" style="color:var(--muted);margin-left:8px">Ancho:</span><input type="range" min="0.5" max="2.2" step="0.05" value="${g.courtWidth||1}" oninput="lpSetCourtWidth('${block.id}','${g.id}',this.value)" style="width:120px"><span class="small" id="lpCourtWidthLbl-${g.id}">${Math.round((g.courtWidth||1)*100)}%</span>
     </div>`:''}
     <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px"><span class="small" style="align-self:center;color:var(--muted)">Agregar:</span>${iconBtn('jugador','🧍 Jugador','A')}${iconBtn('jugador','🧑‍🏫 Profesor','P')}${iconBtn('raqueta','🎾 Raqueta')}${iconBtn('pelota','🟡 Pelota')}${iconBtn('canasto','🧺 Canasto')}${iconBtn('cono','🔶 Cono')}${iconBtn('conobajo','🔻 Cono bajo')}${iconBtn('aro','⭕ Aro')}${iconBtn('escalera','🪜 Escalera')}${iconBtn('pisada','👣 Pisada')}${iconBtn('soga','➰ Soga')}${iconBtn('red','🥅 Red')}</div>
-    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px"><span class="small" style="align-self:center;color:var(--muted)">Dibujar:</span>${drawBtn('linea','— Línea')}${drawBtn('flecha','→ Flecha')}${drawBtn('flechaPunteada','⇢ Flecha punteada')}${drawBtn('flechaDoble','⇔ Flecha doble')}${drawBtn('flechaCurva','⤳ Flecha curva')}${drawHere?'<span class="small" style="color:#c0392b">Tocá y arrastrá sobre el gráfico…</span>':''}</div>`:''}
-    <svg viewBox="0 0 100 56" style="width:100%;max-width:480px;display:block;background:#fff;border:1px solid var(--line);border-radius:8px;touch-action:none" onpointerdown="lpCanvasPointerDown(event,'${block.id}','${g.id}')"><g id="lpCourtBgGroup-${g.id}">${lpCourtBg(g.court,g.courtScale||1,g.courtWidth||1)}</g>${shapesSvg}${elsSvg}</svg>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px"><span class="small" style="align-self:center;color:var(--muted)">Dibujar:</span>${drawBtn('linea','— Línea')}${drawBtn('flecha','→ Flecha')}${drawBtn('flechaPunteada','⇢ Flecha punteada')}${drawBtn('flechaDoble','⇔ Flecha doble')}${drawBtn('flechaCurva','⤳ Flecha curva')}${drawHere?'<span class="small" style="color:#c0392b">Tocá y arrastrá sobre el gráfico…</span>':''}</div>
+    ${LP_CLIPBOARD?`<div style="margin-bottom:6px"><button type="button" class="btn sm ghost" onclick="lpPasteClipboard('${block.id}','${g.id}')">📌 Pegar (Ctrl+V)</button></div>`:''}
+    `:''}
+    <svg viewBox="0 0 100 ${LP_CH}" style="width:100%;max-width:480px;display:block;background:#fff;border:1px solid var(--line);border-radius:8px;touch-action:none" onpointerdown="lpCanvasPointerDown(event,'${block.id}','${g.id}')"><g id="lpCourtBgGroup-${g.id}">${lpCourtBg(g.court,g.courtScale||1,g.courtWidth||1)}</g>${shapesSvg}${elsSvg}</svg>
     ${selHere?`<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px">
       ${selEl&&LP_COLORABLE.has(selEl.kind)?LP_COLORS.map(cl=>`<button type="button" title="Color" onclick="lpSetElColor('${cl}')" style="width:20px;height:20px;border-radius:50%;border:2px solid ${selEl.color===cl?'#111':'#fff'};box-shadow:0 0 0 1px var(--line);background:${cl};cursor:pointer;padding:0"></button>`).join(''):''}
       ${selEl&&selEl.kind==='jugador'?`<input value="${esc(selEl.label||'')}" maxlength="4" oninput="lpSetElLabel(this.value)" placeholder="Etiqueta" style="width:64px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px">`:''}
       ${LP_SELECTED.kind==='el'?`<button type="button" class="btn sm ghost" onclick="lpRotateSel(-15)">↺ Rotar</button><button type="button" class="btn sm ghost" onclick="lpRotateSel(15)">↻ Rotar</button><button type="button" class="btn sm ghost" onclick="lpScaleSel(-0.2)">🔽 Achicar</button><button type="button" class="btn sm ghost" onclick="lpScaleSel(0.2)">🔼 Agrandar</button>`:''}
+      <button type="button" class="btn sm ghost" onclick="lpCopySel()">📋 Copiar (Ctrl+C)</button>
+      <button type="button" class="btn sm ghost" onclick="lpCutSel()">✂️ Cortar (Ctrl+X)</button>
       <button type="button" class="btn sm ghost" onclick="lpDeleteSel()">🗑 Eliminar seleccionado</button>
     </div>`:''}
   </div>`;
@@ -1564,12 +1569,13 @@ function lpElPointerDown(ev,blockId,graphId,elId){
   ev.stopPropagation();
   if(LP_DRAW||!can('planner'))return;
   LP_SELECTED={blockId,graphId,kind:'el',id:elId};
+  LP_ACTIVE_GRAPHIC={blockId,graphId};
   const grp=ev.currentTarget,svg=grp.closest('svg');
   const start=svgPoint(svg,ev.clientX,ev.clientY);
   const g=lpFindGraphic(blockId,graphId),el=g&&g.elements.find(x=>x.id===elId);
   if(!el)return;
   const startX=el.x,startY=el.y;
-  const move=mv=>{const p=svgPoint(svg,mv.clientX,mv.clientY);el.x=lpClamp(startX+(p.x-start.x),0,100);el.y=lpClamp(startY+(p.y-start.y),0,56);grp.setAttribute('transform',`translate(${el.x},${el.y}) rotate(${el.rot||0}) scale(${el.scale||1})`);};
+  const move=mv=>{const p=svgPoint(svg,mv.clientX,mv.clientY);el.x=lpClamp(startX+(p.x-start.x),0,100);el.y=lpClamp(startY+(p.y-start.y),0,LP_CH);grp.setAttribute('transform',`translate(${el.x},${el.y}) rotate(${el.rot||0}) scale(${el.scale||1})`);};
   const up=()=>{document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',up);lpRenderGraphic(blockId,graphId);};
   document.addEventListener('pointermove',move);document.addEventListener('pointerup',up);
 }
@@ -1577,13 +1583,15 @@ function lpShapePointerDown(ev,blockId,graphId,shapeId){
   ev.stopPropagation();
   if(LP_DRAW||!can('planner'))return;
   LP_SELECTED={blockId,graphId,kind:'shape',id:shapeId};
+  LP_ACTIVE_GRAPHIC={blockId,graphId};
   lpRenderGraphic(blockId,graphId);
 }
 function lpCanvasPointerDown(ev,blockId,graphId){
+  if(can('planner'))LP_ACTIVE_GRAPHIC={blockId,graphId};
   if(!can('planner')||!LP_DRAW||LP_DRAW.blockId!==blockId||LP_DRAW.graphId!==graphId)return;
   const svg=ev.currentTarget;
   const start=svgPoint(svg,ev.clientX,ev.clientY);
-  const startC=lpClamp(start.x,0,100),startCy=lpClamp(start.y,0,56);
+  const startC=lpClamp(start.x,0,100),startCy=lpClamp(start.y,0,LP_CH);
   const isCurve=LP_DRAW.type==='flechaCurva';
   const el=document.createElementNS('http://www.w3.org/2000/svg',isCurve?'path':'line');
   if(isCurve){el.setAttribute('d',`M${startC},${startCy} Q${startC},${startCy} ${startC},${startCy}`);el.setAttribute('fill','none');el.setAttribute('marker-start','url(#lpArrow)');el.setAttribute('marker-end','url(#lpArrow)');}
@@ -1597,7 +1605,7 @@ function lpCanvasPointerDown(ev,blockId,graphId){
   svg.appendChild(el);
   const move=mv=>{
     const p=svgPoint(svg,mv.clientX,mv.clientY);
-    const px=lpClamp(p.x,0,100),py=lpClamp(p.y,0,56);
+    const px=lpClamp(p.x,0,100),py=lpClamp(p.y,0,LP_CH);
     if(isCurve){const {cx,cy}=lpCurveCtrl(startC,startCy,px,py);el.setAttribute('d',`M${startC},${startCy} Q${cx},${cy} ${px},${py}`);}
     else{el.setAttribute('x2',px);el.setAttribute('y2',py);}
   };
@@ -1605,7 +1613,7 @@ function lpCanvasPointerDown(ev,blockId,graphId){
     document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',up);
     const p=svgPoint(svg,mv.clientX,mv.clientY);
     const g=lpFindGraphic(blockId,graphId);
-    if(g){g.shapes=g.shapes||[];g.shapes.push({id:'sh'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),type:LP_DRAW.type,x1:startC,y1:startCy,x2:lpClamp(p.x,0,100),y2:lpClamp(p.y,0,56)});}
+    if(g){g.shapes=g.shapes||[];g.shapes.push({id:'sh'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),type:LP_DRAW.type,x1:startC,y1:startCy,x2:lpClamp(p.x,0,100),y2:lpClamp(p.y,0,LP_CH)});}
     LP_DRAW=null;
     lpRenderGraphic(blockId,graphId);
   };
@@ -1634,6 +1642,44 @@ function lpDeleteSel(){
   LP_SELECTED=null;
   lpRenderGraphic(bId,gId);
 }
+function lpCopySel(){
+  if(!LP_SELECTED)return;
+  const g=lpFindGraphic(LP_SELECTED.blockId,LP_SELECTED.graphId);if(!g)return;
+  if(LP_SELECTED.kind==='el'){const el=(g.elements||[]).find(x=>x.id===LP_SELECTED.id);if(!el)return;LP_CLIPBOARD={kind:'el',data:{...el}};}
+  else{const sh=(g.shapes||[]).find(x=>x.id===LP_SELECTED.id);if(!sh)return;LP_CLIPBOARD={kind:'shape',data:{...sh}};}
+}
+function lpCutSel(){
+  if(!LP_SELECTED)return;
+  lpCopySel();
+  lpDeleteSel();
+}
+function lpPasteClipboard(blockId,graphId){
+  if(!LP_CLIPBOARD)return;
+  const g=lpFindGraphic(blockId,graphId);if(!g)return;
+  if(LP_CLIPBOARD.kind==='el'){
+    const src=LP_CLIPBOARD.data,id='el'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+    g.elements=g.elements||[];
+    g.elements.push({...src,id,x:lpClamp((src.x||50)+5,0,100),y:lpClamp((src.y||LP_CY)+5,0,LP_CH)});
+    LP_SELECTED={blockId,graphId,kind:'el',id};
+  }else{
+    const src=LP_CLIPBOARD.data,id='sh'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+    g.shapes=g.shapes||[];
+    g.shapes.push({...src,id,x1:lpClamp((src.x1||10)+5,0,100),y1:lpClamp((src.y1||10)+5,0,LP_CH),x2:lpClamp((src.x2||90)+5,0,100),y2:lpClamp((src.y2||10)+5,0,LP_CH)});
+    LP_SELECTED={blockId,graphId,kind:'shape',id};
+  }
+  LP_ACTIVE_GRAPHIC={blockId,graphId};
+  lpRenderGraphic(blockId,graphId);
+}
+document.addEventListener('keydown',e=>{
+  if(!LP_EDIT||!(e.ctrlKey||e.metaKey))return;
+  const k=(e.key||'').toLowerCase();
+  if(k!=='c'&&k!=='x'&&k!=='v')return;
+  const ae=document.activeElement;
+  if(ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'||ae.isContentEditable))return;
+  if(k==='c'){if(LP_SELECTED){lpCopySel();e.preventDefault();}}
+  else if(k==='x'){if(LP_SELECTED){lpCutSel();e.preventDefault();}}
+  else if(k==='v'){if(LP_CLIPBOARD&&LP_ACTIVE_GRAPHIC){lpPasteClipboard(LP_ACTIVE_GRAPHIC.blockId,LP_ACTIVE_GRAPHIC.graphId);e.preventDefault();}}
+});
 async function renderMessages(){
   const post=document.getElementById('msgPost'),w=document.getElementById('msgsWrap');
   w.innerHTML='<div class="card empty"><p>Cargando…</p></div>';
