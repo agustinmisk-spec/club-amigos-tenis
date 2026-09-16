@@ -217,11 +217,12 @@ const cleanLessonPlan = b => {
     kind: String((e && e.kind) || '').slice(0, 30),
     x: num(e && e.x, 0, 100, 50), y: num(e && e.y, 0, 100, 50),
     rot: num(e && e.rot, -360, 360, 0),
-    label: String((e && e.label) || '').slice(0, 10)
+    label: String((e && e.label) || '').slice(0, 10),
+    color: /^#[0-9a-fA-F]{3,8}$/.test(e && e.color) ? e.color : ''
   });
   const cleanShape = s => ({
     id: String((s && s.id) || '').slice(0, 40),
-    type: ['linea', 'flecha', 'flechaPunteada', 'flechaDoble'].includes(s && s.type) ? s.type : 'linea',
+    type: ['linea', 'flecha', 'flechaPunteada', 'flechaDoble', 'flechaCurva'].includes(s && s.type) ? s.type : 'linea',
     x1: num(s && s.x1, 0, 100, 10), y1: num(s && s.y1, 0, 100, 10),
     x2: num(s && s.x2, 0, 100, 90), y2: num(s && s.y2, 0, 100, 90)
   });
@@ -241,7 +242,7 @@ const cleanLessonPlan = b => {
   });
   return {
     programa: String((b && b.programa) || '').slice(0, 80),
-    nivel: String((b && b.nivel) || '').slice(0, 80),
+    niveles: Array.isArray(b && b.niveles) ? b.niveles.slice(0, 10).map(x => String(x).slice(0, 80)) : (b && b.nivel ? [String(b.nivel).slice(0, 80)] : []),
     fechaDesde: String((b && b.fechaDesde) || '').slice(0, 10),
     fechaHasta: String((b && b.fechaHasta) || '').slice(0, 10),
     objetivo: String((b && b.objetivo) || '').slice(0, 2000),
