@@ -368,6 +368,7 @@
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
   <marker id="lpArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#c0392b"/></marker>
+  <clipPath id="lpRacketClip" clipPathUnits="userSpaceOnUse"><ellipse cx="0" cy="-1.7" rx="2.1" ry="2.7"/></clipPath>
 </defs></svg>
 <header>
   <div class="logo" id="logoBox" style="display:flex;align-items:center"></div>
@@ -1391,9 +1392,24 @@ function lpAddElement(blockId,graphId,kind,label){
   lpRenderGraphic(blockId,graphId);
 }
 function lpArmDraw(blockId,graphId,type){LP_DRAW={blockId,graphId,type};lpRenderGraphic(blockId,graphId);}
+function lpCourtLines(x,y,w,h){
+  const col='#8fae8f',inCol='#c3d6c3';
+  const inset=w*0.125,sx1=x+inset,sx2=x+w-inset;
+  const netY=y+h/2,off=(h/2)*0.5385,sy1=netY-off,sy2=netY+off;
+  const midx=x+w/2;
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#eaf3ea" stroke="${col}" stroke-width="0.6"/>
+    <line x1="${sx1}" y1="${y}" x2="${sx1}" y2="${y+h}" stroke="${inCol}" stroke-width="0.32"/>
+    <line x1="${sx2}" y1="${y}" x2="${sx2}" y2="${y+h}" stroke="${inCol}" stroke-width="0.32"/>
+    <line x1="${x}" y1="${netY}" x2="${x+w}" y2="${netY}" stroke="${col}" stroke-width="0.7"/>
+    <line x1="${sx1}" y1="${sy1}" x2="${sx2}" y2="${sy1}" stroke="${inCol}" stroke-width="0.32"/>
+    <line x1="${sx1}" y1="${sy2}" x2="${sx2}" y2="${sy2}" stroke="${inCol}" stroke-width="0.32"/>
+    <line x1="${midx}" y1="${sy1}" x2="${midx}" y2="${sy2}" stroke="${inCol}" stroke-width="0.32"/>
+    <line x1="${midx-1.1}" y1="${y}" x2="${midx+1.1}" y2="${y}" stroke="${col}" stroke-width="0.5"/>
+    <line x1="${midx-1.1}" y1="${y+h}" x2="${midx+1.1}" y2="${y+h}" stroke="${col}" stroke-width="0.5"/>`;
+}
 function lpCourtBg(court){
-  if(court==='mini')return `<rect x="30" y="8" width="40" height="40" fill="#eaf3ea" stroke="#8fae8f" stroke-width="0.6"/><line x1="30" y1="28" x2="70" y2="28" stroke="#8fae8f" stroke-width="0.5"/>`;
-  if(court==='full')return `<rect x="6" y="4" width="88" height="48" fill="#eaf3ea" stroke="#8fae8f" stroke-width="0.7"/><line x1="6" y1="28" x2="94" y2="28" stroke="#8fae8f" stroke-width="0.6"/><line x1="24" y1="4" x2="24" y2="52" stroke="#c8d8c8" stroke-width="0.4"/><line x1="76" y1="4" x2="76" y2="52" stroke="#c8d8c8" stroke-width="0.4"/><line x1="24" y1="16" x2="76" y2="16" stroke="#c8d8c8" stroke-width="0.4"/><line x1="24" y1="40" x2="76" y2="40" stroke="#c8d8c8" stroke-width="0.4"/><line x1="50" y1="16" x2="50" y2="40" stroke="#c8d8c8" stroke-width="0.4"/>`;
+  if(court==='mini')return lpCourtLines(43.5,14,13,28);
+  if(court==='full')return lpCourtLines(38,2,24,52);
   return '';
 }
 function lpElGlyph(kind,color,label,elId){
@@ -1402,8 +1418,36 @@ function lpElGlyph(kind,color,label,elId){
     case 'jugador': return `<circle r="3.6" fill="#fff" stroke="${c}" stroke-width="0.9"/><text id="lpElLabel-${elId}" y="1.2" text-anchor="middle" font-size="3.2" fill="${c}" font-weight="700">${esc((label||'A').slice(0,4).toUpperCase())}</text>`;
     case 'alumno': return `<circle r="3.4" fill="#2563eb"/><text y="1.3" text-anchor="middle" font-size="3.6" fill="#fff" font-weight="700">A</text>`;
     case 'profesor': return `<circle r="3.4" fill="#c2613f"/><text y="1.3" text-anchor="middle" font-size="3.6" fill="#fff" font-weight="700">P</text>`;
-    case 'raqueta': return `<ellipse cx="0" cy="-1.7" rx="2.1" ry="2.7" fill="none" stroke="${c}" stroke-width="0.7"/><line x1="-1.5" y1="-3" x2="1.5" y2="-0.5" stroke="${c}" stroke-width="0.2"/><line x1="1.5" y1="-3" x2="-1.5" y2="-0.5" stroke="${c}" stroke-width="0.2"/><line x1="0" y1="-4.3" x2="0" y2="0.6" stroke="${c}" stroke-width="0.2"/><line x1="-1.9" y1="-2.5" x2="1.9" y2="-2.5" stroke="${c}" stroke-width="0.2"/><line x1="0" y1="0.9" x2="0" y2="4" stroke="${c}" stroke-width="0.8"/>`;
-    case 'canasto': return `<path d="M-3.2,-1.8 L3.2,-1.8 L2.3,2.6 L-2.3,2.6 Z" fill="none" stroke="${c}" stroke-width="0.5"/><path d="M-3.2,-1.8 Q0,-4 3.2,-1.8" fill="none" stroke="${c}" stroke-width="0.5"/><circle cx="-1" cy="-0.6" r="0.8" fill="${c}"/><circle cx="1" cy="-0.9" r="0.8" fill="${c}"/><circle cx="0.1" cy="0.6" r="0.8" fill="${c}"/>`;
+    case 'raqueta': return `<g clip-path="url(#lpRacketClip)">
+        <line x1="-2.1" y1="-3.6" x2="2.1" y2="-3.6" stroke="${c}" stroke-width="0.16" opacity="0.6"/>
+        <line x1="-2.1" y1="-2.95" x2="2.1" y2="-2.95" stroke="${c}" stroke-width="0.16" opacity="0.6"/>
+        <line x1="-2.1" y1="-2.3" x2="2.1" y2="-2.3" stroke="${c}" stroke-width="0.16" opacity="0.6"/>
+        <line x1="-2.1" y1="-1.65" x2="2.1" y2="-1.65" stroke="${c}" stroke-width="0.16" opacity="0.6"/>
+        <line x1="-2.1" y1="-1" x2="2.1" y2="-1" stroke="${c}" stroke-width="0.16" opacity="0.6"/>
+        <line x1="-2.1" y1="-0.35" x2="2.1" y2="-0.35" stroke="${c}" stroke-width="0.16" opacity="0.6"/>
+        <line x1="-2.1" y1="0.3" x2="2.1" y2="0.3" stroke="${c}" stroke-width="0.16" opacity="0.6"/>
+        <line x1="-1.6" y1="-4.4" x2="-1.6" y2="1" stroke="${c}" stroke-width="0.16" opacity="0.6"/>
+        <line x1="-1.05" y1="-4.4" x2="-1.05" y2="1" stroke="${c}" stroke-width="0.16" opacity="0.6"/>
+        <line x1="-0.5" y1="-4.4" x2="-0.5" y2="1" stroke="${c}" stroke-width="0.16" opacity="0.6"/>
+        <line x1="0.05" y1="-4.4" x2="0.05" y2="1" stroke="${c}" stroke-width="0.16" opacity="0.6"/>
+        <line x1="0.6" y1="-4.4" x2="0.6" y2="1" stroke="${c}" stroke-width="0.16" opacity="0.6"/>
+        <line x1="1.15" y1="-4.4" x2="1.15" y2="1" stroke="${c}" stroke-width="0.16" opacity="0.6"/>
+        <line x1="1.6" y1="-4.4" x2="1.6" y2="1" stroke="${c}" stroke-width="0.16" opacity="0.6"/>
+      </g>
+      <ellipse cx="0" cy="-1.7" rx="2.1" ry="2.7" fill="none" stroke="${c}" stroke-width="0.7"/>
+      <path d="M-0.6,1 L0.6,1 L0.4,2 L-0.4,2 Z" fill="${c}"/>
+      <rect x="-0.45" y="1.9" width="0.9" height="4.1" rx="0.35" fill="${c}"/>`;
+    case 'canasto': return `<path d="M-3.3,-1.6 L3.3,-1.6 L2.4,3 L-2.4,3 Z" fill="#f4ede1" stroke="${c}" stroke-width="0.5"/>
+      <line x1="-3.1" y1="-0.5" x2="2.9" y2="-0.5" stroke="${c}" stroke-width="0.22"/>
+      <line x1="-2.9" y1="0.6" x2="2.7" y2="0.6" stroke="${c}" stroke-width="0.22"/>
+      <line x1="-2.7" y1="1.7" x2="2.5" y2="1.7" stroke="${c}" stroke-width="0.22"/>
+      <line x1="-2.2" y1="-1.6" x2="-1.6" y2="3" stroke="${c}" stroke-width="0.18"/>
+      <line x1="2.2" y1="-1.6" x2="1.6" y2="3" stroke="${c}" stroke-width="0.18"/>
+      <line x1="0" y1="-1.6" x2="0" y2="3" stroke="${c}" stroke-width="0.18"/>
+      <path d="M-3.3,-1.6 Q0,-3.8 3.3,-1.6" fill="none" stroke="${c}" stroke-width="0.55"/>
+      <circle cx="-1.3" cy="-2.5" r="1" fill="#d8e84a" stroke="#8a9a1e" stroke-width="0.18"/>
+      <circle cx="0.5" cy="-3" r="1" fill="#d8e84a" stroke="#8a9a1e" stroke-width="0.18"/>
+      <circle cx="1.7" cy="-2.3" r="1" fill="#d8e84a" stroke="#8a9a1e" stroke-width="0.18"/>`;
     case 'cono': return `<polygon points="0,-3.6 2.1,2.4 -2.1,2.4" fill="${c}"/>`;
     case 'conobajo': return `<ellipse cx="0" cy="1.8" rx="2.6" ry="0.9" fill="${c}"/><path d="M-1.6,1.8 Q0,-1.6 1.6,1.8 Z" fill="${c}"/>`;
     case 'aro': return `<circle r="3" fill="none" stroke="${c}" stroke-width="1.1"/>`;
