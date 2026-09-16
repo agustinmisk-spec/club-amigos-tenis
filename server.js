@@ -244,8 +244,10 @@ const cleanLessonPlan = b => {
     graficos: Array.isArray(bl && bl.graficos) ? bl.graficos.slice(0, 10).map(cleanGraph) : []
   });
   return {
+    titulo: String((b && b.titulo) || '').slice(0, 150),
     programa: String((b && b.programa) || '').slice(0, 80),
     niveles: Array.isArray(b && b.niveles) ? b.niveles.slice(0, 10).map(x => String(x).slice(0, 80)) : (b && b.nivel ? [String(b.nivel).slice(0, 80)] : []),
+    segmento: String((b && b.segmento) || '').slice(0, 150),
     fechaDesde: String((b && b.fechaDesde) || '').slice(0, 10),
     fechaHasta: String((b && b.fechaHasta) || '').slice(0, 10),
     objetivo: String((b && b.objetivo) || '').slice(0, 2000),

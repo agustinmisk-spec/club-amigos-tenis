@@ -1231,21 +1231,64 @@ async function renderLP(){
   }
   renderLPView();
 }
+let LP_FILTER={q:'',programa:'',nivel:'',desde:'',hasta:''};
+function lpNivelesLabel(p){
+  const niveles=(p.niveles&&p.niveles.length)?p.niveles.join(', '):(p.nivel||'');
+  if(p.segmento)return niveles?niveles+' · '+p.segmento:p.segmento;
+  return niveles;
+}
+function lpPlanHeading(p){
+  const nl=lpNivelesLabel(p);
+  if(p.titulo)return {title:p.titulo,subtitle:(p.programa||'')+(nl?' · '+nl:'')};
+  return {title:(p.programa||'—')+(nl?' · '+nl:''),subtitle:''};
+}
+function lpFilteredPlans(){
+  const q=LP_FILTER.q.trim().toLowerCase();
+  return LESSONPLANS.filter(p=>{
+    if(LP_FILTER.programa&&p.programa!==LP_FILTER.programa)return false;
+    const niveles=(p.niveles&&p.niveles.length)?p.niveles:(p.nivel?[p.nivel]:[]);
+    if(LP_FILTER.nivel&&!niveles.includes(LP_FILTER.nivel))return false;
+    if(LP_FILTER.desde&&p.fechaDesde&&p.fechaDesde<LP_FILTER.desde)return false;
+    if(LP_FILTER.hasta&&p.fechaDesde&&p.fechaDesde>LP_FILTER.hasta)return false;
+    if(q){
+      const hay=[p.titulo,p.programa,niveles.join(' '),p.segmento,p.objetivo,p.contenido].filter(Boolean).join(' ').toLowerCase();
+      if(!hay.includes(q))return false;
+    }
+    return true;
+  });
+}
+function lpSetFilter(key,val){LP_FILTER[key]=val;lpRenderListResults();}
+function lpClearFilter(){LP_FILTER={q:'',programa:'',nivel:'',desde:'',hasta:''};renderLPView();}
+function lpRenderListResults(){const box=document.getElementById('lpListResults');if(box)box.innerHTML=lpListHTML();}
+function lpFilterBarHTML(){
+  const c=DB.config;
+  return `<div class="toolbar" style="margin-bottom:8px;flex-wrap:wrap">
+    <input type="search" placeholder="Buscar por palabra clave…" value="${esc(LP_FILTER.q)}" oninput="lpSetFilter('q',this.value)" style="flex:1;min-width:160px;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+    <select onchange="lpSetFilter('programa',this.value)" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px">${lpOpt(c.programas,'Todos los programas',LP_FILTER.programa)}</select>
+    <select onchange="lpSetFilter('nivel',this.value)" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px">${lpOpt(c.niveles,'Todos los niveles',LP_FILTER.nivel)}</select>
+    <input type="date" value="${esc(LP_FILTER.desde)}" onchange="lpSetFilter('desde',this.value)" title="Desde" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px">
+    <input type="date" value="${esc(LP_FILTER.hasta)}" onchange="lpSetFilter('hasta',this.value)" title="Hasta" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px">
+    <button type="button" class="btn ghost sm" onclick="lpClearFilter()">Borrar filtros</button>
+  </div>`;
+}
 function renderLPView(){
   const wrap=document.getElementById('lpWrap');if(!wrap)return;
-  wrap.innerHTML=LP_EDIT?lpEditorHTML():`<div class="toolbar" style="margin-bottom:10px">${can('planner')?'<button class="btn" onclick="lpNewPlan()">+ Nueva planificación</button>':''}<div class="spacer"></div><span class="small">${LESSONPLANS.length} planificación(es)</span></div>${lpListHTML()}`;
+  wrap.innerHTML=LP_EDIT?lpEditorHTML():`<div class="toolbar" style="margin-bottom:10px">${can('planner')?'<button class="btn" onclick="lpNewPlan()">+ Nueva planificación</button>':''}<div class="spacer"></div></div>${lpFilterBarHTML()}<div id="lpListResults">${lpListHTML()}</div>`;
 }
 function lpListHTML(){
+  const list=lpFilteredPlans();
+  const countLine=`<div class="small" style="margin-bottom:6px;color:var(--muted)">${list.length} de ${LESSONPLANS.length} planificación(es)</div>`;
   if(!LESSONPLANS.length)return '<div class="card empty"><div class="big">📅</div><p>Todavía no hay planificaciones cargadas.</p></div>';
-  return '<div class="feed">'+LESSONPLANS.map(p=>{
+  if(!list.length)return countLine+'<div class="card empty"><p>No hay planificaciones que coincidan con los filtros.</p></div>';
+  return countLine+'<div class="feed">'+list.map(p=>{
     const mins=(p.bloques||[]).reduce((a,b)=>a+(b.minutos||0),0);
-    const niveles=(p.niveles&&p.niveles.length)?p.niveles:(p.nivel?[p.nivel]:[]);
-    return `<div class="item"><div class="top"><span class="ti">📅 ${esc(p.programa||'—')}${niveles.length?' · '+esc(niveles.join(', ')):''}</span><span>${can('planner')?`<button class="att-btn" title="Eliminar" onclick="lpDeletePlan('${p.id}')">🗑</button> `:''}<button class="btn sec sm" onclick="lpPrintPlanById('${p.id}')">📄 PDF</button> <button class="btn sec sm" onclick="lpEditPlan('${p.id}')">${can('planner')?'Editar':'Ver'}</button></span></div><div class="meta2">${esc(fmtFecha(p.fechaDesde))}${p.fechaHasta?' a '+esc(fmtFecha(p.fechaHasta)):''} · ${(p.bloques||[]).length} bloque(s) · ${mins} min · ${esc(p.autor||'')}</div>${p.objetivo?`<div class="small" style="margin-top:4px">${fmt(p.objetivo)}</div>`:''}</div>`;
+    const hd=lpPlanHeading(p);
+    return `<div class="item"><div class="top"><span class="ti">📅 ${esc(hd.title)}</span><span>${can('planner')?`<button class="att-btn" title="Eliminar" onclick="lpDeletePlan('${p.id}')">🗑</button> `:''}<button class="btn sec sm" onclick="lpPrintPlanById('${p.id}')">🖨️ Imprimir</button> <button class="btn sec sm" onclick="lpPrintPlanById('${p.id}')">📄 PDF</button> <button class="btn sec sm" onclick="lpEditPlan('${p.id}')">${can('planner')?'Editar':'Ver'}</button></span></div>${hd.subtitle?`<div class="small" style="color:var(--muted)">${esc(hd.subtitle)}</div>`:''}<div class="meta2">${esc(fmtFecha(p.fechaDesde))}${p.fechaHasta?' a '+esc(fmtFecha(p.fechaHasta)):''} · ${(p.bloques||[]).length} bloque(s) · ${mins} min · ${esc(p.autor||'')}</div>${p.objetivo?`<div class="small" style="margin-top:4px">${fmt(p.objetivo)}</div>`:''}</div>`;
   }).join('')+'</div>';
 }
 function lpNewPlan(){
   if(!can('planner'))return;
-  LP_EDIT={programa:'',niveles:[],fechaDesde:'',fechaHasta:'',objetivo:'',contenido:'',bloques:LP_BLOCK_CATALOG.map(c=>({id:'blk'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),tipo:c.tipo,titulo:c.label,minutos:0,descripcion:'',graficos:[]}))};
+  LP_EDIT={titulo:'',programa:'',niveles:[],segmento:'',fechaDesde:'',fechaHasta:'',objetivo:'',contenido:'',bloques:LP_BLOCK_CATALOG.map(c=>({id:'blk'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),tipo:c.tipo,titulo:c.label,minutos:0,descripcion:'',graficos:[]}))};
   LP_SELECTED=null;LP_DRAW=null;
   renderLPView();
 }
@@ -1253,6 +1296,8 @@ function lpEditPlan(id){
   const p=LESSONPLANS.find(x=>x.id===id);if(!p)return;
   LP_EDIT=JSON.parse(JSON.stringify(p));
   if(!Array.isArray(LP_EDIT.niveles))LP_EDIT.niveles=LP_EDIT.nivel?[LP_EDIT.nivel]:[];
+  if(LP_EDIT.titulo==null)LP_EDIT.titulo='';
+  if(LP_EDIT.segmento==null)LP_EDIT.segmento='';
   LP_SELECTED=null;LP_DRAW=null;
   renderLPView();
 }
@@ -1267,7 +1312,7 @@ async function lpSavePlan(){
   if(!can('planner')||!LP_EDIT)return;
   if(!LP_EDIT.programa){alert('Elegí el programa.');return;}
   if(!LP_EDIT.fechaDesde){alert('Elegí la fecha desde.');return;}
-  const body={programa:LP_EDIT.programa,niveles:LP_EDIT.niveles||[],fechaDesde:LP_EDIT.fechaDesde,fechaHasta:LP_EDIT.fechaHasta,objetivo:LP_EDIT.objetivo,contenido:LP_EDIT.contenido,bloques:LP_EDIT.bloques};
+  const body={titulo:LP_EDIT.titulo||'',programa:LP_EDIT.programa,niveles:LP_EDIT.niveles||[],segmento:LP_EDIT.segmento||'',fechaDesde:LP_EDIT.fechaDesde,fechaHasta:LP_EDIT.fechaHasta,objetivo:LP_EDIT.objetivo,contenido:LP_EDIT.contenido,bloques:LP_EDIT.bloques};
   try{
     const saved=LP_EDIT.id?await api('PUT','/api/lessonplans/'+LP_EDIT.id,body):await api('POST','/api/lessonplans',body);
     LP_EDIT=saved;
@@ -1283,16 +1328,19 @@ function lpEditorHTML(){
     <button class="btn sm ghost" onclick="lpBackToList()">← Volver al listado</button>
     <div class="spacer"></div>
     <button class="btn sec" onclick="lpGeneratePDF(LP_EDIT)">📄 Generar PDF</button>
+    <button class="btn sec" onclick="lpGeneratePDF(LP_EDIT)">🖨️ Imprimir</button>
     ${editable?`<button class="btn" onclick="lpSavePlan()">💾 ${isNew?'Crear planificación':'Guardar cambios'}</button>`:''}
     ${editable&&!isNew?`<button class="btn sec" onclick="lpDeletePlan('${LP_EDIT.id}')">🗑 Eliminar</button>`:''}
   </div>
   <div class="card" style="padding:18px;max-width:820px">
+    <div class="field"><label>Título de la planificación (opcional)</label><input ${editable?'':'disabled'} value="${esc(LP_EDIT.titulo||'')}" oninput="lpSetTop('titulo',this.value)" placeholder="Ej: Semana 1 - Fundamentos de saque"></div>
     <div class="grid2">
       <div class="field"><label>Programa</label><select ${editable?'':'disabled'} onchange="lpSetTop('programa',this.value)">${lpOpt(c.programas,'—',LP_EDIT.programa)}</select></div>
       <div class="field"><label>Período — desde</label><input type="date" ${editable?'':'disabled'} value="${esc(LP_EDIT.fechaDesde||'')}" oninput="lpSetTop('fechaDesde',this.value)"></div>
       <div class="field"><label>Período — hasta</label><input type="date" ${editable?'':'disabled'} value="${esc(LP_EDIT.fechaHasta||'')}" oninput="lpSetTop('fechaHasta',this.value)"></div>
     </div>
     <div class="field"><label>Niveles (podés elegir varios)</label>${lpNivelesChecklistHTML()}</div>
+    <div class="field"><label>Segmento personalizado (opcional, para clases que no encajan en un nivel)</label><input ${editable?'':'disabled'} value="${esc(LP_EDIT.segmento||'')}" oninput="lpSetTop('segmento',this.value)" placeholder="Ej: CANCHA TALLER"></div>
     <div class="field"><label>Objetivo</label><textarea ${editable?'':'disabled'} oninput="lpSetTop('objetivo',this.value)" style="min-height:50px">${esc(LP_EDIT.objetivo||'')}</textarea></div>
     <div class="field"><label>Contenido</label><textarea ${editable?'':'disabled'} oninput="lpSetTop('contenido',this.value)" style="min-height:70px">${esc(LP_EDIT.contenido||'')}</textarea></div>
     <div class="sectitle" style="margin-top:14px">Bloques de la clase</div>
@@ -1688,7 +1736,7 @@ function lpGeneratePDF(p){
   if(!p)return;
   const w=window.open('','_blank');
   if(!w){alert('Tu navegador bloqueó la ventana emergente. Permitila para generar el PDF.');return;}
-  const niveles=(p.niveles&&p.niveles.length)?p.niveles.join(', '):(p.nivel||'');
+  const hd=lpPlanHeading(p);
   const mins=(p.bloques||[]).reduce((a,b)=>a+(b.minutos||0),0);
   const cfg=DB.config||{};
   const logoHTML=cfg.logo?'<img src="'+cfg.logo+'">':DEFAULT_LOGO;
@@ -1724,6 +1772,7 @@ function lpGeneratePDF(p){
     +'.hd{display:flex;align-items:center;gap:10px;border-bottom:3px solid '+LP_PDF_COLOR+';padding-bottom:8px;margin-bottom:10px}'
     +'.hd img,.hd svg{height:42px;width:auto;flex:0 0 auto}'
     +'.hd h1{font-size:20px;margin:0;color:'+LP_PDF_COLOR+';letter-spacing:.2px}'
+    +'.hdsub{font-size:12px;color:'+LP_PDF_COLOR+';font-weight:600;margin-top:1px}'
     +'.hdmeta{font-size:11px;color:#667685;margin-top:2px}'
     +'.fields{display:flex;gap:9px;margin-bottom:11px}'
     +'.fields .f{flex:1;background:#f2f6f4;border-left:3px solid '+LP_PDF_COLOR+';border-radius:0 6px 6px 0;padding:6px 10px;font-size:10.5px;line-height:1.4}'
@@ -1742,7 +1791,8 @@ function lpGeneratePDF(p){
     +'</style></head><body>'
     +'<svg width="0" height="0" style="position:absolute"><defs><marker id="lppArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#c0392b"/></marker></defs></svg>'
     +'<div id="wrap">'
-    +'<div class="hd">'+logoHTML+'<div><h1>'+esc(p.programa||'Planificación')+(niveles?' · '+esc(niveles):'')+'</h1>'
+    +'<div class="hd">'+logoHTML+'<div><h1>'+esc(hd.title||'Planificación')+'</h1>'
+    +(hd.subtitle?'<div class="hdsub">'+esc(hd.subtitle)+'</div>':'')
     +'<div class="hdmeta">'+esc(fmtFecha(p.fechaDesde||''))+(p.fechaHasta?' a '+esc(fmtFecha(p.fechaHasta)):'')+' · '+mins+' min total · '+(p.bloques||[]).length+' bloque(s)</div></div></div>'
     +((p.objetivo||p.contenido)?'<div class="fields">'
       +(p.objetivo?'<div class="f"><b>Objetivo</b>'+fmtRaw(p.objetivo)+'</div>':'')
