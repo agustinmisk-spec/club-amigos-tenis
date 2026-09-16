@@ -278,6 +278,8 @@ app.delete('/api/lessonplans/:id', auth, need('planner'), async (req, res) => { 
 const cleanLibraryItem = b => ({
   nombre: String((b && b.nombre) || '').slice(0, 120),
   tipo: String((b && b.tipo) || 'custom').slice(0, 30),
+  momento: String((b && b.momento) || '').slice(0, 30),
+  cancha: ['mini', 'full'].includes(b && b.cancha) ? b.cancha : '',
   descripcion: String((b && b.descripcion) || '').slice(0, 4000),
   graficos: Array.isArray(b && b.graficos) ? b.graficos.slice(0, 10).map(cleanGraph) : []
 });
