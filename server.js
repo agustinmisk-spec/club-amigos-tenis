@@ -231,6 +231,7 @@ const cleanLessonPlan = b => {
     id: String((g && g.id) || '').slice(0, 40),
     court: ['none', 'mini', 'full'].includes(g && g.court) ? g.court : 'none',
     courtScale: num(g && g.courtScale, 0.5, 1.5, 1),
+    courtWidth: num(g && g.courtWidth, 0.5, 2.2, 1),
     elements: Array.isArray(g && g.elements) ? g.elements.slice(0, 60).map(cleanEl) : [],
     shapes: Array.isArray(g && g.shapes) ? g.shapes.slice(0, 60).map(cleanShape) : []
   });
