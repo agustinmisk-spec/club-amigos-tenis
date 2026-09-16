@@ -1407,8 +1407,18 @@ function lpCourtLines(x,y,w,h){
     <line x1="${midx-1.1}" y1="${y}" x2="${midx+1.1}" y2="${y}" stroke="${col}" stroke-width="0.5"/>
     <line x1="${midx-1.1}" y1="${y+h}" x2="${midx+1.1}" y2="${y+h}" stroke="${col}" stroke-width="0.5"/>`;
 }
+function lpMiniCourtLines(x,y,w,h){
+  const col='#8fae8f';
+  const topH=h*0.13,botH=h*0.13,midH=h-topH-botH;
+  const midY0=y+topH,midY1=y+h-botH,netY=midY0+midH/2,midx=x+w/2,ext=w*0.28;
+  return `<rect x="${x}" y="${y}" width="${w}" height="${topH}" fill="#eaf3ea" stroke="${col}" stroke-width="0.6"/>
+    <rect x="${x}" y="${midY0}" width="${w}" height="${midH}" fill="#eaf3ea" stroke="${col}" stroke-width="0.6"/>
+    <rect x="${x}" y="${midY1}" width="${w}" height="${botH}" fill="#eaf3ea" stroke="${col}" stroke-width="0.6"/>
+    <line x1="${midx}" y1="${midY0}" x2="${midx}" y2="${midY1}" stroke="${col}" stroke-width="0.45"/>
+    <line x1="${x-ext}" y1="${netY}" x2="${x+w+ext}" y2="${netY}" stroke="${col}" stroke-width="0.7"/>`;
+}
 function lpCourtBg(court){
-  if(court==='mini')return lpCourtLines(43.5,14,13,28);
+  if(court==='mini')return lpMiniCourtLines(43.5,10,13,36);
   if(court==='full')return lpCourtLines(38,2,24,52);
   return '';
 }
