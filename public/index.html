@@ -1638,10 +1638,10 @@ function libItemCardHTML(it){
     </div>`;
 }
 const LIB_BLOCKS=[
-  {categoria:'ejercicio',cancha:'full',icon:'🎯',label:'Ejercicios',canchaLabel:'Cancha completa',color:'#2563eb'},
   {categoria:'ejercicio',cancha:'mini',icon:'🎯',label:'Ejercicios',canchaLabel:'Mini cancha',color:'#1f8a4d'},
-  {categoria:'juego',cancha:'full',icon:'🎲',label:'Juegos',canchaLabel:'Cancha completa',color:'#c0392b'},
-  {categoria:'juego',cancha:'mini',icon:'🎲',label:'Juegos',canchaLabel:'Mini cancha',color:'#ff7a1a'}
+  {categoria:'ejercicio',cancha:'full',icon:'🎯',label:'Ejercicios',canchaLabel:'Cancha completa',color:'#2563eb'},
+  {categoria:'juego',cancha:'mini',icon:'🎲',label:'Juegos',canchaLabel:'Mini cancha',color:'#ff7a1a'},
+  {categoria:'juego',cancha:'full',icon:'🎲',label:'Juegos',canchaLabel:'Cancha completa',color:'#c0392b'}
 ];
 function libTabRenderList(){
   const wrap=document.getElementById('libTabItems');if(!wrap)return;
@@ -1666,7 +1666,7 @@ function libTabRenderList(){
     </div>`;
   };
   const sinCancha=items.filter(it=>it.cancha!=='mini'&&it.cancha!=='full');
-  wrap.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:14px">${LIB_BLOCKS.map(blockHTML).join('')}</div>`
+  wrap.innerHTML=`<div class="grid2" style="gap:14px">${LIB_BLOCKS.map(blockHTML).join('')}</div>`
     +(sinCancha.length?`<div class="sectitle" style="margin:14px 0 6px">Sin cancha definida (${sinCancha.length})</div>${sinCancha.map(libItemCardHTML).join('')}`:'');
 }
 async function libTabDelete(id){
