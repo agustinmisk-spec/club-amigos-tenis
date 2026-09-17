@@ -252,7 +252,6 @@ const cleanLessonPlan = b => {
     fechaHasta: String((b && b.fechaHasta) || '').slice(0, 10),
     objetivo: String((b && b.objetivo) || '').slice(0, 2000),
     contenido: String((b && b.contenido) || '').slice(0, 4000),
-    folderId: String((b && b.folderId) || '').slice(0, 40),
     bloques: Array.isArray(b && b.bloques) ? b.bloques.slice(0, 12).map(cleanBlock) : []
   };
 };
@@ -275,52 +274,14 @@ app.put('/api/lessonplans/:id', auth, need('planner'), async (req, res) => {
 });
 app.delete('/api/lessonplans/:id', auth, need('planner'), async (req, res) => { await store.deleteLessonPlan(req.params.id); res.json({ ok: true }); });
 
-/* ---------------- Carpetas del planificador (organización de planificaciones) ---------------- */
-const cleanLpFolder = b => ({
-  nombre: String((b && b.nombre) || '').slice(0, 100),
-  parentId: String((b && b.parentId) || '').slice(0, 40)
-});
-app.get('/api/lpfolders', auth, async (req, res) => { res.json(await store.listLpFolders()); });
-app.post('/api/lpfolders', auth, need('planner'), async (req, res) => {
-  const b = req.body || {};
-  if (!b.nombre) return res.status(400).json({ error: 'Falta el nombre' });
-  const clean = cleanLpFolder(b);
-  const f = Object.assign({ id: 'lpf' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) }, clean, { autor: req.user.nombre, fecha: new Date().toISOString() });
-  await store.addLpFolder(f);
-  res.json(f);
-});
-app.put('/api/lpfolders/:id', auth, need('planner'), async (req, res) => {
-  const list = await store.listLpFolders();
-  const f = list.find(x => x.id === req.params.id);
-  if (!f) return res.status(404).json({ error: 'No existe' });
-  if (req.body && !req.body.nombre) return res.status(400).json({ error: 'Falta el nombre' });
-  Object.assign(f, cleanLpFolder(req.body || {}));
-  await store.updateLpFolder(f);
-  res.json(f);
-});
-app.delete('/api/lpfolders/:id', auth, need('planner'), async (req, res) => {
-  const folders = await store.listLpFolders();
-  const target = folders.find(x => x.id === req.params.id);
-  if (target) {
-    const parentId = target.parentId || '';
-    for (const f of folders) {
-      if (f.parentId === target.id) { f.parentId = parentId; await store.updateLpFolder(f); }
-    }
-    const plans = await store.listLessonPlans();
-    for (const p of plans) {
-      if ((p.folderId || '') === target.id) { p.folderId = parentId; await store.updateLessonPlan(p); }
-    }
-    await store.deleteLpFolder(req.params.id);
-  }
-  res.json({ ok: true });
-});
-
 /* ---------------- Biblioteca de ejercicios (bloques reutilizables) ---------------- */
 const cleanLibraryItem = b => ({
   nombre: String((b && b.nombre) || '').slice(0, 120),
   tipo: String((b && b.tipo) || 'custom').slice(0, 30),
   momento: String((b && b.momento) || '').slice(0, 30),
   cancha: ['mini', 'full'].includes(b && b.cancha) ? b.cancha : '',
+  categoria: ['juego', 'ejercicio'].includes(b && b.categoria) ? b.categoria : 'ejercicio',
+  contenido: String((b && b.contenido) || '').slice(0, 200),
   descripcion: String((b && b.descripcion) || '').slice(0, 4000),
   graficos: Array.isArray(b && b.graficos) ? b.graficos.slice(0, 10).map(cleanGraph) : []
 });
