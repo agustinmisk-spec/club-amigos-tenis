@@ -1492,7 +1492,10 @@ function libRenderList(){
 function libAddSelected(){
   if(!LIB_PICK_SEL.size){closeLib();return;}
   const chosen=LIBRARY.filter(it=>LIB_PICK_SEL.has(it.id));
-  const combinedDesc=chosen.map(it=>it.descripcion||'').filter(Boolean).join('<br>');
+  const combinedDesc=chosen.map(it=>{
+    const name=it.nombre?`<b>${esc(it.nombre)}</b>`:'';
+    return [name,it.descripcion||''].filter(Boolean).join('<br>');
+  }).join('<br><br>');
   const combinedGraphs=[];
   chosen.forEach(it=>(it.graficos||[]).forEach(g=>combinedGraphs.push(Object.assign({},JSON.parse(JSON.stringify(g)),{id:'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)}))));
   if(LIB_TARGET_BLOCK){
