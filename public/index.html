@@ -815,13 +815,21 @@
   <div class="modal" style="max-width:640px">
     <h2>Biblioteca de ejercicios</h2>
     <div class="body">
-      <div style="display:flex;gap:8px;margin-bottom:10px">
-        <input type="search" id="libSearch" placeholder="Buscar por nombre o contenido…" oninput="libRenderList()" style="flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <input type="search" id="libSearch" placeholder="Buscar por nombre o contenido…" oninput="libRenderList()" style="flex:1;min-width:160px;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
         <select id="libPickCategoria" onchange="libRenderList()" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px">
           <option value="">Juegos y ejercicios</option>
           <option value="ejercicio">🎯 Ejercicios</option>
           <option value="juego">🎲 Juegos</option>
         </select>
+        <div style="position:relative">
+          <button type="button" class="btn sm ghost" id="libFieldsBtn" onclick="libToggleFieldsMenu(event)">Incluir: Nombre - Descripción - Gráfico ▾</button>
+          <div id="libFieldsPanel" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 12px;box-shadow:0 6px 18px rgba(0,0,0,.15);z-index:20;white-space:nowrap">
+            <label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-weight:500;font-size:13px"><input type="checkbox" id="libFieldNombre" onchange="libFieldsChanged()">Nombre</label>
+            <label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-weight:500;font-size:13px"><input type="checkbox" id="libFieldDescripcion" onchange="libFieldsChanged()">Descripción</label>
+            <label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-weight:500;font-size:13px"><input type="checkbox" id="libFieldGraficos" onchange="libFieldsChanged()">Gráfico</label>
+          </div>
+        </div>
       </div>
       <div id="libList" style="max-height:56vh;overflow:auto"></div>
     </div>
@@ -1063,6 +1071,7 @@ async function delEvent(id){if(!confirm('¿Eliminar esta actividad?'))return;try
 let RECOVERIES=[],COMPS=[],PLANS=[],GROUPNOTES=[],LESSONPLANS=[];
 let planSubTab='planificador',LP_EDIT=null,LP_SELECTED=null,LP_DRAW=null,LP_CLIPBOARD=null,LP_ACTIVE_GRAPHIC=null;
 let LIBRARY=[],LIB_TARGET_BLOCK=null,LIB_PICK_SEL=new Set();
+let LIB_PICK_FIELDS={nombre:true,descripcion:true,graficos:true};
 let LIB_EDIT=null,LIB_EDITING=false,LIB_LP_STASH,LIB_FILTER={q:'',momento:'',cancha:'',categoria:'',contenido:''};
 const LP_CH=90,LP_CY=45;
 const LP_BLOCK_CATALOG=[{tipo:'inicio',label:'Inicio de clase'},{tipo:'calentamiento',label:'Calentamiento'},{tipo:'drill',label:'Drill'},{tipo:'saques',label:'Saques'},{tipo:'juego',label:'Juego final'},{tipo:'cierre',label:'Cierre de clase'}];
@@ -1470,11 +1479,39 @@ async function openLibPicker(blockId){
   LIB_PICK_SEL=new Set();
   document.getElementById('libSearch').value='';
   document.getElementById('libPickCategoria').value='';
+  document.getElementById('libFieldsPanel').style.display='none';
+  document.getElementById('libFieldNombre').checked=LIB_PICK_FIELDS.nombre;
+  document.getElementById('libFieldDescripcion').checked=LIB_PICK_FIELDS.descripcion;
+  document.getElementById('libFieldGraficos').checked=LIB_PICK_FIELDS.graficos;
+  libUpdateFieldsLabel();
   try{LIBRARY=await api('GET','/api/library');}catch(e){LIBRARY=[];}
   libRenderList();
   document.getElementById('libOverlay').classList.add('show');
 }
 function closeLib(){document.getElementById('libOverlay').classList.remove('show');LIB_TARGET_BLOCK=null;LIB_PICK_SEL=new Set();}
+function libToggleFieldsMenu(e){
+  e.stopPropagation();
+  const p=document.getElementById('libFieldsPanel');
+  p.style.display=p.style.display==='none'?'block':'none';
+}
+document.addEventListener('click',e=>{
+  const p=document.getElementById('libFieldsPanel');
+  if(p&&p.style.display==='block'&&e.target.id!=='libFieldsBtn'&&!e.target.closest('#libFieldsPanel'))p.style.display='none';
+});
+function libUpdateFieldsLabel(){
+  const btn=document.getElementById('libFieldsBtn');if(!btn)return;
+  const parts=[];
+  if(LIB_PICK_FIELDS.nombre)parts.push('Nombre');
+  if(LIB_PICK_FIELDS.descripcion)parts.push('Descripción');
+  if(LIB_PICK_FIELDS.graficos)parts.push('Gráfico');
+  btn.textContent='Incluir: '+(parts.length?parts.join(' - '):'nada')+' ▾';
+}
+function libFieldsChanged(){
+  LIB_PICK_FIELDS.nombre=document.getElementById('libFieldNombre').checked;
+  LIB_PICK_FIELDS.descripcion=document.getElementById('libFieldDescripcion').checked;
+  LIB_PICK_FIELDS.graficos=document.getElementById('libFieldGraficos').checked;
+  libUpdateFieldsLabel();
+}
 function libTag(label){return label?`<span style="background:#eef3f0;color:#3a5048;border-radius:10px;padding:1px 8px;font-size:10.5px;font-weight:600">${esc(label)}</span>`:'';}
 function libMomentoLabel(tipo){return (LP_BLOCK_CATALOG.find(c=>c.tipo===tipo)||{}).label||'';}
 function libCanchaLabel(cancha){return cancha==='mini'?'Mini cancha':(cancha==='full'?'Cancha completa':'');}
@@ -1506,11 +1543,12 @@ function libAddSelected(){
   if(!LIB_PICK_SEL.size){closeLib();return;}
   const chosen=LIBRARY.filter(it=>LIB_PICK_SEL.has(it.id));
   const combinedDesc=chosen.map(it=>{
-    const name=it.nombre?`<b>${esc(it.nombre)}</b>`:'';
-    return [name,it.descripcion||''].filter(Boolean).join('<br>');
-  }).join('<br><br>');
+    const name=LIB_PICK_FIELDS.nombre&&it.nombre?`<b>${esc(it.nombre)}</b>`:'';
+    const desc=LIB_PICK_FIELDS.descripcion?(it.descripcion||''):'';
+    return [name,desc].filter(Boolean).join('<br>');
+  }).filter(Boolean).join('<br><br>');
   const combinedGraphs=[];
-  chosen.forEach(it=>(it.graficos||[]).forEach(g=>combinedGraphs.push(Object.assign({},JSON.parse(JSON.stringify(g)),{id:'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)}))));
+  if(LIB_PICK_FIELDS.graficos)chosen.forEach(it=>(it.graficos||[]).forEach(g=>combinedGraphs.push(Object.assign({},JSON.parse(JSON.stringify(g)),{id:'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)}))));
   if(LIB_TARGET_BLOCK){
     const b=lpFindBlock(LIB_TARGET_BLOCK);
     if(b){
