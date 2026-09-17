@@ -369,7 +369,12 @@
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-  <marker id="lpArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#c0392b"/></marker>
+  <marker id="lpArrow-111827" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#111827"/></marker>
+  <marker id="lpArrow-c0392b" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#c0392b"/></marker>
+  <marker id="lpArrow-1f8a4d" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#1f8a4d"/></marker>
+  <marker id="lpArrow-2563eb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#2563eb"/></marker>
+  <marker id="lpArrow-ff7a1a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#ff7a1a"/></marker>
+  <marker id="lpArrow-f1c40f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#f1c40f"/></marker>
   <clipPath id="lpRacketClip" clipPathUnits="userSpaceOnUse"><ellipse cx="0" cy="-1.7" rx="2.1" ry="2.7"/></clipPath>
 </defs></svg>
 <header>
@@ -1078,6 +1083,7 @@ const LP_BLOCK_CATALOG=[{tipo:'inicio',label:'Inicio de clase'},{tipo:'calentami
 const LP_COLORS=['#111827','#c0392b','#1f8a4d','#2563eb','#ff7a1a','#f1c40f'];
 const LP_DEFAULT_COLOR={jugador:'#111827',raqueta:'#111827',pelota:'#cfe61c',canasto:'#e9c46a',cono:'#ff7a1a',conobajo:'#ff7a1a',aro:'#e0338c'};
 const LP_COLORABLE=new Set(Object.keys(LP_DEFAULT_COLOR));
+function lpColorId(c){return String(c||'c0392b').replace('#','');}
 let editMsgId=null,editEvId=null,editCompId=null,editRecId=null;
 let pickSel=new Set(),pickCb=null;
 function recCount(id,tipo){return RECOVERIES.filter(r=>r.studentId===id&&r.tipo===tipo).length;}
@@ -1863,11 +1869,31 @@ function lpCurveCtrl(x1,y1,x2,y2){
   const nx=-dy/len,ny=dx/len,off=Math.min(14,len*0.28);
   return {cx:mx+nx*off,cy:my+ny*off};
 }
+function lpShapeInnerSvg(s,sel){
+  const col=sel?'#2563eb':(s.color||'#c0392b'),w=sel?Math.max(1.1,(s.width||0.8)+0.3):(s.width||0.8);
+  const mk=`url(#lpArrow-${lpColorId(col)})`;
+  if(s.type==='flechaCurva'){
+    const {cx,cy}=lpCurveCtrl(s.x1,s.y1,s.x2,s.y2);
+    return `<path d="M${s.x1},${s.y1} Q${cx},${cy} ${s.x2},${s.y2}" fill="none" stroke="transparent" stroke-width="3"/><path d="M${s.x1},${s.y1} Q${cx},${cy} ${s.x2},${s.y2}" fill="none" stroke="${col}" stroke-width="${w}" marker-start="${mk}" marker-end="${mk}"/>`;
+  }
+  const dash=s.type==='flechaPunteada'?' stroke-dasharray="1.6,1.2"':'';
+  const mEnd=s.type!=='linea'?` marker-end="${mk}"`:'';
+  const mStart=s.type==='flechaDoble'?` marker-start="${mk}"`:'';
+  return `<line x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}" stroke="transparent" stroke-width="3"/><line x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}" stroke="${col}" stroke-width="${w}"${dash}${mEnd}${mStart}/>`;
+}
+function lpRedrawShape(blockId,graphId,shapeId){
+  const g=lpFindGraphic(blockId,graphId);if(!g)return;
+  const s=(g.shapes||[]).find(x=>x.id===shapeId);if(!s)return;
+  const el=document.getElementById('lpShape-'+shapeId);if(!el)return;
+  const sel=LP_SELECTED&&LP_SELECTED.kind==='shape'&&LP_SELECTED.id===shapeId;
+  el.innerHTML=lpShapeInnerSvg(s,sel);
+}
 function lpGraphicCardHTML(block,g){
   const editable=can('planner');
   const selHere=editable&&LP_SELECTED&&LP_SELECTED.graphId===g.id;
   const drawHere=editable&&LP_DRAW&&LP_DRAW.graphId===g.id;
   const selEl=selHere&&LP_SELECTED.kind==='el'?(g.elements||[]).find(x=>x.id===LP_SELECTED.id):null;
+  const selShape=selHere&&LP_SELECTED.kind==='shape'?(g.shapes||[]).find(x=>x.id===LP_SELECTED.id):null;
   const courtBtn=(v,label)=>`<button type="button" class="btn sm ${g.court===v?'':'ghost'}" onclick="lpSetCourt('${block.id}','${g.id}','${v}')">${esc(label)}</button>`;
   const drawBtn=(t,label)=>`<button type="button" class="btn sm ${drawHere&&LP_DRAW.type===t?'':'ghost'}" onclick="lpArmDraw('${block.id}','${g.id}','${t}')">${esc(label)}</button>`;
   const iconBtn=(k,label,lbl)=>`<button type="button" class="btn sm ghost" onclick="lpAddElement('${block.id}','${g.id}','${k}','${lbl||''}')">${esc(label)}</button>`;
@@ -1877,15 +1903,7 @@ function lpGraphicCardHTML(block,g){
   }).join('');
   const shapesSvg=(g.shapes||[]).map(s=>{
     const sel=LP_SELECTED&&LP_SELECTED.kind==='shape'&&LP_SELECTED.id===s.id;
-    const col=sel?'#2563eb':'#c0392b',w=sel?1.1:0.8;
-    if(s.type==='flechaCurva'){
-      const {cx,cy}=lpCurveCtrl(s.x1,s.y1,s.x2,s.y2);
-      return `<g onpointerdown="lpShapePointerDown(event,'${block.id}','${g.id}','${s.id}')" style="cursor:pointer"><path d="M${s.x1},${s.y1} Q${cx},${cy} ${s.x2},${s.y2}" fill="none" stroke="transparent" stroke-width="3"/><path d="M${s.x1},${s.y1} Q${cx},${cy} ${s.x2},${s.y2}" fill="none" stroke="${col}" stroke-width="${w}" marker-start="url(#lpArrow)" marker-end="url(#lpArrow)"/></g>`;
-    }
-    const dash=s.type==='flechaPunteada'?' stroke-dasharray="1.6,1.2"':'';
-    const mEnd=s.type!=='linea'?' marker-end="url(#lpArrow)"':'';
-    const mStart=s.type==='flechaDoble'?' marker-start="url(#lpArrow)"':'';
-    return `<g onpointerdown="lpShapePointerDown(event,'${block.id}','${g.id}','${s.id}')" style="cursor:pointer"><line x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}" stroke="transparent" stroke-width="3"/><line x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}" stroke="${col}" stroke-width="${w}"${dash}${mEnd}${mStart}/></g>`;
+    return `<g id="lpShape-${s.id}" onpointerdown="lpShapePointerDown(event,'${block.id}','${g.id}','${s.id}')" style="cursor:pointer">${lpShapeInnerSvg(s,sel)}</g>`;
   }).join('');
   return `<div class="card" id="lpGraph-${g.id}" style="padding:10px;margin-top:8px;background:#fafbfc">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -1906,6 +1924,8 @@ function lpGraphicCardHTML(block,g){
       ${selEl&&LP_COLORABLE.has(selEl.kind)?LP_COLORS.map(cl=>`<button type="button" title="Color" onclick="lpSetElColor('${cl}')" style="width:20px;height:20px;border-radius:50%;border:2px solid ${selEl.color===cl?'#111':'#fff'};box-shadow:0 0 0 1px var(--line);background:${cl};cursor:pointer;padding:0"></button>`).join(''):''}
       ${selEl&&selEl.kind==='jugador'?`<input value="${esc(selEl.label||'')}" maxlength="4" oninput="lpSetElLabel(this.value)" placeholder="Etiqueta" style="width:64px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px">`:''}
       ${LP_SELECTED.kind==='el'?`<button type="button" class="btn sm ghost" onclick="lpRotateSel(-15)">↺ Rotar</button><button type="button" class="btn sm ghost" onclick="lpRotateSel(15)">↻ Rotar</button><button type="button" class="btn sm ghost" onclick="lpScaleSel(-0.2)">🔽 Achicar</button><button type="button" class="btn sm ghost" onclick="lpScaleSel(0.2)">🔼 Agrandar</button>`:''}
+      ${selShape?LP_COLORS.map(cl=>`<button type="button" title="Color" onclick="lpSetShapeColor('${cl}')" style="width:20px;height:20px;border-radius:50%;border:2px solid ${(selShape.color||'#c0392b')===cl?'#111':'#fff'};box-shadow:0 0 0 1px var(--line);background:${cl};cursor:pointer;padding:0"></button>`).join(''):''}
+      ${selShape?`<span class="small" style="color:var(--muted)">Tamaño:</span><input type="range" min="0.4" max="2.2" step="0.1" value="${selShape.width||0.8}" oninput="lpSetShapeWidth(this.value)" style="width:100px">`:''}
       <button type="button" class="btn sm ghost" onclick="lpCopySel()">📋 Copiar (Ctrl+C)</button>
       <button type="button" class="btn sm ghost" onclick="lpCutSel()">✂️ Cortar (Ctrl+X)</button>
       <button type="button" class="btn sm ghost" onclick="lpDeleteSel()">🗑 Eliminar seleccionado</button>
@@ -1926,6 +1946,20 @@ function lpSetElLabel(val){
   el.label=val.slice(0,4);
   const t=document.getElementById('lpElLabel-'+el.id);
   if(t)t.textContent=el.label.toUpperCase();
+}
+function lpSetShapeColor(color){
+  if(!LP_SELECTED||LP_SELECTED.kind!=='shape')return;
+  const g=lpFindGraphic(LP_SELECTED.blockId,LP_SELECTED.graphId);if(!g)return;
+  const sh=(g.shapes||[]).find(x=>x.id===LP_SELECTED.id);if(!sh)return;
+  sh.color=color;
+  lpRenderGraphic(LP_SELECTED.blockId,LP_SELECTED.graphId);
+}
+function lpSetShapeWidth(val){
+  if(!LP_SELECTED||LP_SELECTED.kind!=='shape')return;
+  const g=lpFindGraphic(LP_SELECTED.blockId,LP_SELECTED.graphId);if(!g)return;
+  const sh=(g.shapes||[]).find(x=>x.id===LP_SELECTED.id);if(!sh)return;
+  sh.width=Math.max(0.4,Math.min(2.2,parseFloat(val)||0.8));
+  lpRedrawShape(LP_SELECTED.blockId,LP_SELECTED.graphId,LP_SELECTED.id);
 }
 function lpElPointerDown(ev,blockId,graphId,elId){
   ev.stopPropagation();
@@ -1956,11 +1990,11 @@ function lpCanvasPointerDown(ev,blockId,graphId){
   const startC=lpClamp(start.x,0,100),startCy=lpClamp(start.y,0,LP_CH);
   const isCurve=LP_DRAW.type==='flechaCurva';
   const el=document.createElementNS('http://www.w3.org/2000/svg',isCurve?'path':'line');
-  if(isCurve){el.setAttribute('d',`M${startC},${startCy} Q${startC},${startCy} ${startC},${startCy}`);el.setAttribute('fill','none');el.setAttribute('marker-start','url(#lpArrow)');el.setAttribute('marker-end','url(#lpArrow)');}
+  if(isCurve){el.setAttribute('d',`M${startC},${startCy} Q${startC},${startCy} ${startC},${startCy}`);el.setAttribute('fill','none');el.setAttribute('marker-start','url(#lpArrow-c0392b)');el.setAttribute('marker-end','url(#lpArrow-c0392b)');}
   else{
     el.setAttribute('x1',startC);el.setAttribute('y1',startCy);el.setAttribute('x2',startC);el.setAttribute('y2',startCy);
-    if(LP_DRAW.type!=='linea')el.setAttribute('marker-end','url(#lpArrow)');
-    if(LP_DRAW.type==='flechaDoble')el.setAttribute('marker-start','url(#lpArrow)');
+    if(LP_DRAW.type!=='linea')el.setAttribute('marker-end','url(#lpArrow-c0392b)');
+    if(LP_DRAW.type==='flechaDoble')el.setAttribute('marker-start','url(#lpArrow-c0392b)');
   }
   el.setAttribute('stroke','#c0392b');el.setAttribute('stroke-width','0.8');
   if(LP_DRAW.type==='flechaPunteada')el.setAttribute('stroke-dasharray','1.6,1.2');
@@ -1975,7 +2009,7 @@ function lpCanvasPointerDown(ev,blockId,graphId){
     document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',up);
     const p=svgPoint(svg,mv.clientX,mv.clientY);
     const g=lpFindGraphic(blockId,graphId);
-    if(g){g.shapes=g.shapes||[];g.shapes.push({id:'sh'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),type:LP_DRAW.type,x1:startC,y1:startCy,x2:lpClamp(p.x,0,100),y2:lpClamp(p.y,0,LP_CH)});}
+    if(g){g.shapes=g.shapes||[];g.shapes.push({id:'sh'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),type:LP_DRAW.type,x1:startC,y1:startCy,x2:lpClamp(p.x,0,100),y2:lpClamp(p.y,0,LP_CH),color:'#c0392b',width:0.8});}
     LP_DRAW=null;
     lpRenderGraphic(blockId,graphId);
   };
@@ -2074,11 +2108,12 @@ function lpGeneratePDF(p){
     const gw=colstack?gwCol:gwRow;
     const graphsHTML=(b.graficos||[]).map(g=>{
       const shapesSvg=(g.shapes||[]).map(s=>{
-        if(s.type==='flechaCurva'){const c=lpCurveCtrl(s.x1,s.y1,s.x2,s.y2);return `<path d="M${s.x1},${s.y1} Q${c.cx},${c.cy} ${s.x2},${s.y2}" fill="none" stroke="#c0392b" stroke-width="0.9" marker-start="url(#lppArrow)" marker-end="url(#lppArrow)"/>`;}
+        const col=s.color||'#c0392b',w=s.width||0.9,mk=`url(#lppArrow-${lpColorId(col)})`;
+        if(s.type==='flechaCurva'){const c=lpCurveCtrl(s.x1,s.y1,s.x2,s.y2);return `<path d="M${s.x1},${s.y1} Q${c.cx},${c.cy} ${s.x2},${s.y2}" fill="none" stroke="${col}" stroke-width="${w}" marker-start="${mk}" marker-end="${mk}"/>`;}
         const dash=s.type==='flechaPunteada'?' stroke-dasharray="1.6,1.2"':'';
-        const mEnd=s.type!=='linea'?' marker-end="url(#lppArrow)"':'';
-        const mStart=s.type==='flechaDoble'?' marker-start="url(#lppArrow)"':'';
-        return `<line x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}" stroke="#c0392b" stroke-width="0.9"${dash}${mEnd}${mStart}/>`;
+        const mEnd=s.type!=='linea'?` marker-end="${mk}"`:'';
+        const mStart=s.type==='flechaDoble'?` marker-start="${mk}"`:'';
+        return `<line x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}" stroke="${col}" stroke-width="${w}"${dash}${mEnd}${mStart}/>`;
       }).join('');
       const elsSvg=(g.elements||[]).map(e=>`<g transform="translate(${e.x},${e.y}) rotate(${e.rot||0}) scale(${e.scale||1})">${lpElGlyph(e.kind,e.color,e.label,e.id)}</g>`).join('');
       const courtSvg=lpCourtBg(g.court,g.courtScale||1,g.courtWidth||1);
@@ -2119,7 +2154,7 @@ function lpGeneratePDF(p){
     +'.lppg{background:#fff;border:1px solid #dde3de;border-radius:5px}'
     +'.ft{margin-top:calc(9px * var(--s) * var(--g));font-size:calc(8.5px * var(--s));color:#9aa4ab;text-align:right}'
     +'</style></head><body>'
-    +'<svg width="0" height="0" style="position:absolute"><defs><marker id="lppArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#c0392b"/></marker></defs></svg>'
+    +'<svg width="0" height="0" style="position:absolute"><defs>'+LP_COLORS.map(c=>`<marker id="lppArrow-${lpColorId(c)}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="${c}"/></marker>`).join('')+'</defs></svg>'
     +'<div id="wrap">'
     +'<div class="hd">'+logoHTML+'<div><h1>'+esc(hd.title||'Planificación')+'</h1>'
     +(hd.subtitle?'<div class="hdsub">'+esc(hd.subtitle)+'</div>':'')
