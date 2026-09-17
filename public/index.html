@@ -1483,7 +1483,7 @@ function lpSetBlockField(blockId,field,val){
 }
 function lpRenderBlock(blockId){
   const el=document.getElementById('lpBlock-'+blockId),b=lpFindBlock(blockId);
-  if(el&&b)el.outerHTML=LIB_EDITING?libBlockEditorHTML(b):lpBlockCardHTML(b);
+  if(el&&b)el.outerHTML=LIB_EDITING?libBlockEditorHTML(b,LIB_EDIT&&LIB_EDIT.categoria==='tecnico'):lpBlockCardHTML(b);
 }
 function lpBlockCardHTML(block){
   const editable=can('planner');
@@ -1859,14 +1859,15 @@ function renderLibEditView(){
       </div>`}
       <div class="field"><label>Contenido (opcional)</label><input id="libEditContenido" ${editable?'':'disabled'} value="${esc(LIB_EDIT.contenido||'')}" placeholder="${isTec?'Ej: Derecha, revés, saque…':'Ej: Derecha, volea, saque…'}"></div>
       <div class="sectitle" style="margin-top:10px">${isTec?'Contenido técnico':'Ejercicio'}</div>
-      ${libBlockEditorHTML(b)}
+      ${libBlockEditorHTML(b,isTec)}
     </div>`;
 }
-function libBlockEditorHTML(block){
+function libBlockEditorHTML(block,isTec){
   const editable=can('planner');
   const graphs=(block.graficos||[]).map(g=>lpGraphicCardHTML(block,g)).join('');
+  const placeholder=isTec?'Descripción del contenido técnico…':'Descripción del ejercicio…';
   return `<div id="lpBlock-${block.id}">
-    <div class="field" style="margin-top:8px"><label>Descripción</label>${editable?rteBox('','',block.descripcion,60,'Descripción del ejercicio…',`lpSetBlockField('${block.id}','descripcion',rteGet(this))`):`<div class="rte" style="border:1px solid var(--line);border-radius:8px;background:var(--card)">${fmtRaw(block.descripcion||'')}</div>`}</div>
+    <div class="field" style="margin-top:8px"><label>Descripción</label>${editable?rteBox('','',block.descripcion,60,placeholder,`lpSetBlockField('${block.id}','descripcion',rteGet(this))`):`<div class="rte" style="border:1px solid var(--line);border-radius:8px;background:var(--card)">${fmtRaw(block.descripcion||'')}</div>`}</div>
     ${graphs}
     ${editable?`<button type="button" class="btn sm ghost" style="margin-top:6px" onclick="lpAddGraphic('${block.id}')">+ Agregar gráfico</button>`:''}
   </div>`;
