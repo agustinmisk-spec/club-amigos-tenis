@@ -2230,7 +2230,7 @@ function lpGeneratePDF(p){
     const n=(b.graficos||[]).length;
     const textLen=String(b.descripcion||'').replace(/<[^>]+>/g,'').trim().length;
     const gwRow=n<=1?195:(n===2?152:118);
-    const gwCol=175;
+    const gwCol=n===2?175:(n===3?150:130);
     let colstack=false;
     if(n>1){
       const W=700,charW=6,lineH=17;
