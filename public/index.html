@@ -1903,7 +1903,7 @@ function lpGraphicCardHTML(block,g){
   }).join('');
   const shapesSvg=(g.shapes||[]).map(s=>{
     const sel=LP_SELECTED&&LP_SELECTED.kind==='shape'&&LP_SELECTED.id===s.id;
-    return `<g id="lpShape-${s.id}" onpointerdown="lpShapePointerDown(event,'${block.id}','${g.id}','${s.id}')" style="cursor:pointer">${lpShapeInnerSvg(s,sel)}</g>`;
+    return `<g id="lpShape-${s.id}" onpointerdown="lpShapePointerDown(event,'${block.id}','${g.id}','${s.id}')" style="cursor:move">${lpShapeInnerSvg(s,sel)}</g>`;
   }).join('');
   return `<div class="card" id="lpGraph-${g.id}" style="padding:10px;margin-top:8px;background:#fafbfc">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -1980,7 +1980,21 @@ function lpShapePointerDown(ev,blockId,graphId,shapeId){
   if(LP_DRAW||!can('planner'))return;
   LP_SELECTED={blockId,graphId,kind:'shape',id:shapeId};
   LP_ACTIVE_GRAPHIC={blockId,graphId};
-  lpRenderGraphic(blockId,graphId);
+  const grp=ev.currentTarget,svg=grp.closest('svg');
+  const start=svgPoint(svg,ev.clientX,ev.clientY);
+  const g=lpFindGraphic(blockId,graphId),sh=g&&(g.shapes||[]).find(x=>x.id===shapeId);
+  if(!sh){lpRenderGraphic(blockId,graphId);return;}
+  const startX1=sh.x1,startY1=sh.y1,startX2=sh.x2,startY2=sh.y2;
+  const minDx=-Math.min(startX1,startX2),maxDx=100-Math.max(startX1,startX2);
+  const minDy=-Math.min(startY1,startY2),maxDy=LP_CH-Math.max(startY1,startY2);
+  const move=mv=>{
+    const p=svgPoint(svg,mv.clientX,mv.clientY);
+    const dx=lpClamp(p.x-start.x,minDx,maxDx),dy=lpClamp(p.y-start.y,minDy,maxDy);
+    sh.x1=startX1+dx;sh.y1=startY1+dy;sh.x2=startX2+dx;sh.y2=startY2+dy;
+    lpRedrawShape(blockId,graphId,shapeId);
+  };
+  const up=()=>{document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',up);lpRenderGraphic(blockId,graphId);};
+  document.addEventListener('pointermove',move);document.addEventListener('pointerup',up);
 }
 function lpCanvasPointerDown(ev,blockId,graphId){
   if(can('planner'))LP_ACTIVE_GRAPHIC={blockId,graphId};
@@ -2067,14 +2081,17 @@ function lpPasteClipboard(blockId,graphId){
   lpRenderGraphic(blockId,graphId);
 }
 document.addEventListener('keydown',e=>{
-  if(!LP_EDIT||!(e.ctrlKey||e.metaKey))return;
-  const k=(e.key||'').toLowerCase();
-  if(k!=='c'&&k!=='x'&&k!=='v')return;
+  if(!LP_EDIT)return;
   const ae=document.activeElement;
   if(ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'||ae.isContentEditable))return;
-  if(k==='c'){if(LP_SELECTED){lpCopySel();e.preventDefault();}}
-  else if(k==='x'){if(LP_SELECTED){lpCutSel();e.preventDefault();}}
-  else if(k==='v'){if(LP_CLIPBOARD&&LP_ACTIVE_GRAPHIC){lpPasteClipboard(LP_ACTIVE_GRAPHIC.blockId,LP_ACTIVE_GRAPHIC.graphId);e.preventDefault();}}
+  if(e.ctrlKey||e.metaKey){
+    const k=(e.key||'').toLowerCase();
+    if(k==='c'){if(LP_SELECTED){lpCopySel();e.preventDefault();}}
+    else if(k==='x'){if(LP_SELECTED){lpCutSel();e.preventDefault();}}
+    else if(k==='v'){if(LP_CLIPBOARD&&LP_ACTIVE_GRAPHIC){lpPasteClipboard(LP_ACTIVE_GRAPHIC.blockId,LP_ACTIVE_GRAPHIC.graphId);e.preventDefault();}}
+    return;
+  }
+  if((e.key==='Delete'||e.key==='Backspace')&&LP_SELECTED){lpDeleteSel();e.preventDefault();}
 });
 function lpPrintPlanById(id){const p=LESSONPLANS.find(x=>x.id===id);if(p)lpGeneratePDF(p);}
 const LP_PDF_COLOR='#1b3a6b';
