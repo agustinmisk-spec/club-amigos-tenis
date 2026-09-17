@@ -1057,6 +1057,7 @@ let RECOVERIES=[],COMPS=[],PLANS=[],GROUPNOTES=[],LESSONPLANS=[];
 let planSubTab='planificador',LP_EDIT=null,LP_SELECTED=null,LP_DRAW=null,LP_CLIPBOARD=null,LP_ACTIVE_GRAPHIC=null;
 let LIBRARY=[],LIB_TARGET_BLOCK=null,LIB_PICK_SEL=new Set();
 let LIB_EDIT=null,LIB_EDITING=false,LIB_LP_STASH,LIB_FILTER={q:'',momento:'',cancha:''};
+let LPFOLDERS=[],LP_CUR_FOLDER='';
 const LP_CH=90,LP_CY=45;
 const LP_BLOCK_CATALOG=[{tipo:'inicio',label:'Inicio de clase'},{tipo:'calentamiento',label:'Calentamiento'},{tipo:'drill',label:'Drill'},{tipo:'saques',label:'Saques'},{tipo:'juego',label:'Juego final'},{tipo:'cierre',label:'Cierre de clase'}];
 const LP_COLORS=['#111827','#c0392b','#1f8a4d','#2563eb','#ff7a1a','#f1c40f'];
@@ -1248,7 +1249,7 @@ async function renderLP(){
   const wrap=document.getElementById('lpWrap');if(!wrap)return;
   if(!LP_EDIT){
     wrap.innerHTML='<div class="card empty"><p>Cargando…</p></div>';
-    try{LESSONPLANS=await api('GET','/api/lessonplans');}catch(e){wrap.innerHTML='<div class="card empty"><p>No se pudo cargar.</p></div>';return;}
+    try{[LESSONPLANS,LPFOLDERS]=await Promise.all([api('GET','/api/lessonplans'),api('GET','/api/lpfolders')]);}catch(e){wrap.innerHTML='<div class="card empty"><p>No se pudo cargar.</p></div>';return;}
   }
   renderLPView();
 }
@@ -1263,9 +1264,12 @@ function lpPlanHeading(p){
   if(p.titulo)return {title:p.titulo,subtitle:(p.programa||'')+(nl?' · '+nl:'')};
   return {title:(p.programa||'—')+(nl?' · '+nl:''),subtitle:''};
 }
+function lpHasActiveFilter(){return !!(LP_FILTER.q.trim()||LP_FILTER.programa||LP_FILTER.nivel||LP_FILTER.desde||LP_FILTER.hasta);}
 function lpFilteredPlans(){
   const q=LP_FILTER.q.trim().toLowerCase();
+  const scoped=lpHasActiveFilter();
   return LESSONPLANS.filter(p=>{
+    if(!scoped&&(p.folderId||'')!==LP_CUR_FOLDER)return false;
     if(LP_FILTER.programa&&p.programa!==LP_FILTER.programa)return false;
     const niveles=(p.niveles&&p.niveles.length)?p.niveles:(p.nivel?[p.nivel]:[]);
     if(LP_FILTER.nivel&&!niveles.includes(LP_FILTER.nivel))return false;
@@ -1277,6 +1281,65 @@ function lpFilteredPlans(){
     }
     return true;
   });
+}
+function lpFolderChildren(parentId){return LPFOLDERS.filter(f=>(f.parentId||'')===(parentId||''));}
+function lpFolderPath(id){
+  const path=[];let cur=id;
+  while(cur){const f=LPFOLDERS.find(x=>x.id===cur);if(!f)break;path.unshift(f);cur=f.parentId||'';}
+  return path;
+}
+function lpFolderFlatList(){
+  const out=[];
+  function walk(parentId,depth){
+    lpFolderChildren(parentId).slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'')).forEach(f=>{out.push({id:f.id,label:'　'.repeat(depth)+f.nombre});walk(f.id,depth+1);});
+  }
+  walk('',0);
+  return out;
+}
+function lpGoFolder(id){LP_CUR_FOLDER=id||'';renderLPView();}
+function lpBreadcrumbHTML(){
+  const path=lpFolderPath(LP_CUR_FOLDER);
+  const parts=['<a href="javascript:void(0)" onclick="lpGoFolder(\'\')">📅 Planificaciones</a>'].concat(path.map(f=>`<a href="javascript:void(0)" onclick="lpGoFolder('${f.id}')">${esc(f.nombre)}</a>`));
+  return `<div class="small" style="margin-bottom:8px;color:var(--muted)">${parts.join(' <span style="opacity:.5">/</span> ')}</div>`;
+}
+function lpFoldersHTML(){
+  const editable=can('planner');
+  const subs=lpFolderChildren(LP_CUR_FOLDER).slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+  if(!subs.length)return '';
+  const cards=subs.map(f=>{
+    const nsub=lpFolderChildren(f.id).length;
+    const nplans=LESSONPLANS.filter(p=>(p.folderId||'')===f.id).length;
+    const label=[nsub?nsub+' carpeta(s)':'',nplans?nplans+' planificación(es)':''].filter(Boolean).join(' · ')||'vacía';
+    return `<div class="card" style="padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;cursor:pointer" onclick="lpGoFolder('${f.id}')">
+      <span style="font-size:20px">📁</span>
+      <div style="flex:1;min-width:0"><b>${esc(f.nombre)}</b><div class="small" style="color:var(--muted)">${label}</div></div>
+      ${editable?`<button type="button" class="btn sm ghost" onclick="event.stopPropagation();lpRenameFolder('${f.id}')">✏️</button>`:''}
+      ${editable?`<button type="button" class="att-btn" title="Eliminar carpeta" onclick="event.stopPropagation();lpDeleteFolder('${f.id}')">🗑</button>`:''}
+    </div>`;
+  }).join('');
+  return `<div style="margin-bottom:10px">${cards}</div>`;
+}
+async function lpNewFolder(){
+  if(!can('planner'))return;
+  const nombre=(prompt('Nombre de la nueva carpeta:')||'').trim();
+  if(!nombre)return;
+  try{const f=await api('POST','/api/lpfolders',{nombre,parentId:LP_CUR_FOLDER});LPFOLDERS.push(f);renderLPView();}catch(e){alert(e.message);}
+}
+async function lpRenameFolder(id){
+  if(!can('planner'))return;
+  const f=LPFOLDERS.find(x=>x.id===id);if(!f)return;
+  const nombre=(prompt('Nuevo nombre de la carpeta:',f.nombre)||'').trim();
+  if(!nombre||nombre===f.nombre)return;
+  try{const saved=await api('PUT','/api/lpfolders/'+id,{nombre,parentId:f.parentId||''});Object.assign(f,saved);renderLPView();}catch(e){alert(e.message);}
+}
+async function lpDeleteFolder(id){
+  if(!can('planner'))return;
+  if(!confirm('¿Eliminar esta carpeta? Las planificaciones y subcarpetas que tenga adentro pasarán a la carpeta contenedora.'))return;
+  try{
+    await api('DELETE','/api/lpfolders/'+id);
+    [LESSONPLANS,LPFOLDERS]=await Promise.all([api('GET','/api/lessonplans'),api('GET','/api/lpfolders')]);
+    renderLPView();
+  }catch(e){alert(e.message);}
 }
 function lpSetFilter(key,val){LP_FILTER[key]=val;lpRenderListResults();}
 function lpClearFilter(){LP_FILTER={q:'',programa:'',nivel:'',desde:'',hasta:''};renderLPView();}
@@ -1294,13 +1357,18 @@ function lpFilterBarHTML(){
 }
 function renderLPView(){
   const wrap=document.getElementById('lpWrap');if(!wrap)return;
-  wrap.innerHTML=LP_EDIT?lpEditorHTML():`<div class="toolbar" style="margin-bottom:10px">${can('planner')?'<button class="btn" onclick="lpNewPlan()">+ Nueva planificación</button>':''}<div class="spacer"></div></div>${lpFilterBarHTML()}<div id="lpListResults">${lpListHTML()}</div>`;
+  if(LP_EDIT){wrap.innerHTML=lpEditorHTML();return;}
+  const editable=can('planner');
+  wrap.innerHTML=`<div class="toolbar" style="margin-bottom:10px">${editable?'<button class="btn" onclick="lpNewPlan()">+ Nueva planificación</button> <button class="btn sec" onclick="lpNewFolder()">📁 Nueva carpeta</button>':''}<div class="spacer"></div></div>${lpBreadcrumbHTML()}${lpFoldersHTML()}${lpFilterBarHTML()}<div id="lpListResults">${lpListHTML()}</div>`;
 }
 function lpListHTML(){
   const list=lpFilteredPlans();
   const countLine=`<div class="small" style="margin-bottom:6px;color:var(--muted)">${list.length} de ${LESSONPLANS.length} planificación(es)</div>`;
   if(!LESSONPLANS.length)return '<div class="card empty"><div class="big">📅</div><p>Todavía no hay planificaciones cargadas.</p></div>';
-  if(!list.length)return countLine+'<div class="card empty"><p>No hay planificaciones que coincidan con los filtros.</p></div>';
+  if(!list.length){
+    const msg=lpHasActiveFilter()?'No hay planificaciones que coincidan con los filtros.':'No hay planificaciones en esta carpeta todavía.';
+    return countLine+`<div class="card empty"><p>${msg}</p></div>`;
+  }
   return countLine+'<div class="feed">'+list.map(p=>{
     const mins=(p.bloques||[]).reduce((a,b)=>a+(b.minutos||0),0);
     const hd=lpPlanHeading(p);
@@ -1309,7 +1377,7 @@ function lpListHTML(){
 }
 function lpNewPlan(){
   if(!can('planner'))return;
-  LP_EDIT={titulo:'',programa:'',niveles:[],segmento:'',fechaDesde:'',fechaHasta:'',objetivo:'',contenido:'',bloques:LP_BLOCK_CATALOG.map(c=>({id:'blk'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),tipo:c.tipo,titulo:c.label,minutos:0,descripcion:'',graficos:[]}))};
+  LP_EDIT={titulo:'',programa:'',niveles:[],segmento:'',fechaDesde:'',fechaHasta:'',objetivo:'',contenido:'',folderId:LP_CUR_FOLDER||'',bloques:LP_BLOCK_CATALOG.map(c=>({id:'blk'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),tipo:c.tipo,titulo:c.label,minutos:0,descripcion:'',graficos:[]}))};
   LP_SELECTED=null;LP_DRAW=null;
   renderLPView();
 }
@@ -1319,6 +1387,7 @@ function lpEditPlan(id){
   if(!Array.isArray(LP_EDIT.niveles))LP_EDIT.niveles=LP_EDIT.nivel?[LP_EDIT.nivel]:[];
   if(LP_EDIT.titulo==null)LP_EDIT.titulo='';
   if(LP_EDIT.segmento==null)LP_EDIT.segmento='';
+  if(LP_EDIT.folderId==null)LP_EDIT.folderId='';
   LP_SELECTED=null;LP_DRAW=null;
   renderLPView();
 }
@@ -1333,7 +1402,7 @@ async function lpSavePlan(){
   if(!can('planner')||!LP_EDIT)return;
   if(!LP_EDIT.programa){alert('Elegí el programa.');return;}
   if(!LP_EDIT.fechaDesde){alert('Elegí la fecha desde.');return;}
-  const body={titulo:LP_EDIT.titulo||'',programa:LP_EDIT.programa,niveles:LP_EDIT.niveles||[],segmento:LP_EDIT.segmento||'',fechaDesde:LP_EDIT.fechaDesde,fechaHasta:LP_EDIT.fechaHasta,objetivo:LP_EDIT.objetivo,contenido:LP_EDIT.contenido,bloques:LP_EDIT.bloques};
+  const body={titulo:LP_EDIT.titulo||'',programa:LP_EDIT.programa,niveles:LP_EDIT.niveles||[],segmento:LP_EDIT.segmento||'',fechaDesde:LP_EDIT.fechaDesde,fechaHasta:LP_EDIT.fechaHasta,objetivo:LP_EDIT.objetivo,contenido:LP_EDIT.contenido,folderId:LP_EDIT.folderId||'',bloques:LP_EDIT.bloques};
   try{
     const saved=LP_EDIT.id?await api('PUT','/api/lessonplans/'+LP_EDIT.id,body):await api('POST','/api/lessonplans',body);
     LP_EDIT=saved;
@@ -1357,6 +1426,12 @@ function lpEditorHTML(){
     <div class="field"><label>Título de la planificación (opcional)</label><input ${editable?'':'disabled'} value="${esc(LP_EDIT.titulo||'')}" oninput="lpSetTop('titulo',this.value)" placeholder="Ej: Semana 1 - Fundamentos de saque"></div>
     <div class="grid2">
       <div class="field"><label>Programa</label><select ${editable?'':'disabled'} onchange="lpSetTop('programa',this.value)">${lpOpt(c.programas,'—',LP_EDIT.programa)}</select></div>
+      <div class="field"><label>Carpeta</label><select ${editable?'':'disabled'} onchange="lpSetTop('folderId',this.value)">
+        <option value=""${!LP_EDIT.folderId?' selected':''}>📁 Raíz (sin carpeta)</option>
+        ${lpFolderFlatList().map(f=>`<option value="${f.id}"${LP_EDIT.folderId===f.id?' selected':''}>${esc(f.label)}</option>`).join('')}
+      </select></div>
+    </div>
+    <div class="grid2">
       <div class="field"><label>Período — desde</label><input type="date" ${editable?'':'disabled'} value="${esc(LP_EDIT.fechaDesde||'')}" oninput="lpSetTop('fechaDesde',this.value)"></div>
       <div class="field"><label>Período — hasta</label><input type="date" ${editable?'':'disabled'} value="${esc(LP_EDIT.fechaHasta||'')}" oninput="lpSetTop('fechaHasta',this.value)"></div>
     </div>
