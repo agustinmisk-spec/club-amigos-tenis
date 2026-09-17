@@ -224,7 +224,9 @@ const cleanShape = s => ({
   id: String((s && s.id) || '').slice(0, 40),
   type: ['linea', 'flecha', 'flechaPunteada', 'flechaDoble', 'flechaCurva'].includes(s && s.type) ? s.type : 'linea',
   x1: num(s && s.x1, 0, 100, 10), y1: num(s && s.y1, 0, 100, 10),
-  x2: num(s && s.x2, 0, 100, 90), y2: num(s && s.y2, 0, 100, 90)
+  x2: num(s && s.x2, 0, 100, 90), y2: num(s && s.y2, 0, 100, 90),
+  color: /^#[0-9a-fA-F]{3,8}$/.test(s && s.color) ? s.color : '#c0392b',
+  width: num(s && s.width, 0.4, 2.2, 0.8)
 });
 const cleanGraph = g => ({
   id: String((g && g.id) || '').slice(0, 40),
