@@ -673,10 +673,12 @@
     <div class="toolbar" style="margin-bottom:4px">
       <button class="btn sm" id="subtabbtn-planificador" onclick="showPlanSub('planificador')">📅 Planificador</button>
       <button class="btn sm ghost" id="subtabbtn-biblioteca" onclick="showPlanSub('biblioteca')">📚 Biblioteca</button>
+      <button class="btn sm ghost" id="subtabbtn-libtecnico" onclick="showPlanSub('libtecnico')">📐 Contenido técnico</button>
       <button class="btn sm ghost" id="subtabbtn-archivos" onclick="showPlanSub('archivos')">📎 Archivos</button>
     </div>
     <div id="subtab-planificador"><div id="lpWrap"></div></div>
     <div id="subtab-biblioteca" style="display:none"><div id="libWrap"></div></div>
+    <div id="subtab-libtecnico" style="display:none"><div id="libTecWrap"></div></div>
     <div id="subtab-archivos" style="display:none">
       <div id="planUpload"></div>
       <div id="plansWrap"></div>
@@ -820,7 +822,7 @@
   <div class="modal" style="max-width:640px">
     <h2>Biblioteca de ejercicios</h2>
     <div class="body">
-      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
         <input type="search" id="libSearch" placeholder="Buscar por nombre o contenido…" oninput="libRenderList()" style="flex:1;min-width:160px;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
         <select id="libPickCategoria" onchange="libRenderList()" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px">
           <option value="">Todo</option>
@@ -837,7 +839,24 @@
           </div>
         </div>
       </div>
-      <div id="libList" style="max-height:56vh;overflow:auto"></div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <input type="text" id="libPickContenido" placeholder="Contenido (ej: Derecha, Saque)…" oninput="libRenderList()" style="flex:1;min-width:150px;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+        <select id="libPickMomento" onchange="libRenderList()" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+          <option value="">Cualquier momento</option>
+          <option value="inicio">Inicio de clase</option>
+          <option value="calentamiento">Calentamiento</option>
+          <option value="drill">Drill</option>
+          <option value="saques">Saques</option>
+          <option value="juego">Juego final</option>
+          <option value="cierre">Cierre de clase</option>
+        </select>
+        <select id="libPickCancha" onchange="libRenderList()" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+          <option value="">Cualquier cancha</option>
+          <option value="mini">Mini cancha</option>
+          <option value="full">Cancha completa</option>
+        </select>
+      </div>
+      <div id="libList" style="max-height:52vh;overflow:auto"></div>
     </div>
     <div class="foot"><button class="btn ghost" onclick="closeLib()">Cancelar</button><button class="btn" onclick="libAddSelected()">Agregar seleccionados</button></div>
   </div>
@@ -1245,21 +1264,26 @@ async function addPlanLink(){
 async function delPlan(id){if(!confirm('¿Eliminar esta planificación?'))return;try{await api('DELETE','/api/plans/'+id);renderPlans();}catch(e){alert(e.message);}}
 
 /* ===== Planificador de clases ===== */
-function showPlanSub(sub){
-  if(LIB_EDITING&&sub!=='biblioteca'){
-    if(!confirm('Tenés un ejercicio de la biblioteca sin guardar. ¿Salir sin guardar?'))return;
-    libExitBlockEditor();
-  }
+function lpSubtabToggle(sub){
   planSubTab=sub;
-  const bp=document.getElementById('subtabbtn-planificador'),ba=document.getElementById('subtabbtn-archivos'),bb=document.getElementById('subtabbtn-biblioteca');
+  const bp=document.getElementById('subtabbtn-planificador'),ba=document.getElementById('subtabbtn-archivos'),bb=document.getElementById('subtabbtn-biblioteca'),bt=document.getElementById('subtabbtn-libtecnico');
   if(bp)bp.className='btn sm'+(sub==='planificador'?'':' ghost');
   if(ba)ba.className='btn sm'+(sub==='archivos'?'':' ghost');
   if(bb)bb.className='btn sm'+(sub==='biblioteca'?'':' ghost');
-  const sp=document.getElementById('subtab-planificador'),sa=document.getElementById('subtab-archivos'),sb=document.getElementById('subtab-biblioteca');
+  if(bt)bt.className='btn sm'+(sub==='libtecnico'?'':' ghost');
+  const sp=document.getElementById('subtab-planificador'),sa=document.getElementById('subtab-archivos'),sb=document.getElementById('subtab-biblioteca'),st=document.getElementById('subtab-libtecnico');
   if(sp)sp.style.display=sub==='planificador'?'':'none';
   if(sa)sa.style.display=sub==='archivos'?'':'none';
   if(sb)sb.style.display=sub==='biblioteca'?'':'none';
-  if(sub==='planificador')renderLP();else if(sub==='archivos')renderPlans();else renderLibTab();
+  if(st)st.style.display=sub==='libtecnico'?'':'none';
+}
+function showPlanSub(sub){
+  if(LIB_EDITING&&sub!=='biblioteca'&&sub!=='libtecnico'){
+    if(!confirm('Tenés un ejercicio de la biblioteca sin guardar. ¿Salir sin guardar?'))return;
+    libExitBlockEditor();
+  }
+  lpSubtabToggle(sub);
+  if(sub==='planificador')renderLP();else if(sub==='archivos')renderPlans();else if(sub==='libtecnico')renderLibTecTab();else renderLibTab();
 }
 function lpClamp(v,a,b){return Math.max(a,Math.min(b,v));}
 function lpOpt(arr,blank,val){return (blank!=null?`<option value=""${!val?' selected':''}>${esc(blank)}</option>`:'')+(arr||[]).map(x=>`<option${x===val?' selected':''}>${esc(x)}</option>`).join('');}
@@ -1503,6 +1527,9 @@ async function openLibPicker(blockId){
   LIB_PICK_SEL=new Set();
   document.getElementById('libSearch').value='';
   document.getElementById('libPickCategoria').value='';
+  document.getElementById('libPickContenido').value='';
+  document.getElementById('libPickMomento').value='';
+  document.getElementById('libPickCancha').value='';
   document.getElementById('libFieldsPanel').style.display='none';
   document.getElementById('libFieldNombre').checked=LIB_PICK_FIELDS.nombre;
   document.getElementById('libFieldDescripcion').checked=LIB_PICK_FIELDS.descripcion;
@@ -1545,11 +1572,18 @@ function libRenderList(){
   const wrap=document.getElementById('libList');if(!wrap)return;
   const q=(document.getElementById('libSearch').value||'').toLowerCase().trim();
   const cat=document.getElementById('libPickCategoria')?document.getElementById('libPickCategoria').value:'';
+  const contenido=(document.getElementById('libPickContenido')?document.getElementById('libPickContenido').value:'').toLowerCase().trim();
+  const momento=document.getElementById('libPickMomento')?document.getElementById('libPickMomento').value:'';
+  const cancha=document.getElementById('libPickCancha')?document.getElementById('libPickCancha').value:'';
   const items=LIBRARY.filter(it=>
     (!q||(it.nombre||'').toLowerCase().includes(q)||(it.contenido||'').toLowerCase().includes(q))&&
-    (!cat||(it.categoria||'ejercicio')===cat)
+    (!cat||(it.categoria||'ejercicio')===cat)&&
+    (!contenido||(it.contenido||'').toLowerCase().includes(contenido))&&
+    (!momento||it.momento===momento)&&
+    (!cancha||it.cancha===cancha)
   );
-  if(!items.length){wrap.innerHTML='<p class="small">No hay ejercicios guardados'+((q||cat)?' que coincidan con la búsqueda':' todavía. Guardá uno desde un bloque con el botón "💾 Guardar en biblioteca", o creá uno nuevo desde la solapa Biblioteca')+'.</p>';return;}
+  const hasFilter=!!(q||cat||contenido||momento||cancha);
+  if(!items.length){wrap.innerHTML='<p class="small">No hay ejercicios guardados'+(hasFilter?' que coincidan con la búsqueda':' todavía. Guardá uno desde un bloque con el botón "💾 Guardar en biblioteca", o creá uno nuevo desde la solapa Biblioteca')+'.</p>';return;}
   wrap.innerHTML=items.map(it=>{
     const ng=(it.graficos||[]).length;
     const preview=String(it.descripcion||'').replace(/<[^>]+>/g,'').trim();
@@ -1593,23 +1627,19 @@ function libInferCancha(graficos){
   if(!courts.length)return'';
   return courts.every(c=>c===courts[0])?courts[0]:'';
 }
-async function libSaveBlock(blockId){
+function libSaveBlock(blockId){
+  if(!can('planner'))return;
   const b=lpFindBlock(blockId);if(!b)return;
-  const nombre=(prompt('Nombre para guardar este ejercicio en la biblioteca:',b.titulo||'')||'').trim();
-  if(!nombre)return;
   const momento=LP_BLOCK_CATALOG.some(c=>c.tipo===b.tipo)?b.tipo:'';
   const cancha=libInferCancha(b.graficos);
-  try{
-    const saved=await api('POST','/api/library',{nombre,momento,cancha,tipo:'custom',descripcion:b.descripcion||'',graficos:b.graficos||[]});
-    LIBRARY.unshift(saved);
-    alert('Ejercicio guardado en la biblioteca. Podés agregarle más detalles desde la solapa Biblioteca.');
-  }catch(e){alert(e.message);}
+  LIB_EDIT={id:null,nombre:b.titulo||'',momento,cancha,categoria:'ejercicio',contenido:''};
+  libEnterBlockEditor(b);
 }
 
 /* ---- Solapa Biblioteca: listado, alta, edición y borrado de ejercicios ---- */
 async function renderLibTab(){
-  const wrap=document.getElementById('libWrap');if(!wrap)return;
   if(LIB_EDITING){renderLibEditView();return;}
+  const wrap=document.getElementById('libWrap');if(!wrap)return;
   wrap.innerHTML='<div class="card empty"><p>Cargando…</p></div>';
   try{LIBRARY=await api('GET','/api/library');}catch(e){wrap.innerHTML='<div class="card empty"><p>No se pudo cargar.</p></div>';return;}
   renderLibListView();
@@ -1637,20 +1667,21 @@ function libTabFilterChange(){
   LIB_FILTER.momento=document.getElementById('libTabMomento').value;
   libTabRenderList();
 }
-function libItemCardHTML(it){
+function libItemCardHTML(it,tec){
   const editable=can('planner');
   const ng=(it.graficos||[]).length;
   const preview=String(it.descripcion||'').replace(/<[^>]+>/g,'').trim();
+  const editFn=tec?'libTecEdit':'libTabEdit',delFn=tec?'libTecDelete':'libTabDelete';
   return `<div class="card" style="padding:12px 14px;margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
         <div style="flex:1;min-width:200px">
           <b>${esc(it.nombre)}</b>
-          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px">${libTag(libMomentoLabel(it.momento))}${libTag(libCanchaLabel(it.cancha))}${libTag(it.contenido)}${ng?libTag(ng+' gráfico(s)'):''}</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px">${tec?'':libTag(libMomentoLabel(it.momento))+libTag(libCanchaLabel(it.cancha))}${libTag(it.contenido)}${ng?libTag(ng+' gráfico(s)'):''}</div>
           ${preview?`<div class="small" style="margin-top:6px;color:var(--muted)">${esc(preview.slice(0,140))}${preview.length>140?'…':''}</div>`:''}
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          ${editable?`<button type="button" class="btn sm ghost" onclick="libTabEdit('${it.id}')">✏️ Editar</button>`:''}
-          ${editable?`<button type="button" class="att-btn" title="Eliminar" onclick="libTabDelete('${it.id}')">🗑</button>`:''}
+          ${editable?`<button type="button" class="btn sm ghost" onclick="${editFn}('${it.id}')">✏️ Editar</button>`:''}
+          ${editable?`<button type="button" class="att-btn" title="Eliminar" onclick="${delFn}('${it.id}')">🗑</button>`:''}
         </div>
       </div>
     </div>`;
@@ -1663,22 +1694,15 @@ const LIB_BLOCKS=[
 ];
 function libTabRenderList(){
   const wrap=document.getElementById('libTabItems');if(!wrap)return;
-  if(!LIBRARY.length){wrap.innerHTML='<div class="card empty"><p>Todavía no hay ejercicios guardados. Creá uno con "+ Nuevo ejercicio" o guardá uno desde un bloque de una planificación.</p></div>';return;}
-  const items=LIBRARY.filter(it=>
+  const all=LIBRARY.filter(it=>it.categoria!=='tecnico');
+  if(!all.length){wrap.innerHTML='<div class="card empty"><p>Todavía no hay ejercicios guardados. Creá uno con "+ Nuevo ejercicio" o guardá uno desde un bloque de una planificación.</p></div>';return;}
+  const items=all.filter(it=>
     (!LIB_FILTER.q||(it.nombre||'').toLowerCase().includes(LIB_FILTER.q))&&
     (!LIB_FILTER.contenido||(it.contenido||'').toLowerCase().includes(LIB_FILTER.contenido))&&
     (!LIB_FILTER.momento||it.momento===LIB_FILTER.momento)
   );
   const hasFilter=!!(LIB_FILTER.q||LIB_FILTER.contenido||LIB_FILTER.momento);
   if(!items.length){wrap.innerHTML=`<div class="card empty"><p>${hasFilter?'No hay ejercicios que coincidan con el filtro.':'Todavía no hay ejercicios guardados.'}</p></div>`;return;}
-  const tecnicos=items.filter(it=>it.categoria==='tecnico');
-  const tecnicoBlock=tecnicos.length?`<div class="card" style="padding:0;overflow:hidden;border-top:4px solid #7c3aed;margin-bottom:14px">
-    <div style="padding:10px 14px;background:#fafbfc;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between">
-      <b style="font-size:14px">📐 Contenido técnico</b>
-      <span class="small" style="color:var(--muted)">${tecnicos.length}</span>
-    </div>
-    <div style="padding:10px 14px">${tecnicos.map(libItemCardHTML).join('')}</div>
-  </div>`:'';
   const blockHTML=b=>{
     const list=items.filter(it=>(it.categoria||'ejercicio')===b.categoria&&it.cancha===b.cancha);
     return `<div class="card" style="padding:0;overflow:hidden;border-top:4px solid ${b.color}">
@@ -1687,13 +1711,13 @@ function libTabRenderList(){
         <span class="small" style="color:var(--muted)">${list.length}</span>
       </div>
       <div style="padding:10px 14px;max-height:50vh;overflow:auto">
-        ${list.length?list.map(libItemCardHTML).join(''):'<p class="small" style="color:var(--muted);margin:6px 0">Sin ejercicios en este bloque.</p>'}
+        ${list.length?list.map(it=>libItemCardHTML(it)).join(''):'<p class="small" style="color:var(--muted);margin:6px 0">Sin ejercicios en este bloque.</p>'}
       </div>
     </div>`;
   };
-  const sinCancha=items.filter(it=>(it.categoria||'ejercicio')!=='tecnico'&&it.cancha!=='mini'&&it.cancha!=='full');
-  wrap.innerHTML=tecnicoBlock+`<div class="grid2" style="gap:14px">${LIB_BLOCKS.map(blockHTML).join('')}</div>`
-    +(sinCancha.length?`<div class="sectitle" style="margin:14px 0 6px">Sin cancha definida (${sinCancha.length})</div>${sinCancha.map(libItemCardHTML).join('')}`:'');
+  const sinCancha=items.filter(it=>it.cancha!=='mini'&&it.cancha!=='full');
+  wrap.innerHTML=`<div class="grid2" style="gap:14px">${LIB_BLOCKS.map(blockHTML).join('')}</div>`
+    +(sinCancha.length?`<div class="sectitle" style="margin:14px 0 6px">Sin cancha definida (${sinCancha.length})</div>${sinCancha.map(it=>libItemCardHTML(it)).join('')}`:'');
 }
 async function libTabDelete(id){
   if(!can('planner'))return;
@@ -1708,24 +1732,89 @@ function libTabNew(){
 function libTabEdit(id){
   if(!can('planner'))return;
   const it=LIBRARY.find(x=>x.id===id);if(!it)return;
-  LIB_EDIT={id:it.id,nombre:it.nombre||'',momento:it.momento||'',cancha:it.cancha||'',categoria:it.categoria||'ejercicio',contenido:it.contenido||''};
+  LIB_EDIT={id:it.id,nombre:it.nombre||'',momento:it.momento||'',cancha:it.cancha||'',categoria:(it.categoria&&it.categoria!=='tecnico')?it.categoria:'ejercicio',contenido:it.contenido||''};
+  libEnterBlockEditor(it);
+}
+/* ---- Solapa Contenido técnico: listado, alta, edición y borrado ---- */
+let LIB_TEC_FILTER={q:'',contenido:''};
+async function renderLibTecTab(){
+  if(LIB_EDITING){renderLibEditView();return;}
+  const wrap=document.getElementById('libTecWrap');if(!wrap)return;
+  wrap.innerHTML='<div class="card empty"><p>Cargando…</p></div>';
+  try{LIBRARY=await api('GET','/api/library');}catch(e){wrap.innerHTML='<div class="card empty"><p>No se pudo cargar.</p></div>';return;}
+  renderLibTecListView();
+}
+function renderLibTecListView(){
+  const wrap=document.getElementById('libTecWrap');if(!wrap)return;
+  const editable=can('planner');
+  wrap.innerHTML=`
+    <div class="toolbar" style="margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <input type="search" id="libTecSearch" placeholder="Buscar por nombre…" value="${esc(LIB_TEC_FILTER.q)}" oninput="libTecFilterChange()" style="flex:1;min-width:160px;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+      <input type="text" id="libTecContenido" placeholder="Contenido (ej: Derecha, Saque)…" value="${esc(LIB_TEC_FILTER.contenido)}" oninput="libTecFilterChange()" style="flex:1;min-width:160px;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+      <div class="spacer"></div>
+      ${editable?'<button class="btn sm" onclick="libTecNew()">+ Nuevo contenido técnico</button>':''}
+    </div>
+    <div id="libTecItems"></div>`;
+  libTecRenderList();
+}
+function libTecFilterChange(){
+  LIB_TEC_FILTER.q=(document.getElementById('libTecSearch').value||'').toLowerCase().trim();
+  LIB_TEC_FILTER.contenido=(document.getElementById('libTecContenido').value||'').toLowerCase().trim();
+  libTecRenderList();
+}
+function libTecRenderList(){
+  const wrap=document.getElementById('libTecItems');if(!wrap)return;
+  const all=LIBRARY.filter(it=>it.categoria==='tecnico');
+  if(!all.length){wrap.innerHTML='<div class="card empty"><p>Todavía no hay contenido técnico guardado. Creá uno con "+ Nuevo contenido técnico".</p></div>';return;}
+  const items=all.filter(it=>
+    (!LIB_TEC_FILTER.q||(it.nombre||'').toLowerCase().includes(LIB_TEC_FILTER.q))&&
+    (!LIB_TEC_FILTER.contenido||(it.contenido||'').toLowerCase().includes(LIB_TEC_FILTER.contenido))
+  );
+  if(!items.length){wrap.innerHTML='<div class="card empty"><p>No hay contenido técnico que coincida con el filtro.</p></div>';return;}
+  wrap.innerHTML=items.map(it=>libItemCardHTML(it,true)).join('');
+}
+async function libTecDelete(id){
+  if(!can('planner'))return;
+  if(!confirm('¿Eliminar este contenido técnico?'))return;
+  try{await api('DELETE','/api/library/'+id);LIBRARY=LIBRARY.filter(x=>x.id!==id);libTecRenderList();}catch(e){alert(e.message);}
+}
+function libTecNew(){
+  if(!can('planner'))return;
+  LIB_EDIT={id:null,nombre:'',momento:'',cancha:'',categoria:'tecnico',contenido:''};
+  libEnterBlockEditor(null);
+}
+function libTecEdit(id){
+  if(!can('planner'))return;
+  const it=LIBRARY.find(x=>x.id===id);if(!it)return;
+  LIB_EDIT={id:it.id,nombre:it.nombre||'',momento:'',cancha:'',categoria:'tecnico',contenido:it.contenido||''};
   libEnterBlockEditor(it);
 }
 function libEnterBlockEditor(srcItem){
   LIB_LP_STASH=LP_EDIT;LIB_EDITING=true;
   LP_EDIT={id:'__lib',bloques:[{id:'libblk',tipo:'custom',titulo:'',minutos:0,descripcion:(srcItem&&srcItem.descripcion)||'',graficos:(srcItem&&srcItem.graficos)?JSON.parse(JSON.stringify(srcItem.graficos)):[]}]};
-  renderLibTab();
+  lpSubtabToggle(LIB_EDIT.categoria==='tecnico'?'libtecnico':'biblioteca');
+  renderLibEditView();
 }
 function libExitBlockEditor(){
   LP_EDIT=LIB_LP_STASH;LIB_LP_STASH=undefined;LIB_EDITING=false;LIB_EDIT=null;
 }
-function libCancelEdit(){libExitBlockEditor();renderLibTab();}
+function libReturnAfterEdit(categoria){
+  if(LP_EDIT){lpSubtabToggle('planificador');renderLPView();}
+  else if(categoria==='tecnico'){lpSubtabToggle('libtecnico');renderLibTecTab();}
+  else{lpSubtabToggle('biblioteca');renderLibTab();}
+}
+function libCancelEdit(){
+  const cat=LIB_EDIT&&LIB_EDIT.categoria;
+  libExitBlockEditor();
+  libReturnAfterEdit(cat);
+}
 async function libSaveEdit(){
   if(!can('planner'))return;
   const nombre=(document.getElementById('libEditNombre').value||'').trim();
-  if(!nombre){alert('Poné un nombre para el ejercicio.');return;}
-  const momento=document.getElementById('libEditMomento').value;
-  const cancha=document.getElementById('libEditCancha').value;
+  if(!nombre){alert('Poné un nombre.');return;}
+  const momentoEl=document.getElementById('libEditMomento'),canchaEl=document.getElementById('libEditCancha');
+  const momento=momentoEl?momentoEl.value:'';
+  const cancha=canchaEl?canchaEl.value:'';
   const categoria=document.getElementById('libEditCategoria').value;
   const contenido=(document.getElementById('libEditContenido').value||'').trim();
   const b=LP_EDIT.bloques[0];
@@ -1735,29 +1824,29 @@ async function libSaveEdit(){
     if(LIB_EDIT.id){const i=LIBRARY.findIndex(x=>x.id===LIB_EDIT.id);if(i>=0)LIBRARY[i]=saved;}
     else LIBRARY.unshift(saved);
     libExitBlockEditor();
-    renderLibTab();
+    libReturnAfterEdit(categoria);
   }catch(e){alert(e.message);}
 }
 function renderLibEditView(){
-  const wrap=document.getElementById('libWrap');if(!wrap)return;
+  const isTec=LIB_EDIT.categoria==='tecnico';
+  const wrap=document.getElementById(isTec?'libTecWrap':'libWrap');if(!wrap)return;
   const editable=can('planner');
   const b=LP_EDIT.bloques[0];
   wrap.innerHTML=`
     <div class="toolbar" style="margin-bottom:10px">
       <button class="btn sec sm" onclick="libCancelEdit()">← ${editable?'Cancelar':'Volver'}</button>
       <div class="spacer"></div>
-      ${editable?'<button class="btn sm" onclick="libSaveEdit()">💾 Guardar ejercicio</button>':''}
+      ${editable?`<button class="btn sm" onclick="libSaveEdit()">💾 Guardar ${isTec?'contenido técnico':'ejercicio'}</button>`:''}
     </div>
     <div class="card" style="padding:18px;max-width:820px">
       <div class="grid2">
-        <div class="field"><label>Nombre del ejercicio</label><input id="libEditNombre" ${editable?'':'disabled'} value="${esc(LIB_EDIT.nombre||'')}" placeholder="Ej: Peloteo cruzado de derecha"></div>
-        <div class="field"><label>Tipo</label><select id="libEditCategoria" ${editable?'':'disabled'}>
+        <div class="field"><label>Nombre${isTec?' del contenido técnico':' del ejercicio'}</label><input id="libEditNombre" ${editable?'':'disabled'} value="${esc(LIB_EDIT.nombre||'')}" placeholder="${isTec?'Ej: Empuñadura continental':'Ej: Peloteo cruzado de derecha'}"></div>
+        ${isTec?`<input type="hidden" id="libEditCategoria" value="tecnico">`:`<div class="field"><label>Tipo</label><select id="libEditCategoria" ${editable?'':'disabled'}>
           <option value="ejercicio"${(LIB_EDIT.categoria||'ejercicio')==='ejercicio'?' selected':''}>🎯 Ejercicio</option>
           <option value="juego"${LIB_EDIT.categoria==='juego'?' selected':''}>🎲 Juego</option>
-          <option value="tecnico"${LIB_EDIT.categoria==='tecnico'?' selected':''}>📐 Contenido técnico</option>
-        </select></div>
+        </select></div>`}
       </div>
-      <div class="grid2">
+      ${isTec?'':`<div class="grid2">
         <div class="field"><label>Momento de la clase</label><select id="libEditMomento" ${editable?'':'disabled'}>
           <option value="">Cualquier momento</option>
           ${LP_BLOCK_CATALOG.map(c=>`<option value="${c.tipo}"${LIB_EDIT.momento===c.tipo?' selected':''}>${esc(c.label)}</option>`).join('')}
@@ -1767,9 +1856,9 @@ function renderLibEditView(){
           <option value="mini"${LIB_EDIT.cancha==='mini'?' selected':''}>Mini cancha</option>
           <option value="full"${LIB_EDIT.cancha==='full'?' selected':''}>Cancha completa</option>
         </select></div>
-      </div>
-      <div class="field"><label>Contenido (opcional)</label><input id="libEditContenido" ${editable?'':'disabled'} value="${esc(LIB_EDIT.contenido||'')}" placeholder="Ej: Derecha, volea, saque…"></div>
-      <div class="sectitle" style="margin-top:10px">Ejercicio</div>
+      </div>`}
+      <div class="field"><label>Contenido (opcional)</label><input id="libEditContenido" ${editable?'':'disabled'} value="${esc(LIB_EDIT.contenido||'')}" placeholder="${isTec?'Ej: Derecha, revés, saque…':'Ej: Derecha, volea, saque…'}"></div>
+      <div class="sectitle" style="margin-top:10px">${isTec?'Contenido técnico':'Ejercicio'}</div>
       ${libBlockEditorHTML(b)}
     </div>`;
 }
