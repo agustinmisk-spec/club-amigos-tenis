@@ -282,7 +282,7 @@ const cleanLibraryItem = b => ({
   tipo: String((b && b.tipo) || 'custom').slice(0, 30),
   momento: String((b && b.momento) || '').slice(0, 30),
   cancha: ['mini', 'full'].includes(b && b.cancha) ? b.cancha : '',
-  categoria: ['juego', 'ejercicio'].includes(b && b.categoria) ? b.categoria : 'ejercicio',
+  categoria: ['juego', 'ejercicio', 'tecnico'].includes(b && b.categoria) ? b.categoria : 'ejercicio',
   contenido: String((b && b.contenido) || '').slice(0, 200),
   descripcion: String((b && b.descripcion) || '').slice(0, 4000),
   graficos: Array.isArray(b && b.graficos) ? b.graficos.slice(0, 10).map(cleanGraph) : []

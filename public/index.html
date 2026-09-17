@@ -399,6 +399,7 @@
   </div>
   <button class="tab" data-tab="asistencia" onclick="showTab('asistencia')">Asistencia</button>
   <button class="tab" data-tab="competencias" onclick="showTab('competencias')">Competencias</button>
+  <button class="tab" data-tab="planificaciones" onclick="showTab('planificaciones')">Planificaciones</button>
   <div class="tabmenu" id="menuEval">
     <button class="tab tabtop" onclick="menuToggle(event,this)">Evaluaciones ▾</button>
     <div class="tabdrop" id="evalPeriodDrop"></div>
@@ -411,7 +412,6 @@
       <button data-tab="comunicaciones" onclick="showTab('comunicaciones')">Comunicaciones</button>
       <button id="tabbtn-estadisticas" data-tab="estadisticas" onclick="showTab('estadisticas')">Datos de la escuela</button>
       <button id="tabbtn-informes" data-tab="informes" onclick="showTab('informes')">Informes (PDF)</button>
-      <button data-tab="planificaciones" onclick="showTab('planificaciones')">Planificaciones</button>
       <button data-tab="ranking" onclick="showTab('ranking')">Ranking por año</button>
     </div>
   </div>
@@ -823,9 +823,10 @@
       <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
         <input type="search" id="libSearch" placeholder="Buscar por nombre o contenido…" oninput="libRenderList()" style="flex:1;min-width:160px;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
         <select id="libPickCategoria" onchange="libRenderList()" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px">
-          <option value="">Juegos y ejercicios</option>
+          <option value="">Todo</option>
           <option value="ejercicio">🎯 Ejercicios</option>
           <option value="juego">🎲 Juegos</option>
+          <option value="tecnico">📐 Contenido técnico</option>
         </select>
         <div style="position:relative">
           <button type="button" class="btn sm ghost" id="libFieldsBtn" onclick="libToggleFieldsMenu(event)">Incluir: Nombre - Descripción - Gráfico ▾</button>
@@ -1274,7 +1275,7 @@ async function renderLP(){
   }
   renderLPView();
 }
-let LP_FILTER={q:'',programa:'',nivel:'',desde:'',hasta:''};
+let LP_FILTER={q:'',nivel:'',desde:'',hasta:''};
 function lpNivelesLabel(p){
   const niveles=(p.niveles&&p.niveles.length)?p.niveles.join(', '):(p.nivel||'');
   if(p.segmento)return niveles?niveles+' · '+p.segmento:p.segmento;
@@ -1288,7 +1289,6 @@ function lpPlanHeading(p){
 function lpFilteredPlans(){
   const q=LP_FILTER.q.trim().toLowerCase();
   return LESSONPLANS.filter(p=>{
-    if(LP_FILTER.programa&&p.programa!==LP_FILTER.programa)return false;
     const niveles=(p.niveles&&p.niveles.length)?p.niveles:(p.nivel?[p.nivel]:[]);
     if(LP_FILTER.nivel&&!niveles.includes(LP_FILTER.nivel))return false;
     if(LP_FILTER.desde&&p.fechaDesde&&p.fechaDesde<LP_FILTER.desde)return false;
@@ -1301,13 +1301,12 @@ function lpFilteredPlans(){
   });
 }
 function lpSetFilter(key,val){LP_FILTER[key]=val;lpRenderListResults();}
-function lpClearFilter(){LP_FILTER={q:'',programa:'',nivel:'',desde:'',hasta:''};renderLPView();}
+function lpClearFilter(){LP_FILTER={q:'',nivel:'',desde:'',hasta:''};renderLPView();}
 function lpRenderListResults(){const box=document.getElementById('lpListResults');if(box)box.innerHTML=lpListHTML();}
 function lpFilterBarHTML(){
   const c=DB.config;
   return `<div class="toolbar" style="margin-bottom:8px;flex-wrap:wrap">
     <input type="search" placeholder="Buscar por palabra clave…" value="${esc(LP_FILTER.q)}" oninput="lpSetFilter('q',this.value)" style="flex:1;min-width:160px;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
-    <select onchange="lpSetFilter('programa',this.value)" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px">${lpOpt(c.programas,'Todos los programas',LP_FILTER.programa)}</select>
     <select onchange="lpSetFilter('nivel',this.value)" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px">${lpOpt(c.niveles,'Todos los niveles',LP_FILTER.nivel)}</select>
     <input type="date" value="${esc(LP_FILTER.desde)}" onchange="lpSetFilter('desde',this.value)" title="Desde" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px">
     <input type="date" value="${esc(LP_FILTER.hasta)}" onchange="lpSetFilter('hasta',this.value)" title="Hasta" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px">
@@ -1318,16 +1317,35 @@ function renderLPView(){
   const wrap=document.getElementById('lpWrap');if(!wrap)return;
   wrap.innerHTML=LP_EDIT?lpEditorHTML():`<div class="toolbar" style="margin-bottom:10px">${can('planner')?'<button class="btn" onclick="lpNewPlan()">+ Nueva planificación</button>':''}<div class="spacer"></div></div>${lpFilterBarHTML()}<div id="lpListResults">${lpListHTML()}</div>`;
 }
+const LP_PROG_COLORS=['#2563eb','#1f8a4d','#c0392b','#ff7a1a','#7c3aed','#0891b2','#db2777','#65a30d'];
+function lpPlanCardHTML(p){
+  const mins=(p.bloques||[]).reduce((a,b)=>a+(b.minutos||0),0);
+  const hd=lpPlanHeading(p);
+  return `<div class="item"><div class="top"><span class="ti">📅 ${esc(hd.title)}</span><span>${can('planner')?`<button class="att-btn" title="Eliminar" onclick="lpDeletePlan('${p.id}')">🗑</button> `:''}<button class="btn sec sm" onclick="lpPrintPlanById('${p.id}')">🖨️ Imprimir</button> <button class="btn sec sm" onclick="lpPrintPlanById('${p.id}')">📄 PDF</button> <button class="btn sec sm" onclick="lpEditPlan('${p.id}')">${can('planner')?'Editar':'Ver'}</button></span></div>${hd.subtitle?`<div class="small" style="color:var(--muted)">${esc(hd.subtitle)}</div>`:''}<div class="meta2">${esc(fmtFecha(p.fechaDesde))}${p.fechaHasta?' a '+esc(fmtFecha(p.fechaHasta)):''} · ${(p.bloques||[]).length} bloque(s) · ${mins} min · ${esc(p.autor||'')}</div>${p.objetivo?`<div class="small" style="margin-top:4px">${fmt(p.objetivo)}</div>`:''}</div>`;
+}
 function lpListHTML(){
   const list=lpFilteredPlans();
   const countLine=`<div class="small" style="margin-bottom:6px;color:var(--muted)">${list.length} de ${LESSONPLANS.length} planificación(es)</div>`;
   if(!LESSONPLANS.length)return '<div class="card empty"><div class="big">📅</div><p>Todavía no hay planificaciones cargadas.</p></div>';
   if(!list.length)return countLine+'<div class="card empty"><p>No hay planificaciones que coincidan con los filtros.</p></div>';
-  return countLine+'<div class="feed">'+list.map(p=>{
-    const mins=(p.bloques||[]).reduce((a,b)=>a+(b.minutos||0),0);
-    const hd=lpPlanHeading(p);
-    return `<div class="item"><div class="top"><span class="ti">📅 ${esc(hd.title)}</span><span>${can('planner')?`<button class="att-btn" title="Eliminar" onclick="lpDeletePlan('${p.id}')">🗑</button> `:''}<button class="btn sec sm" onclick="lpPrintPlanById('${p.id}')">🖨️ Imprimir</button> <button class="btn sec sm" onclick="lpPrintPlanById('${p.id}')">📄 PDF</button> <button class="btn sec sm" onclick="lpEditPlan('${p.id}')">${can('planner')?'Editar':'Ver'}</button></span></div>${hd.subtitle?`<div class="small" style="color:var(--muted)">${esc(hd.subtitle)}</div>`:''}<div class="meta2">${esc(fmtFecha(p.fechaDesde))}${p.fechaHasta?' a '+esc(fmtFecha(p.fechaHasta)):''} · ${(p.bloques||[]).length} bloque(s) · ${mins} min · ${esc(p.autor||'')}</div>${p.objetivo?`<div class="small" style="margin-top:4px">${fmt(p.objetivo)}</div>`:''}</div>`;
-  }).join('')+'</div>';
+  const programas=(DB.config.programas||[]).slice();
+  list.forEach(p=>{if(p.programa&&!programas.includes(p.programa))programas.push(p.programa);});
+  const blockHTML=(prog,i)=>{
+    const items=list.filter(p=>p.programa===prog);
+    if(!items.length)return '';
+    const color=LP_PROG_COLORS[i%LP_PROG_COLORS.length];
+    return `<div class="card" style="padding:0;overflow:hidden;border-top:4px solid ${color}">
+      <div style="padding:10px 14px;background:#fafbfc;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between">
+        <b style="font-size:14px">📅 ${esc(prog)}</b>
+        <span class="small" style="color:var(--muted)">${items.length}</span>
+      </div>
+      <div style="padding:10px 14px" class="feed">${items.map(lpPlanCardHTML).join('')}</div>
+    </div>`;
+  };
+  const blocksHtml=programas.map((prog,i)=>blockHTML(prog,i)).filter(Boolean).join('');
+  const sinPrograma=list.filter(p=>!p.programa);
+  const sinProgramaHtml=sinPrograma.length?`<div class="sectitle" style="margin:14px 0 6px">Sin programa (${sinPrograma.length})</div><div class="feed">${sinPrograma.map(lpPlanCardHTML).join('')}</div>`:'';
+  return countLine+`<div class="grid2" style="gap:14px">${blocksHtml}</div>`+sinProgramaHtml;
 }
 function lpNewPlan(){
   if(!can('planner'))return;
@@ -1521,7 +1539,7 @@ function libFieldsChanged(){
 function libTag(label){return label?`<span style="background:#eef3f0;color:#3a5048;border-radius:10px;padding:1px 8px;font-size:10.5px;font-weight:600">${esc(label)}</span>`:'';}
 function libMomentoLabel(tipo){return (LP_BLOCK_CATALOG.find(c=>c.tipo===tipo)||{}).label||'';}
 function libCanchaLabel(cancha){return cancha==='mini'?'Mini cancha':(cancha==='full'?'Cancha completa':'');}
-function libCategoriaLabel(categoria){return categoria==='juego'?'🎲 Juego':'🎯 Ejercicio';}
+function libCategoriaLabel(categoria){return categoria==='juego'?'🎲 Juego':(categoria==='tecnico'?'📐 Técnico':'🎯 Ejercicio');}
 function libToggleSel(id,checked){if(checked)LIB_PICK_SEL.add(id);else LIB_PICK_SEL.delete(id);}
 function libRenderList(){
   const wrap=document.getElementById('libList');if(!wrap)return;
@@ -1653,6 +1671,14 @@ function libTabRenderList(){
   );
   const hasFilter=!!(LIB_FILTER.q||LIB_FILTER.contenido||LIB_FILTER.momento);
   if(!items.length){wrap.innerHTML=`<div class="card empty"><p>${hasFilter?'No hay ejercicios que coincidan con el filtro.':'Todavía no hay ejercicios guardados.'}</p></div>`;return;}
+  const tecnicos=items.filter(it=>it.categoria==='tecnico');
+  const tecnicoBlock=tecnicos.length?`<div class="card" style="padding:0;overflow:hidden;border-top:4px solid #7c3aed;margin-bottom:14px">
+    <div style="padding:10px 14px;background:#fafbfc;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between">
+      <b style="font-size:14px">📐 Contenido técnico</b>
+      <span class="small" style="color:var(--muted)">${tecnicos.length}</span>
+    </div>
+    <div style="padding:10px 14px">${tecnicos.map(libItemCardHTML).join('')}</div>
+  </div>`:'';
   const blockHTML=b=>{
     const list=items.filter(it=>(it.categoria||'ejercicio')===b.categoria&&it.cancha===b.cancha);
     return `<div class="card" style="padding:0;overflow:hidden;border-top:4px solid ${b.color}">
@@ -1665,8 +1691,8 @@ function libTabRenderList(){
       </div>
     </div>`;
   };
-  const sinCancha=items.filter(it=>it.cancha!=='mini'&&it.cancha!=='full');
-  wrap.innerHTML=`<div class="grid2" style="gap:14px">${LIB_BLOCKS.map(blockHTML).join('')}</div>`
+  const sinCancha=items.filter(it=>(it.categoria||'ejercicio')!=='tecnico'&&it.cancha!=='mini'&&it.cancha!=='full');
+  wrap.innerHTML=tecnicoBlock+`<div class="grid2" style="gap:14px">${LIB_BLOCKS.map(blockHTML).join('')}</div>`
     +(sinCancha.length?`<div class="sectitle" style="margin:14px 0 6px">Sin cancha definida (${sinCancha.length})</div>${sinCancha.map(libItemCardHTML).join('')}`:'');
 }
 async function libTabDelete(id){
@@ -1728,6 +1754,7 @@ function renderLibEditView(){
         <div class="field"><label>Tipo</label><select id="libEditCategoria" ${editable?'':'disabled'}>
           <option value="ejercicio"${(LIB_EDIT.categoria||'ejercicio')==='ejercicio'?' selected':''}>🎯 Ejercicio</option>
           <option value="juego"${LIB_EDIT.categoria==='juego'?' selected':''}>🎲 Juego</option>
+          <option value="tecnico"${LIB_EDIT.categoria==='tecnico'?' selected':''}>📐 Contenido técnico</option>
         </select></div>
       </div>
       <div class="grid2">
@@ -2882,11 +2909,11 @@ function toggleDarkMode(){
 /* ===== Diseño: orden y visibilidad de pestañas ===== */
 const TAB_MANAGE_DOMAINS=[
   {key:'flat', label:'Fila principal', containerSel:'.tabs', anchorSel:'#menuEval', menuSel:null,
-    items:[{id:'asistencia',label:'Asistencia'},{id:'competencias',label:'Competencias'}]},
+    items:[{id:'asistencia',label:'Asistencia'},{id:'competencias',label:'Competencias'},{id:'planificaciones',label:'Planificaciones'}]},
   {key:'canchas', label:'Menú "Canchas ▾"', containerSel:'#canchasDrop', anchorSel:null, menuSel:'#menuCanchas',
     items:[{id:'canchas',label:'Distribución por cancha'},{id:'recuperaciones',label:'Recuperaciones e invitaciones'},{id:'historial',label:'Historial de cambios'}]},
   {key:'gestion', label:'Menú "Gestión ▾"', containerSel:'#gestionDrop', anchorSel:null, menuSel:'#menuGestion',
-    items:[{id:'calendario',label:'Calendario'},{id:'capacitaciones',label:'Capacitaciones'},{id:'comunicaciones',label:'Comunicaciones'},{id:'estadisticas',label:'Datos de la escuela',perm:'reports'},{id:'informes',label:'Informes (PDF)',perm:'reports'},{id:'planificaciones',label:'Planificaciones'},{id:'ranking',label:'Ranking por año'}]}
+    items:[{id:'calendario',label:'Calendario'},{id:'capacitaciones',label:'Capacitaciones'},{id:'comunicaciones',label:'Comunicaciones'},{id:'estadisticas',label:'Datos de la escuela',perm:'reports'},{id:'informes',label:'Informes (PDF)',perm:'reports'},{id:'ranking',label:'Ranking por año'}]}
 ];
 function orderedDomainItems(domain){
   const order=DB.config.tabsOrder||[];
