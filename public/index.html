@@ -1077,7 +1077,7 @@ let RECOVERIES=[],COMPS=[],PLANS=[],GROUPNOTES=[],LESSONPLANS=[];
 let planSubTab='planificador',LP_EDIT=null,LP_SELECTED=null,LP_DRAW=null,LP_CLIPBOARD=null,LP_ACTIVE_GRAPHIC=null;
 let LIBRARY=[],LIB_TARGET_BLOCK=null,LIB_PICK_SEL=new Set();
 let LIB_PICK_FIELDS={nombre:true,descripcion:true,graficos:true};
-let LIB_EDIT=null,LIB_EDITING=false,LIB_LP_STASH,LIB_FILTER={q:'',momento:'',cancha:'',categoria:'',contenido:''};
+let LIB_EDIT=null,LIB_EDITING=false,LIB_LP_STASH,LIB_FILTER={q:'',momento:'',contenido:''};
 const LP_CH=90,LP_CY=45;
 const LP_BLOCK_CATALOG=[{tipo:'inicio',label:'Inicio de clase'},{tipo:'calentamiento',label:'Calentamiento'},{tipo:'drill',label:'Drill'},{tipo:'saques',label:'Saques'},{tipo:'juego',label:'Juego final'},{tipo:'cierre',label:'Cierre de clase'}];
 const LP_COLORS=['#111827','#c0392b','#1f8a4d','#2563eb','#ff7a1a','#f1c40f'];
@@ -1603,19 +1603,9 @@ function renderLibListView(){
     <div class="toolbar" style="margin-bottom:10px;flex-wrap:wrap;gap:8px">
       <input type="search" id="libTabSearch" placeholder="Buscar por nombre…" value="${esc(LIB_FILTER.q)}" oninput="libTabFilterChange()" style="flex:1;min-width:160px;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
       <input type="text" id="libTabContenido" placeholder="Contenido (opcional)…" value="${esc(LIB_FILTER.contenido)}" oninput="libTabFilterChange()" style="flex:1;min-width:160px;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
-      <select id="libTabCategoria" onchange="libTabFilterChange()" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px">
-        <option value="">Juegos y ejercicios</option>
-        <option value="ejercicio"${LIB_FILTER.categoria==='ejercicio'?' selected':''}>🎯 Ejercicios</option>
-        <option value="juego"${LIB_FILTER.categoria==='juego'?' selected':''}>🎲 Juegos</option>
-      </select>
       <select id="libTabMomento" onchange="libTabFilterChange()" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px">
         <option value="">Cualquier momento</option>
         ${LP_BLOCK_CATALOG.map(c=>`<option value="${c.tipo}"${LIB_FILTER.momento===c.tipo?' selected':''}>${esc(c.label)}</option>`).join('')}
-      </select>
-      <select id="libTabCancha" onchange="libTabFilterChange()" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px">
-        <option value="">Cualquier cancha</option>
-        <option value="mini"${LIB_FILTER.cancha==='mini'?' selected':''}>Mini cancha</option>
-        <option value="full"${LIB_FILTER.cancha==='full'?' selected':''}>Cancha completa</option>
       </select>
       <div class="spacer"></div>
       ${editable?'<button class="btn sm" onclick="libTabNew()">+ Nuevo ejercicio</button>':''}
@@ -1626,9 +1616,7 @@ function renderLibListView(){
 function libTabFilterChange(){
   LIB_FILTER.q=(document.getElementById('libTabSearch').value||'').toLowerCase().trim();
   LIB_FILTER.contenido=(document.getElementById('libTabContenido').value||'').toLowerCase().trim();
-  LIB_FILTER.categoria=document.getElementById('libTabCategoria').value;
   LIB_FILTER.momento=document.getElementById('libTabMomento').value;
-  LIB_FILTER.cancha=document.getElementById('libTabCancha').value;
   libTabRenderList();
 }
 function libItemCardHTML(it){
@@ -1649,21 +1637,37 @@ function libItemCardHTML(it){
       </div>
     </div>`;
 }
+const LIB_BLOCKS=[
+  {categoria:'ejercicio',cancha:'full',icon:'🎯',label:'Ejercicios',canchaLabel:'Cancha completa',color:'#2563eb'},
+  {categoria:'ejercicio',cancha:'mini',icon:'🎯',label:'Ejercicios',canchaLabel:'Mini cancha',color:'#1f8a4d'},
+  {categoria:'juego',cancha:'full',icon:'🎲',label:'Juegos',canchaLabel:'Cancha completa',color:'#c0392b'},
+  {categoria:'juego',cancha:'mini',icon:'🎲',label:'Juegos',canchaLabel:'Mini cancha',color:'#ff7a1a'}
+];
 function libTabRenderList(){
   const wrap=document.getElementById('libTabItems');if(!wrap)return;
+  if(!LIBRARY.length){wrap.innerHTML='<div class="card empty"><p>Todavía no hay ejercicios guardados. Creá uno con "+ Nuevo ejercicio" o guardá uno desde un bloque de una planificación.</p></div>';return;}
   const items=LIBRARY.filter(it=>
     (!LIB_FILTER.q||(it.nombre||'').toLowerCase().includes(LIB_FILTER.q))&&
     (!LIB_FILTER.contenido||(it.contenido||'').toLowerCase().includes(LIB_FILTER.contenido))&&
-    (!LIB_FILTER.categoria||(it.categoria||'ejercicio')===LIB_FILTER.categoria)&&
-    (!LIB_FILTER.momento||it.momento===LIB_FILTER.momento)&&
-    (!LIB_FILTER.cancha||it.cancha===LIB_FILTER.cancha)
+    (!LIB_FILTER.momento||it.momento===LIB_FILTER.momento)
   );
-  const hasFilter=!!(LIB_FILTER.q||LIB_FILTER.contenido||LIB_FILTER.categoria||LIB_FILTER.momento||LIB_FILTER.cancha);
-  if(!items.length){wrap.innerHTML=`<div class="card empty"><p>${hasFilter?'No hay ejercicios que coincidan con el filtro.':'Todavía no hay ejercicios guardados. Creá uno con "+ Nuevo ejercicio" o guardá uno desde un bloque de una planificación.'}</p></div>`;return;}
-  const ejercicios=items.filter(it=>(it.categoria||'ejercicio')==='ejercicio');
-  const juegos=items.filter(it=>it.categoria==='juego');
-  const section=(label,list)=>list.length?`<div class="sectitle" style="margin:10px 0 6px">${label} (${list.length})</div>${list.map(libItemCardHTML).join('')}`:'';
-  wrap.innerHTML=section('🎯 Ejercicios',ejercicios)+section('🎲 Juegos',juegos);
+  const hasFilter=!!(LIB_FILTER.q||LIB_FILTER.contenido||LIB_FILTER.momento);
+  if(!items.length){wrap.innerHTML=`<div class="card empty"><p>${hasFilter?'No hay ejercicios que coincidan con el filtro.':'Todavía no hay ejercicios guardados.'}</p></div>`;return;}
+  const blockHTML=b=>{
+    const list=items.filter(it=>(it.categoria||'ejercicio')===b.categoria&&it.cancha===b.cancha);
+    return `<div class="card" style="padding:0;overflow:hidden;border-top:4px solid ${b.color}">
+      <div style="padding:10px 14px;background:#fafbfc;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between">
+        <b style="font-size:14px">${b.icon} ${esc(b.label)} · ${esc(b.canchaLabel)}</b>
+        <span class="small" style="color:var(--muted)">${list.length}</span>
+      </div>
+      <div style="padding:10px 14px;max-height:50vh;overflow:auto">
+        ${list.length?list.map(libItemCardHTML).join(''):'<p class="small" style="color:var(--muted);margin:6px 0">Sin ejercicios en este bloque.</p>'}
+      </div>
+    </div>`;
+  };
+  const sinCancha=items.filter(it=>it.cancha!=='mini'&&it.cancha!=='full');
+  wrap.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:14px">${LIB_BLOCKS.map(blockHTML).join('')}</div>`
+    +(sinCancha.length?`<div class="sectitle" style="margin:14px 0 6px">Sin cancha definida (${sinCancha.length})</div>${sinCancha.map(libItemCardHTML).join('')}`:'');
 }
 async function libTabDelete(id){
   if(!can('planner'))return;
