@@ -312,6 +312,13 @@ app.delete('/api/library/:id', auth, need('planner'), async (req, res) => { awai
 /* ---------------- Documentos libres (hoja en blanco: texto, tablas, gráficos) ---------------- */
 const cleanFreeCell = c => String(c == null ? '' : c).slice(0, 500);
 const cleanFreeRow = r => Array.isArray(r) ? r.slice(0, 20).map(cleanFreeCell) : [];
+const cleanCancha = c => ({
+  id: String((c && c.id) || '').slice(0, 40),
+  tipo: ['mini', 'full'].includes(c && c.tipo) ? c.tipo : 'mini',
+  x: num(c && c.x, 0, 100, 50), y: num(c && c.y, 0, 90, 45),
+  scale: num(c && c.scale, 0.4, 2, 1),
+  width: num(c && c.width, 0.5, 2.2, 1)
+});
 const cleanFreeElement = e => {
   const type = ['texto', 'tabla', 'grafico'].includes(e && e.type) ? e.type : 'texto';
   const base = {
@@ -323,9 +330,7 @@ const cleanFreeElement = e => {
   if (type === 'texto') return Object.assign(base, { html: String((e && e.html) || '').slice(0, 8000) });
   if (type === 'tabla') return Object.assign(base, { rows: Array.isArray(e && e.rows) ? e.rows.slice(0, 30).map(cleanFreeRow) : [['', '']] });
   return Object.assign(base, {
-    court: ['none', 'mini', 'full'].includes(e && e.court) ? e.court : 'none',
-    courtScale: num(e && e.courtScale, 0.5, 1.5, 1),
-    courtWidth: num(e && e.courtWidth, 0.5, 2.2, 1),
+    canchas: Array.isArray(e && e.canchas) ? e.canchas.slice(0, 6).map(cleanCancha) : [],
     elements: Array.isArray(e && e.elements) ? e.elements.slice(0, 60).map(cleanEl) : [],
     shapes: Array.isArray(e && e.shapes) ? e.shapes.slice(0, 60).map(cleanShape) : []
   });

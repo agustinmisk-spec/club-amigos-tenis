@@ -1952,12 +1952,13 @@ function lpCourtDims(baseW,baseH,scale,wScale){
   const w=Math.min(baseW*scale*(wScale||1),94);
   return{w,h};
 }
-function lpCourtBg(court,scale,wScale){
+function lpCourtBgAt(court,scale,wScale,cx,cy){
   const s=Math.max(0.4,Math.min(2,scale||1)),ws=Math.max(0.5,Math.min(2.2,wScale||1));
-  if(court==='mini'){const d=lpCourtDims(13,36,s,ws);return lpMiniCourtLines(50-d.w/2,LP_CY-d.h/2,d.w,d.h);}
-  if(court==='full'){const d=lpCourtDims(22,47.7,s,ws);return lpCourtLines(50-d.w/2,LP_CY-d.h/2,d.w,d.h);}
+  if(court==='mini'){const d=lpCourtDims(13,36,s,ws);return lpMiniCourtLines(cx-d.w/2,cy-d.h/2,d.w,d.h);}
+  if(court==='full'){const d=lpCourtDims(22,47.7,s,ws);return lpCourtLines(cx-d.w/2,cy-d.h/2,d.w,d.h);}
   return '';
 }
+function lpCourtBg(court,scale,wScale){return lpCourtBgAt(court,scale,wScale,50,LP_CY);}
 function lpElGlyph(kind,color,label,elId){
   const c=color||'#111827';
   switch(kind){
@@ -2380,7 +2381,13 @@ function fdNew(){
 }
 function fdOpen(id){
   const d=FREEDOCS.find(x=>x.id===id);if(!d)return;
-  FD_EDIT=JSON.parse(JSON.stringify(d));FD_SELECTED=null;FD_GSEL=null;FD_GDRAW=null;
+  FD_EDIT=JSON.parse(JSON.stringify(d));
+  (FD_EDIT.elementos||[]).forEach(el=>{
+    if(el.type==='grafico'&&!Array.isArray(el.canchas)){
+      el.canchas=(el.court&&el.court!=='none')?[{id:'fdc'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),tipo:el.court,x:50,y:LP_CY,scale:el.courtScale||1,width:el.courtWidth||1}]:[];
+    }
+  });
+  FD_SELECTED=null;FD_GSEL=null;FD_GDRAW=null;
   renderFdEditor();
 }
 function fdCancel(){FD_EDIT=null;FD_SELECTED=null;FD_GSEL=null;FD_GDRAW=null;renderFdList();}
@@ -2438,13 +2445,12 @@ function fdElHTML(el){
 }
 function fdElPointerDown(ev,id){
   ev.stopPropagation();
-  const changed=FD_SELECTED!==id;
-  FD_SELECTED=id;FD_GSEL=null;
-  const editable=can('content');
-  if(changed)fdRenderCanvas();
-  if(!editable)return;
   const t=ev.target;
-  if(t.closest('[contenteditable="true"]')||t.closest('table')||t.closest('svg')||t.closest('button')||t.closest('input')||t.closest('.fd-resize'))return;
+  const isInner=!!(t.closest('[contenteditable="true"]')||t.closest('table')||t.closest('svg')||t.closest('button')||t.closest('input')||t.closest('.fd-resize'));
+  const changed=FD_SELECTED!==id;
+  FD_SELECTED=id;
+  if(changed){FD_GSEL=null;if(!isInner)fdRenderCanvas();}
+  if(!can('content')||isInner)return;
   fdDragStart(ev,id);
 }
 function fdDragStart(ev,id){
@@ -2516,7 +2522,7 @@ function fdAddGraphic(){
   if(!can('content'))return;
   const id='fde'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
   FD_EDIT.elementos=FD_EDIT.elementos||[];
-  FD_EDIT.elementos.push({id,type:'grafico',x:10,y:10,w:45,h:30,court:'none',courtScale:1,courtWidth:1,elements:[],shapes:[]});
+  FD_EDIT.elementos.push({id,type:'grafico',x:10,y:10,w:45,h:30,canchas:[],elements:[],shapes:[]});
   FD_SELECTED=id;FD_GSEL=null;
   fdRenderCanvas();
 }
@@ -2544,12 +2550,25 @@ function fdTableDelRow(id){const el=fdFindEl(id);if(!el||el.rows.length<=1)retur
 function fdTableDelCol(id){const el=fdFindEl(id);if(!el||!el.rows[0]||el.rows[0].length<=1)return;el.rows.forEach(r=>r.pop());fdRenderTable(id);}
 function fdRenderTable(id){const node=document.getElementById('fdEl-'+id);const el=fdFindEl(id);if(!node||!el)return;node.outerHTML=fdElHTML(el);}
 function fdRenderGraphicEl(id){const node=document.getElementById('fdEl-'+id);const el=fdFindEl(id);if(!node||!el)return;node.outerHTML=fdElHTML(el);}
+function fdCanchaInnerSvg(c,sel){
+  const s=Math.max(0.4,Math.min(2,c.scale||1)),ws=Math.max(0.5,Math.min(2.2,c.width||1));
+  const base=lpCourtBgAt(c.tipo,s,ws,c.x,c.y);
+  if(!sel)return base;
+  const dims=lpCourtDims(c.tipo==='mini'?13:22,c.tipo==='mini'?36:47.7,s,ws);
+  const bx=c.x-dims.w/2-1.5,by=c.y-dims.h/2-1.5,bw=dims.w+3,bh=dims.h+3;
+  return base+`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="none" stroke="#2563eb" stroke-width="0.5" stroke-dasharray="1.4,1"/>`;
+}
 function fdGraphicInner(el){
   const editable=can('content');
   const selHere=FD_GSEL&&FD_GSEL.elId===el.id;
   const drawHere=FD_GDRAW&&FD_GDRAW.elId===el.id;
   const selEl=selHere&&FD_GSEL.kind==='el'?(el.elements||[]).find(x=>x.id===FD_GSEL.id):null;
   const selShape=selHere&&FD_GSEL.kind==='shape'?(el.shapes||[]).find(x=>x.id===FD_GSEL.id):null;
+  const selCancha=selHere&&FD_GSEL.kind==='cancha'?(el.canchas||[]).find(x=>x.id===FD_GSEL.id):null;
+  const canchasSvg=(el.canchas||[]).map(c=>{
+    const sel=selHere&&FD_GSEL.kind==='cancha'&&FD_GSEL.id===c.id;
+    return `<g id="fdCancha-${c.id}" onpointerdown="fdCanchaPointerDown(event,'${el.id}','${c.id}')" style="cursor:move">${fdCanchaInnerSvg(c,sel)}</g>`;
+  }).join('');
   const elsSvg=(el.elements||[]).map(e=>{
     const sel=selHere&&FD_GSEL.kind==='el'&&FD_GSEL.id===e.id;
     return `<g transform="translate(${e.x},${e.y}) rotate(${e.rot||0}) scale(${e.scale||1})" onpointerdown="fdGElPointerDown(event,'${el.id}','${e.id}')" style="cursor:move">${sel?'<circle r="5" fill="none" stroke="#2563eb" stroke-width="0.6" stroke-dasharray="1.4,1"/>':''}<circle r="4.2" fill="transparent"/>${lpElGlyph(e.kind,e.color,e.label,e.id)}</g>`;
@@ -2558,25 +2577,72 @@ function fdGraphicInner(el){
     const sel=selHere&&FD_GSEL.kind==='shape'&&FD_GSEL.id===s.id;
     return `<g id="fdShape-${s.id}" onpointerdown="fdGShapePointerDown(event,'${el.id}','${s.id}')" style="cursor:pointer">${lpShapeInnerSvg(s,sel)}</g>`;
   }).join('');
-  const courtSvg=lpCourtBg(el.court,el.courtScale||1,el.courtWidth||1);
-  const svgHtml=`<svg viewBox="0 0 100 ${LP_CH}" preserveAspectRatio="none" class="fdgcanvas" onpointerdown="fdGCanvasPointerDown(event,'${el.id}')"><g>${courtSvg}</g>${shapesSvg}${elsSvg}</svg>`;
+  const svgHtml=`<svg viewBox="0 0 100 ${LP_CH}" preserveAspectRatio="none" class="fdgcanvas" onpointerdown="fdGCanvasPointerDown(event,'${el.id}')">${canchasSvg}${shapesSvg}${elsSvg}</svg>`;
   if(!editable)return svgHtml;
-  const courtBtn=(v,label)=>`<button type="button" class="btn sm ${el.court===v?'':'ghost'}" onclick="fdSetCourt('${el.id}','${v}')">${esc(label)}</button>`;
+  const canchaCount=(el.canchas||[]).length;
   const drawBtn=(t,label)=>`<button type="button" class="btn sm ${drawHere&&FD_GDRAW.type===t?'':'ghost'}" onclick="fdArmDraw('${el.id}','${t}')">${esc(label)}</button>`;
   const iconBtn=(k,label,lbl)=>`<button type="button" class="btn sm ghost" onclick="fdAddIcon('${el.id}','${k}','${lbl||''}')">${esc(label)}</button>`;
   const toolbar=`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px">
-    <span class="small" style="align-self:center;color:var(--muted)">Fondo:</span>${courtBtn('none','Sin cancha')}${courtBtn('mini','Mini')}${courtBtn('full','Completa')}
+    <span class="small" style="align-self:center;color:var(--muted)">Cancha:</span>
+    <button type="button" class="btn sm ghost" ${canchaCount>=6?'disabled':''} onclick="fdAddCancha('${el.id}','mini')">+ Mini</button>
+    <button type="button" class="btn sm ghost" ${canchaCount>=6?'disabled':''} onclick="fdAddCancha('${el.id}','full')">+ Completa</button>
     <span class="small" style="align-self:center;color:var(--muted);margin-left:6px">Agregar:</span>${iconBtn('jugador','🧍','A')}${iconBtn('jugador','🧑‍🏫','P')}${iconBtn('raqueta','🎾')}${iconBtn('pelota','🟡')}${iconBtn('canasto','🧺')}${iconBtn('cono','🔶')}${iconBtn('conobajo','🔻')}${iconBtn('aro','⭕')}${iconBtn('escalera','🪜')}${iconBtn('pisada','👣')}${iconBtn('soga','➰')}${iconBtn('red','🥅')}
     <span class="small" style="align-self:center;color:var(--muted);margin-left:6px">Dibujar:</span>${drawBtn('linea','—')}${drawBtn('flecha','→')}${drawBtn('flechaPunteada','⇢')}${drawBtn('flechaDoble','⇔')}${drawBtn('flechaCurva','⤳')}${drawBtn('dibujo','✏️ Libre')}
     ${FD_GCLIPBOARD?`<button type="button" class="btn sm ghost" onclick="fdGPasteClipboard('${el.id}')">📌 Pegar</button>`:''}
     ${drawHere?'<span class="small" style="color:#c0392b;align-self:center">Tocá y arrastrá sobre el gráfico…</span>':''}
   </div>`;
+  const selCanchaBar=selCancha?`<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:4px">
+    <span class="small" style="color:var(--muted)">Tamaño:</span><input type="range" min="0.4" max="2" step="0.05" value="${selCancha.scale||1}" oninput="fdSetCanchaScale(this.value)" style="width:90px">
+    <span class="small" style="color:var(--muted)">Ancho:</span><input type="range" min="0.5" max="2.2" step="0.05" value="${selCancha.width||1}" oninput="fdSetCanchaWidth(this.value)" style="width:90px">
+  </div>`:'';
   const selElBar=selEl?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px">${LP_COLORS.map(cl=>`<button type="button" title="Color" onclick="fdSetElColor('${cl}')" style="width:18px;height:18px;border-radius:50%;border:2px solid ${(selEl.color||'#111827')===cl?'#111':'#fff'};box-shadow:0 0 0 1px var(--line);background:${cl};cursor:pointer;padding:0"></button>`).join('')}<button type="button" class="btn sm ghost" onclick="fdRotateSel(-15)">⟲</button><button type="button" class="btn sm ghost" onclick="fdRotateSel(15)">⟳</button><button type="button" class="btn sm ghost" onclick="fdScaleSel(-0.1)">－</button><button type="button" class="btn sm ghost" onclick="fdScaleSel(0.1)">＋</button></div>`:'';
   const selShapeBar=selShape?`<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-bottom:4px">${LP_COLORS.map(cl=>`<button type="button" title="Color" onclick="fdSetShapeColor('${cl}')" style="width:18px;height:18px;border-radius:50%;border:2px solid ${(selShape.color||'#c0392b')===cl?'#111':'#fff'};box-shadow:0 0 0 1px var(--line);background:${cl};cursor:pointer;padding:0"></button>`).join('')}<span class="small" style="color:var(--muted)">Tamaño:</span><input type="range" min="0.4" max="2.2" step="0.1" value="${selShape.width||0.8}" oninput="fdSetShapeWidth(this.value)" style="width:80px"></div>`:'';
-  const selActions=(selEl||selShape)?`<div style="margin-bottom:4px;display:flex;gap:4px;flex-wrap:wrap"><button type="button" class="btn sm ghost" onclick="fdGCopySel()">📋 Copiar</button><button type="button" class="btn sm ghost" onclick="fdGCutSel()">✂️ Cortar</button><button type="button" class="btn sm ghost" onclick="fdGDeleteSel()">🗑 Eliminar</button></div>`:'';
-  return toolbar+svgHtml+selElBar+selShapeBar+selActions;
+  const selActions=(selEl||selShape||selCancha)?`<div style="margin-bottom:4px;display:flex;gap:4px;flex-wrap:wrap">${selCancha?'':'<button type="button" class="btn sm ghost" onclick="fdGCopySel()">📋 Copiar</button><button type="button" class="btn sm ghost" onclick="fdGCutSel()">✂️ Cortar</button>'}<button type="button" class="btn sm ghost" onclick="fdGDeleteSel()">🗑 Eliminar</button></div>`:'';
+  return `<div style="display:flex;flex-direction:column;height:100%;overflow:hidden">${toolbar}${selCanchaBar}${selElBar}${selShapeBar}${selActions}<div style="flex:1;min-height:30px;overflow:hidden">${svgHtml}</div></div>`;
 }
-function fdSetCourt(elId,court){const el=fdFindGraphicEl(elId);if(!el)return;el.court=court;fdRenderGraphicEl(elId);}
+function fdAddCancha(elId,tipo){
+  const el=fdFindGraphicEl(elId);if(!el)return;
+  el.canchas=el.canchas||[];
+  if(el.canchas.length>=6)return;
+  const id='fdc'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+  el.canchas.push({id,tipo,x:50,y:LP_CY,scale:1,width:1});
+  FD_SELECTED=elId;FD_GSEL={elId,kind:'cancha',id};
+  fdRenderGraphicEl(elId);
+}
+function fdCanchaPointerDown(ev,elId,canchaId){
+  ev.stopPropagation();
+  if(FD_GDRAW||!can('content'))return;
+  FD_SELECTED=elId;FD_GSEL={elId,kind:'cancha',id:canchaId};
+  const grp=ev.currentTarget,svg=grp.closest('svg');
+  const start=svgPoint(svg,ev.clientX,ev.clientY);
+  const g=fdFindGraphicEl(elId),c=g&&(g.canchas||[]).find(x=>x.id===canchaId);
+  if(!c){fdRenderGraphicEl(elId);return;}
+  const startX=c.x,startY=c.y;
+  const move=mv=>{const p=svgPoint(svg,mv.clientX,mv.clientY);c.x=lpClamp(startX+(p.x-start.x),0,100);c.y=lpClamp(startY+(p.y-start.y),0,LP_CH);fdRedrawCancha(elId,canchaId);};
+  const up=()=>{document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',up);fdRenderGraphicEl(elId);};
+  document.addEventListener('pointermove',move);document.addEventListener('pointerup',up);
+}
+function fdRedrawCancha(elId,canchaId){
+  const g=fdFindGraphicEl(elId);if(!g)return;
+  const c=(g.canchas||[]).find(x=>x.id===canchaId);if(!c)return;
+  const node=document.getElementById('fdCancha-'+canchaId);if(!node)return;
+  const sel=FD_GSEL&&FD_GSEL.elId===elId&&FD_GSEL.kind==='cancha'&&FD_GSEL.id===canchaId;
+  node.innerHTML=fdCanchaInnerSvg(c,sel);
+}
+function fdSetCanchaScale(val){
+  if(!FD_GSEL||FD_GSEL.kind!=='cancha')return;
+  const g=fdFindGraphicEl(FD_GSEL.elId);if(!g)return;
+  const c=(g.canchas||[]).find(x=>x.id===FD_GSEL.id);if(!c)return;
+  c.scale=Math.max(0.4,Math.min(2,parseFloat(val)||1));
+  fdRedrawCancha(FD_GSEL.elId,FD_GSEL.id);
+}
+function fdSetCanchaWidth(val){
+  if(!FD_GSEL||FD_GSEL.kind!=='cancha')return;
+  const g=fdFindGraphicEl(FD_GSEL.elId);if(!g)return;
+  const c=(g.canchas||[]).find(x=>x.id===FD_GSEL.id);if(!c)return;
+  c.width=Math.max(0.5,Math.min(2.2,parseFloat(val)||1));
+  fdRedrawCancha(FD_GSEL.elId,FD_GSEL.id);
+}
 function fdAddIcon(elId,kind,label){
   const el=fdFindGraphicEl(elId);if(!el)return;
   el.elements=el.elements||[];
@@ -2688,6 +2754,7 @@ function fdGDeleteSel(){
   if(!FD_GSEL)return;
   const g=fdFindGraphicEl(FD_GSEL.elId);if(!g)return;
   if(FD_GSEL.kind==='el')g.elements=g.elements.filter(x=>x.id!==FD_GSEL.id);
+  else if(FD_GSEL.kind==='cancha')g.canchas=(g.canchas||[]).filter(x=>x.id!==FD_GSEL.id);
   else g.shapes=g.shapes.filter(x=>x.id!==FD_GSEL.id);
   const elId=FD_GSEL.elId;FD_GSEL=null;
   fdRenderGraphicEl(elId);
@@ -2696,6 +2763,7 @@ function fdGCopySel(){
   if(!FD_GSEL)return;
   const g=fdFindGraphicEl(FD_GSEL.elId);if(!g)return;
   if(FD_GSEL.kind==='el'){const e=(g.elements||[]).find(x=>x.id===FD_GSEL.id);if(!e)return;FD_GCLIPBOARD={kind:'el',data:{...e}};}
+  else if(FD_GSEL.kind==='cancha'){const c=(g.canchas||[]).find(x=>x.id===FD_GSEL.id);if(!c)return;FD_GCLIPBOARD={kind:'cancha',data:{...c}};}
   else{const s=(g.shapes||[]).find(x=>x.id===FD_GSEL.id);if(!s)return;FD_GCLIPBOARD={kind:'shape',data:JSON.parse(JSON.stringify(s))};}
 }
 function fdGCutSel(){fdGCopySel();fdGDeleteSel();}
@@ -2706,6 +2774,10 @@ function fdGPasteClipboard(elId){
     const src=FD_GCLIPBOARD.data,id='fge'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
     g.elements=g.elements||[];g.elements.push({...src,id,x:lpClamp((src.x||50)+5,0,100),y:lpClamp((src.y||LP_CY)+5,0,LP_CH)});
     FD_GSEL={elId,kind:'el',id};
+  }else if(FD_GCLIPBOARD.kind==='cancha'){
+    const src=FD_GCLIPBOARD.data,id='fdc'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+    g.canchas=g.canchas||[];
+    if(g.canchas.length<6){g.canchas.push({...src,id,x:lpClamp((src.x||50)+5,0,100),y:lpClamp((src.y||LP_CY)+5,0,LP_CH)});FD_GSEL={elId,kind:'cancha',id};}
   }else{
     const src=FD_GCLIPBOARD.data,id='fgs'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
     g.shapes=g.shapes||[];
@@ -2754,7 +2826,7 @@ function fdElPrintHTML(el){
     return `<line x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}" stroke="${col}" stroke-width="${w}"${dash}${mEnd}${mStart}/>`;
   }).join('');
   const elsSvg=(el.elements||[]).map(e=>`<g transform="translate(${e.x},${e.y}) rotate(${e.rot||0}) scale(${e.scale||1})">${lpElGlyph(e.kind,e.color,e.label,e.id)}</g>`).join('');
-  const courtSvg=lpCourtBg(el.court,el.courtScale||1,el.courtWidth||1);
+  const courtSvg=(el.canchas||[]).map(c=>lpCourtBgAt(c.tipo,c.scale||1,c.width||1,c.x,c.y)).join('');
   return `<div class="fpel" style="${style}"><svg viewBox="0 0 100 ${LP_CH}" preserveAspectRatio="none" style="width:100%;height:100%;display:block">${courtSvg}${shapesSvg}${elsSvg}</svg></div>`;
 }
 function fdGeneratePDF(d){
