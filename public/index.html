@@ -368,6 +368,7 @@
   .fdcanvas{position:relative;width:100%;max-width:860px;aspect-ratio:210/297;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);overflow:hidden;margin:0 auto;touch-action:none}
   .fd-el{position:absolute;box-sizing:border-box;min-width:16px;min-height:16px}
   .fd-el.sel{outline:2px solid #2563eb;z-index:5}
+  .fd-el-grafico.sel{outline:none}
   .fd-el-body{width:100%;height:100%;overflow:auto;padding:2px}
   .fd-el .rtewrap,.fd-el .rte{height:100%}
   .fd-toolbar{position:absolute;top:-24px;left:0;right:0;height:20px;display:flex;align-items:center;gap:3px;z-index:6;background:#2563eb;border-radius:5px 5px 0 0;cursor:move;padding:0 3px}
@@ -2394,7 +2395,7 @@ function fdEnsureGraphicTarget(){
   if(g)return g;
   if(FD_LASTGRAPHIC){g=fdFindGraphicEl(FD_LASTGRAPHIC);if(g){fdSelectOnly(g.id);return g;}}
   const id='fde'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
-  const newEl={id,type:'grafico',x:5,y:5,w:90,h:70,canchas:[],elements:[],shapes:[]};
+  const newEl={id,type:'grafico',x:10,y:10,w:45,h:30,canchas:[],elements:[],shapes:[]};
   FD_EDIT.elementos=FD_EDIT.elementos||[];
   FD_EDIT.elementos.push(newEl);
   fdSelectOnly(id);
@@ -2483,7 +2484,7 @@ function fdElHTML(el){
   if(el.type==='texto')inner=fdTextInner(el);
   else if(el.type==='tabla')inner=fdTableInner(el);
   else inner=fdGraphicInner(el);
-  return `<div class="fd-el${sel?' sel':''}" id="fdEl-${el.id}" style="left:${el.x}%;top:${el.y}%;width:${el.w}%;height:${el.h}%" onpointerdown="fdElPointerDown(event,'${el.id}')">
+  return `<div class="fd-el${sel?' sel':''}${el.type==='grafico'?' fd-el-grafico':''}" id="fdEl-${el.id}" style="left:${el.x}%;top:${el.y}%;width:${el.w}%;height:${el.h}%" onpointerdown="fdElPointerDown(event,'${el.id}')">
     ${editable&&sel?`<div class="fd-toolbar"><span class="fd-grab">⠿ Arrastrar${FD_MULTISEL.size>1?' ('+FD_MULTISEL.size+')':''}</span><button type="button" onclick="fdCopySel()">📋</button><button type="button" onclick="fdDeleteSel()">🗑</button></div>`:''}
     <div class="fd-el-body">${inner}</div>
     ${editable&&sel?`<div class="fd-resize" onpointerdown="fdResizeStart(event,'${el.id}')"></div>`:''}
