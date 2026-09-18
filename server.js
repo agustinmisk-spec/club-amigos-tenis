@@ -309,30 +309,34 @@ app.put('/api/library/:id', auth, need('planner'), async (req, res) => {
 });
 app.delete('/api/library/:id', auth, need('planner'), async (req, res) => { await store.deleteLibraryItem(req.params.id); res.json({ ok: true }); });
 
-/* ---------------- Documentos libres (hoja en blanco: texto, tablas, gráficos) ---------------- */
+/* ---------------- Documentos libres (hoja en blanco estilo Canva: cada elemento -texto, tabla,
+   cancha, ícono, forma/flecha/dibujo- es un objeto de primer nivel posicionado en % de la página) ---------------- */
 const cleanFreeCell = c => String(c == null ? '' : c).slice(0, 2000);
 const cleanFreeRow = r => Array.isArray(r) ? r.slice(0, 20).map(cleanFreeCell) : [];
-const cleanCancha = c => ({
-  id: String((c && c.id) || '').slice(0, 40),
-  tipo: ['mini', 'full'].includes(c && c.tipo) ? c.tipo : 'mini',
-  x: num(c && c.x, 0, 100, 50), y: num(c && c.y, 0, 90, 45),
-  scale: num(c && c.scale, 0.4, 2, 1),
-  width: num(c && c.width, 0.5, 2.2, 1)
-});
 const cleanFreeElement = e => {
-  const type = ['texto', 'tabla', 'grafico'].includes(e && e.type) ? e.type : 'texto';
+  const type = ['texto', 'tabla', 'cancha', 'icono', 'forma'].includes(e && e.type) ? e.type : 'texto';
   const base = {
     id: String((e && e.id) || '').slice(0, 40),
     type,
     x: num(e && e.x, 0, 100, 10), y: num(e && e.y, 0, 100, 10),
-    w: num(e && e.w, 3, 100, 30), h: num(e && e.h, 3, 100, 20)
+    w: num(e && e.w, 2, 100, 30), h: num(e && e.h, 2, 100, 20)
   };
   if (type === 'texto') return Object.assign(base, { html: String((e && e.html) || '').slice(0, 8000) });
   if (type === 'tabla') return Object.assign(base, { rows: Array.isArray(e && e.rows) ? e.rows.slice(0, 30).map(cleanFreeRow) : [['', '']] });
+  if (type === 'cancha') return Object.assign(base, { tipo: ['mini', 'full'].includes(e && e.tipo) ? e.tipo : 'mini' });
+  if (type === 'icono') return Object.assign(base, {
+    kind: String((e && e.kind) || '').slice(0, 30),
+    label: String((e && e.label) || '').slice(0, 10),
+    color: /^#[0-9a-fA-F]{3,8}$/.test(e && e.color) ? e.color : '#111827',
+    rot: num(e && e.rot, -360, 360, 0)
+  });
   return Object.assign(base, {
-    canchas: Array.isArray(e && e.canchas) ? e.canchas.slice(0, 6).map(cleanCancha) : [],
-    elements: Array.isArray(e && e.elements) ? e.elements.slice(0, 60).map(cleanEl) : [],
-    shapes: Array.isArray(e && e.shapes) ? e.shapes.slice(0, 60).map(cleanShape) : []
+    shapeType: ['linea', 'flecha', 'flechaPunteada', 'flechaDoble', 'flechaCurva', 'rectangulo', 'circulo', 'triangulo', 'dibujo'].includes(e && e.shapeType) ? e.shapeType : 'linea',
+    x1: num(e && e.x1, 0, 100, 0), y1: num(e && e.y1, 0, 100, 0),
+    x2: num(e && e.x2, 0, 100, 100), y2: num(e && e.y2, 0, 100, 100),
+    pts: Array.isArray(e && e.pts) ? e.pts.slice(0, 300).map(cleanPt) : [],
+    color: /^#[0-9a-fA-F]{3,8}$/.test(e && e.color) ? e.color : '#c0392b',
+    width: num(e && e.width, 0.4, 2.2, 0.8)
   });
 };
 const cleanFreeDoc = b => ({
