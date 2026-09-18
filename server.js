@@ -220,11 +220,13 @@ const cleanEl = e => ({
   label: String((e && e.label) || '').slice(0, 10),
   color: /^#[0-9a-fA-F]{3,8}$/.test(e && e.color) ? e.color : ''
 });
+const cleanPt = p => ({ x: num(p && p.x, 0, 100, 0), y: num(p && p.y, 0, 100, 0) });
 const cleanShape = s => ({
   id: String((s && s.id) || '').slice(0, 40),
-  type: ['linea', 'flecha', 'flechaPunteada', 'flechaDoble', 'flechaCurva'].includes(s && s.type) ? s.type : 'linea',
+  type: ['linea', 'flecha', 'flechaPunteada', 'flechaDoble', 'flechaCurva', 'dibujo'].includes(s && s.type) ? s.type : 'linea',
   x1: num(s && s.x1, 0, 100, 10), y1: num(s && s.y1, 0, 100, 10),
   x2: num(s && s.x2, 0, 100, 90), y2: num(s && s.y2, 0, 100, 90),
+  pts: Array.isArray(s && s.pts) ? s.pts.slice(0, 300).map(cleanPt) : [],
   color: /^#[0-9a-fA-F]{3,8}$/.test(s && s.color) ? s.color : '#c0392b',
   width: num(s && s.width, 0.4, 2.2, 0.8)
 });
@@ -306,6 +308,48 @@ app.put('/api/library/:id', auth, need('planner'), async (req, res) => {
   res.json(it);
 });
 app.delete('/api/library/:id', auth, need('planner'), async (req, res) => { await store.deleteLibraryItem(req.params.id); res.json({ ok: true }); });
+
+/* ---------------- Documentos libres (hoja en blanco: texto, tablas, gráficos) ---------------- */
+const cleanFreeCell = c => String(c == null ? '' : c).slice(0, 500);
+const cleanFreeRow = r => Array.isArray(r) ? r.slice(0, 20).map(cleanFreeCell) : [];
+const cleanFreeElement = e => {
+  const type = ['texto', 'tabla', 'grafico'].includes(e && e.type) ? e.type : 'texto';
+  const base = {
+    id: String((e && e.id) || '').slice(0, 40),
+    type,
+    x: num(e && e.x, 0, 100, 10), y: num(e && e.y, 0, 100, 10),
+    w: num(e && e.w, 3, 100, 30), h: num(e && e.h, 3, 100, 20)
+  };
+  if (type === 'texto') return Object.assign(base, { html: String((e && e.html) || '').slice(0, 8000) });
+  if (type === 'tabla') return Object.assign(base, { rows: Array.isArray(e && e.rows) ? e.rows.slice(0, 30).map(cleanFreeRow) : [['', '']] });
+  return Object.assign(base, {
+    court: ['none', 'mini', 'full'].includes(e && e.court) ? e.court : 'none',
+    courtScale: num(e && e.courtScale, 0.5, 1.5, 1),
+    courtWidth: num(e && e.courtWidth, 0.5, 2.2, 1),
+    elements: Array.isArray(e && e.elements) ? e.elements.slice(0, 60).map(cleanEl) : [],
+    shapes: Array.isArray(e && e.shapes) ? e.shapes.slice(0, 60).map(cleanShape) : []
+  });
+};
+const cleanFreeDoc = b => ({
+  nombre: String((b && b.nombre) || '').slice(0, 150),
+  elementos: Array.isArray(b && b.elementos) ? b.elementos.slice(0, 80).map(cleanFreeElement) : []
+});
+app.get('/api/freedocs', auth, async (req, res) => { res.json(await store.listFreeDocs()); });
+app.post('/api/freedocs', auth, need('content'), async (req, res) => {
+  const clean = cleanFreeDoc(req.body || {});
+  const d = Object.assign({ id: 'fd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) }, clean, { autor: req.user.nombre, fecha: new Date().toISOString() });
+  await store.addFreeDoc(d);
+  res.json(d);
+});
+app.put('/api/freedocs/:id', auth, need('content'), async (req, res) => {
+  const list = await store.listFreeDocs();
+  const d = list.find(x => x.id === req.params.id);
+  if (!d) return res.status(404).json({ error: 'No existe' });
+  Object.assign(d, cleanFreeDoc(req.body || {}));
+  await store.updateFreeDoc(d);
+  res.json(d);
+});
+app.delete('/api/freedocs/:id', auth, need('content'), async (req, res) => { await store.deleteFreeDoc(req.params.id); res.json({ ok: true }); });
 
 /* ---------------- Comunicaciones (mensajes) ---------------- */
 app.get('/api/messages', auth, async (req, res) => { res.json(await store.listMessages()); });
