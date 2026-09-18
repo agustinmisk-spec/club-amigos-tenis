@@ -2387,8 +2387,24 @@ function lpGeneratePDF(p){
   w.document.close();
 }
 /* ===== Documentos libres (hoja en blanco: texto, tablas, gráficos y dibujo libres) ===== */
-let FREEDOCS=[],FD_EDIT=null,FD_SELECTED=null,FD_MULTISEL=new Set(),FD_CLIPBOARD=null,FD_GSEL=null,FD_GDRAW=null,FD_GCLIPBOARD=null,FD_LASTCOLOR='#111827',FD_LASTHILITE='#fff59d';
-function fdSelectOnly(id){FD_SELECTED=id;FD_MULTISEL=id?new Set([id]):new Set();}
+let FREEDOCS=[],FD_EDIT=null,FD_SELECTED=null,FD_MULTISEL=new Set(),FD_CLIPBOARD=null,FD_GSEL=null,FD_GDRAW=null,FD_GCLIPBOARD=null,FD_LASTCOLOR='#111827',FD_LASTHILITE='#fff59d',FD_LASTGRAPHIC=null;
+function fdSelectOnly(id){FD_SELECTED=id;FD_MULTISEL=id?new Set([id]):new Set();const e=id&&fdFindEl(id);if(e&&e.type==='grafico')FD_LASTGRAPHIC=id;}
+function fdEnsureGraphicTarget(){
+  let g=fdFindGraphicEl(FD_SELECTED);
+  if(g)return g;
+  if(FD_LASTGRAPHIC){g=fdFindGraphicEl(FD_LASTGRAPHIC);if(g){fdSelectOnly(g.id);return g;}}
+  const id='fde'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+  const newEl={id,type:'grafico',x:5,y:5,w:90,h:70,canchas:[],elements:[],shapes:[]};
+  FD_EDIT.elementos=FD_EDIT.elementos||[];
+  FD_EDIT.elementos.push(newEl);
+  fdSelectOnly(id);
+  fdRenderCanvas();
+  return newEl;
+}
+function fdAddCanchaAuto(tipo){const g=fdEnsureGraphicTarget();fdAddCancha(g.id,tipo);}
+function fdArmDrawAuto(type){const g=fdEnsureGraphicTarget();fdArmDraw(g.id,type);}
+function fdAddIconAuto(kind,label){const g=fdEnsureGraphicTarget();fdAddIcon(g.id,kind,label);}
+function fdGPasteClipboardAuto(){const g=fdEnsureGraphicTarget();fdGPasteClipboard(g.id);}
 async function renderFreeDocs(){
   if(FD_EDIT){renderFdEditor();return;}
   const wrap=document.getElementById('fdWrap');if(!wrap)return;
@@ -2720,13 +2736,11 @@ function fdToolbarHTML(){
   const selEl=selHere&&FD_GSEL.kind==='el'?(gEl.elements||[]).find(x=>x.id===FD_GSEL.id):null;
   const selShape=selHere&&FD_GSEL.kind==='shape'?(gEl.shapes||[]).find(x=>x.id===FD_GSEL.id):null;
   const drawHere=gEl&&FD_GDRAW&&FD_GDRAW.elId===gEl.id;
-  const gId=gEl?gEl.id:'';
-  const disabledCls=gEl?'':' fddisabled';
   const canchaCount=gEl?(gEl.canchas||[]).length:0;
-  const canchaFullCls=(!gEl||canchaCount>=6)?' fddisabled':'';
-  const shapeItems=FD_SHAPE_ITEMS.map(([t,ic,lb])=>`<button type="button" class="fdmenuitem" onclick="fdArmDraw('${gId}','${t}')">${ic} ${esc(lb)}</button>`).join('');
-  const arrowItems=FD_ARROW_ITEMS.map(([t,ic,lb])=>`<button type="button" class="fdmenuitem" onclick="fdArmDraw('${gId}','${t}')">${ic} ${esc(lb)}</button>`).join('');
-  const tennisItems=FD_TENNIS_ITEMS.map(([k,ic,lb,lbl])=>`<button type="button" class="fdmenuitem" onclick="fdAddIcon('${gId}','${k}','${lbl||''}')">${ic} ${esc(lb)}</button>`).join('');
+  const canchaFullCls=(gEl&&canchaCount>=6)?' fddisabled':'';
+  const shapeItems=FD_SHAPE_ITEMS.map(([t,ic,lb])=>`<button type="button" class="fdmenuitem" onclick="fdArmDrawAuto('${t}')">${ic} ${esc(lb)}</button>`).join('');
+  const arrowItems=FD_ARROW_ITEMS.map(([t,ic,lb])=>`<button type="button" class="fdmenuitem" onclick="fdArmDrawAuto('${t}')">${ic} ${esc(lb)}</button>`).join('');
+  const tennisItems=FD_TENNIS_ITEMS.map(([k,ic,lb,lbl])=>`<button type="button" class="fdmenuitem" onclick="fdAddIconAuto('${k}','${lbl||''}')">${ic} ${esc(lb)}</button>`).join('');
   const colorSwatches=LP_COLORS.map(c=>`<button type="button" class="fdswatch" style="background:${c}" title="${c}" onmousedown="fdColorClick(event,'${c}')"></button>`).join('');
   const hiliteSwatches=FD_HILITE_COLORS.map(c=>`<button type="button" class="fdswatch" style="background:${c}" title="Resaltar" onmousedown="fdHiliteClick(event,'${c}')"></button>`).join('')
     +`<button type="button" class="fdswatch" style="background:#fff;background-image:linear-gradient(to top left,transparent calc(50% - 1px),#c0392b,transparent calc(50% + 1px))" title="Sin resaltado" onmousedown="fdHiliteClick(event,'transparent')"></button>`;
@@ -2744,13 +2758,13 @@ function fdToolbarHTML(){
     <details class="fddrop fdcolordrop"><summary onmousedown="event.preventDefault()" title="Color de fuente / forma / elemento"><span class="fdcolorbtn"><b>A</b><span class="fdcolorbar" style="background:${FD_LASTCOLOR}"></span></span></summary><div class="fdmenu">${colorSwatches}</div></details>
     <details class="fddrop fdcolordrop"><summary onmousedown="event.preventDefault()" title="Resaltado"><span class="fdcolorbtn">🖊️<span class="fdcolorbar" style="background:${FD_LASTHILITE}"></span></span></summary><div class="fdmenu">${hiliteSwatches}</div></details>
     <span class="fdsep"></span>
-    <button type="button" class="btn sm ghost${canchaFullCls}" onclick="fdAddCancha('${gId}','mini')">+ Mini cancha</button>
-    <button type="button" class="btn sm ghost${canchaFullCls}" onclick="fdAddCancha('${gId}','full')">+ Cancha completa</button>
-    <details class="fddrop${disabledCls}"><summary onmousedown="event.preventDefault()">▭ Formas ▾</summary><div class="fdmenu">${shapeItems}</div></details>
-    <details class="fddrop${disabledCls}"><summary onmousedown="event.preventDefault()">🎾 Elementos ▾</summary><div class="fdmenu">${tennisItems}</div></details>
-    <details class="fddrop${disabledCls}"><summary onmousedown="event.preventDefault()">→ Flechas ▾</summary><div class="fdmenu">${arrowItems}</div></details>
-    <button type="button" class="btn sm ${drawHere&&FD_GDRAW.type==='dibujo'?'':'ghost'}${disabledCls}" onclick="fdArmDraw('${gId}','dibujo')">✏️ Libre</button>
-    ${gEl&&FD_GCLIPBOARD?`<button type="button" class="btn sm ghost" onclick="fdGPasteClipboard('${gId}')">📌 Pegar</button>`:''}
+    <button type="button" class="btn sm ghost${canchaFullCls}" onclick="fdAddCanchaAuto('mini')">+ Mini cancha</button>
+    <button type="button" class="btn sm ghost${canchaFullCls}" onclick="fdAddCanchaAuto('full')">+ Cancha completa</button>
+    <details class="fddrop"><summary onmousedown="event.preventDefault()">▭ Formas ▾</summary><div class="fdmenu">${shapeItems}</div></details>
+    <details class="fddrop"><summary onmousedown="event.preventDefault()">🎾 Elementos ▾</summary><div class="fdmenu">${tennisItems}</div></details>
+    <details class="fddrop"><summary onmousedown="event.preventDefault()">→ Flechas ▾</summary><div class="fdmenu">${arrowItems}</div></details>
+    <button type="button" class="btn sm ${drawHere&&FD_GDRAW.type==='dibujo'?'':'ghost'}" onclick="fdArmDrawAuto('dibujo')">✏️ Libre</button>
+    ${FD_GCLIPBOARD?`<button type="button" class="btn sm ghost" onclick="fdGPasteClipboardAuto()">📌 Pegar</button>`:''}
     ${drawHere?'<span class="small" style="color:#c0392b">Tocá y arrastrá sobre el gráfico…</span>':''}
     ${contextBar}
   `;
