@@ -226,7 +226,7 @@
   .printtitle .pt1{font-size:18px;font-weight:700}
   .printtitle .pt2{font-size:14px;color:var(--muted)}
   @media print{
-    header,.tabs,#courtToolbar,#tab-alumnos,#tab-recuperaciones,#tab-competencias,#tab-asistencia,#tab-estadisticas,#tab-ranking,#tab-informes,#tab-capacitaciones,#tab-evaluaciones,#tab-tecevals,#tab-planificaciones,#tab-comunicaciones,#tab-calendario,#tab-config,#tab-usuarios,.overlay:not(.tecprint){display:none!important}
+    header,.tabs,#courtToolbar,#tab-alumnos,#tab-recuperaciones,#tab-competencias,#tab-asistencia,#tab-estadisticas,#tab-ranking,#tab-informes,#tab-capacitaciones,#tab-evaluaciones,#tab-tecevals,#tab-planificaciones,#tab-documentos,#tab-comunicaciones,#tab-calendario,#tab-config,#tab-usuarios,.overlay:not(.tecprint){display:none!important}
     body{background:#fff}
     .wrap{max-width:none;padding:0;margin:0}
     #tab-canchas{display:block!important}
@@ -365,6 +365,18 @@
   html[data-theme="dark"] .att-btn.p.on{color:#fff}
   html[data-theme="dark"] .attdot.none{border-color:var(--muted)}
   html[data-theme="dark"] .login-ov{background:linear-gradient(135deg,#0d1a2e,#070d17)}
+  .fdcanvas{position:relative;width:100%;max-width:860px;aspect-ratio:210/297;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);overflow:hidden;margin:0 auto;touch-action:none}
+  .fd-el{position:absolute;box-sizing:border-box;min-width:16px;min-height:16px}
+  .fd-el.sel{outline:2px solid #2563eb;z-index:5}
+  .fd-el-body{width:100%;height:100%;overflow:auto;padding:2px}
+  .fd-el .rtewrap,.fd-el .rte{height:100%}
+  .fd-toolbar{position:absolute;top:-24px;left:0;right:0;height:20px;display:flex;align-items:center;gap:3px;z-index:6;background:#2563eb;border-radius:5px 5px 0 0;cursor:move;padding:0 3px}
+  .fd-toolbar .fd-grab{flex:1;color:#fff;font-size:11px;opacity:0.9;pointer-events:none}
+  .fd-toolbar button{border:none;background:rgba(255,255,255,.18);color:#fff;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;line-height:1.6;flex:0 0 auto}
+  .fd-resize{position:absolute;right:-7px;bottom:-7px;width:14px;height:14px;background:#2563eb;border-radius:3px;cursor:nwse-resize;z-index:6}
+  .fdtable{border-collapse:collapse;width:100%;font-size:11.5px}
+  .fdtable td{border:1px solid #ccc;padding:3px 6px;min-width:20px}
+  .fdgcanvas{width:100%;height:100%;display:block;background:#fff}
 </style>
 </head>
 <body>
@@ -400,6 +412,7 @@
   <button class="tab" data-tab="asistencia" onclick="showTab('asistencia')">Asistencia</button>
   <button class="tab" data-tab="competencias" onclick="showTab('competencias')">Competencias</button>
   <button class="tab" data-tab="planificaciones" onclick="showTab('planificaciones')">Planificaciones</button>
+  <button class="tab" data-tab="documentos" onclick="showTab('documentos')">Documentos</button>
   <div class="tabmenu" id="menuEval">
     <button class="tab tabtop" onclick="menuToggle(event,this)">Evaluaciones ▾</button>
     <div class="tabdrop" id="evalPeriodDrop"></div>
@@ -686,6 +699,10 @@
       <div id="planUpload"></div>
       <div id="plansWrap"></div>
     </div>
+  </section>
+
+  <section id="tab-documentos" style="display:none">
+    <div id="fdWrap"></div>
   </section>
 
   <section id="tab-comunicaciones" style="display:none">
@@ -1996,6 +2013,12 @@ function lpCurveCtrl(x1,y1,x2,y2){
 function lpShapeInnerSvg(s,sel){
   const col=sel?'#2563eb':(s.color||'#c0392b'),w=sel?Math.max(1.1,(s.width||0.8)+0.3):(s.width||0.8);
   const mk=`url(#lpArrow-${lpColorId(col)})`;
+  if(s.type==='dibujo'){
+    const pts=(s.pts||[]);
+    if(pts.length<2)return '';
+    const d='M'+pts.map(p=>`${p.x},${p.y}`).join(' L');
+    return `<path d="${d}" fill="none" stroke="transparent" stroke-width="3"/><path d="${d}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }
   if(s.type==='flechaCurva'){
     const {cx,cy}=lpCurveCtrl(s.x1,s.y1,s.x2,s.y2);
     return `<path d="M${s.x1},${s.y1} Q${cx},${cy} ${s.x2},${s.y2}" fill="none" stroke="transparent" stroke-width="3"/><path d="M${s.x1},${s.y1} Q${cx},${cy} ${s.x2},${s.y2}" fill="none" stroke="${col}" stroke-width="${w}" marker-start="${mk}" marker-end="${mk}"/>`;
@@ -2335,6 +2358,427 @@ function lpGeneratePDF(p){
   w.document.write(html);
   w.document.close();
 }
+/* ===== Documentos libres (hoja en blanco: texto, tablas, gráficos y dibujo libres) ===== */
+let FREEDOCS=[],FD_EDIT=null,FD_SELECTED=null,FD_CLIPBOARD=null,FD_GSEL=null,FD_GDRAW=null,FD_GCLIPBOARD=null;
+async function renderFreeDocs(){
+  if(FD_EDIT){renderFdEditor();return;}
+  const wrap=document.getElementById('fdWrap');if(!wrap)return;
+  wrap.innerHTML='<div class="card empty"><p>Cargando…</p></div>';
+  try{FREEDOCS=await api('GET','/api/freedocs');}catch(e){wrap.innerHTML='<div class="card empty"><p>No se pudo cargar.</p></div>';return;}
+  renderFdList();
+}
+function renderFdList(){
+  const wrap=document.getElementById('fdWrap');if(!wrap)return;
+  const editable=can('content');
+  const listHtml=FREEDOCS.length?`<div class="feed">${FREEDOCS.map(d=>`<div class="item"><div class="top"><span class="ti">📝 ${esc(d.nombre||'Sin título')}</span><span>${editable?`<button class="att-btn" title="Eliminar" onclick="fdDelete('${d.id}')">🗑</button> `:''}<button class="btn sec sm" onclick="fdPrint('${d.id}')">🖨️ Imprimir</button> <button class="btn sec sm" onclick="fdOpen('${d.id}')">${editable?'Editar':'Ver'}</button></span></div><div class="meta2">${esc(fmtFecha(d.fecha))} · ${esc(d.autor||'')} · ${(d.elementos||[]).length} elemento(s)</div></div>`).join('')}</div>`:'<div class="card empty"><div class="big">📝</div><p>Todavía no hay hojas creadas.</p></div>';
+  wrap.innerHTML=`<div class="toolbar" style="margin-bottom:10px">${editable?'<button class="btn" onclick="fdNew()">+ Nueva hoja</button>':''}<div class="spacer"></div></div>${listHtml}`;
+}
+function fdNew(){
+  if(!can('content'))return;
+  FD_EDIT={id:null,nombre:'',elementos:[]};FD_SELECTED=null;FD_GSEL=null;FD_GDRAW=null;
+  renderFdEditor();
+}
+function fdOpen(id){
+  const d=FREEDOCS.find(x=>x.id===id);if(!d)return;
+  FD_EDIT=JSON.parse(JSON.stringify(d));FD_SELECTED=null;FD_GSEL=null;FD_GDRAW=null;
+  renderFdEditor();
+}
+function fdCancel(){FD_EDIT=null;FD_SELECTED=null;FD_GSEL=null;FD_GDRAW=null;renderFdList();}
+async function fdSave(){
+  if(!can('content'))return;
+  const body={nombre:FD_EDIT.nombre||'Sin título',elementos:FD_EDIT.elementos||[]};
+  try{
+    const saved=FD_EDIT.id?await api('PUT','/api/freedocs/'+FD_EDIT.id,body):await api('POST','/api/freedocs',body);
+    if(FD_EDIT.id){const i=FREEDOCS.findIndex(x=>x.id===FD_EDIT.id);if(i>=0)FREEDOCS[i]=saved;}
+    else FREEDOCS.unshift(saved);
+    FD_EDIT=null;FD_SELECTED=null;FD_GSEL=null;FD_GDRAW=null;
+    renderFdList();
+  }catch(e){alert(e.message);}
+}
+async function fdDelete(id){
+  if(!can('content'))return;
+  if(!confirm('¿Eliminar esta hoja?'))return;
+  try{await api('DELETE','/api/freedocs/'+id);FREEDOCS=FREEDOCS.filter(x=>x.id!==id);renderFdList();}catch(e){alert(e.message);}
+}
+function fdFindEl(id){return FD_EDIT&&(FD_EDIT.elementos||[]).find(x=>x.id===id);}
+function fdFindGraphicEl(id){const e=fdFindEl(id);return e&&e.type==='grafico'?e:null;}
+function renderFdEditor(){
+  const wrap=document.getElementById('fdWrap');if(!wrap)return;
+  const editable=can('content');
+  wrap.innerHTML=`
+    <div class="toolbar" style="margin-bottom:10px;flex-wrap:wrap">
+      <button class="btn sec sm" onclick="fdCancel()">← ${editable?'Cancelar':'Volver'}</button>
+      <input value="${esc(FD_EDIT.nombre||'')}" placeholder="Título de la hoja" oninput="FD_EDIT.nombre=this.value" style="flex:1;min-width:160px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-weight:600" ${editable?'':'disabled'}>
+      <div class="spacer"></div>
+      ${editable?'<button class="btn sm" onclick="fdSave()">💾 Guardar hoja</button>':''}
+    </div>
+    ${editable?`<div class="toolbar" style="margin-bottom:8px;flex-wrap:wrap">
+      <button type="button" class="btn sm ghost" onclick="fdAddText()">+ Texto</button>
+      <button type="button" class="btn sm ghost" onclick="fdAddTable()">+ Tabla</button>
+      <button type="button" class="btn sm ghost" onclick="fdAddGraphic()">+ Gráfico</button>
+      <span class="small" style="align-self:center;color:var(--muted)">Arrastrá los elementos para moverlos; usá la esquina para cambiar el tamaño.</span>
+    </div>`:''}
+    <div id="fdCanvas" class="fdcanvas" onpointerdown="fdCanvasBgPointerDown(event)">${(FD_EDIT.elementos||[]).map(fdElHTML).join('')}</div>
+  `;
+}
+function fdRenderCanvas(){const wrap=document.getElementById('fdCanvas');if(!wrap)return;wrap.innerHTML=(FD_EDIT.elementos||[]).map(fdElHTML).join('');}
+function fdCanvasBgPointerDown(ev){if(ev.target.id!=='fdCanvas')return;if(FD_SELECTED){FD_SELECTED=null;FD_GSEL=null;fdRenderCanvas();}}
+function fdElHTML(el){
+  const sel=FD_SELECTED===el.id;
+  const editable=can('content');
+  let inner='';
+  if(el.type==='texto')inner=fdTextInner(el);
+  else if(el.type==='tabla')inner=fdTableInner(el);
+  else inner=fdGraphicInner(el);
+  return `<div class="fd-el${sel?' sel':''}" id="fdEl-${el.id}" style="left:${el.x}%;top:${el.y}%;width:${el.w}%;height:${el.h}%" onpointerdown="fdElPointerDown(event,'${el.id}')">
+    ${editable&&sel?`<div class="fd-toolbar"><span class="fd-grab">⠿ Arrastrar</span><button type="button" onclick="fdCopySel()">📋</button><button type="button" onclick="fdDeleteSel()">🗑</button></div>`:''}
+    <div class="fd-el-body">${inner}</div>
+    ${editable&&sel?`<div class="fd-resize" onpointerdown="fdResizeStart(event,'${el.id}')"></div>`:''}
+  </div>`;
+}
+function fdElPointerDown(ev,id){
+  ev.stopPropagation();
+  const changed=FD_SELECTED!==id;
+  FD_SELECTED=id;FD_GSEL=null;
+  const editable=can('content');
+  if(changed)fdRenderCanvas();
+  if(!editable)return;
+  const t=ev.target;
+  if(t.closest('[contenteditable="true"]')||t.closest('table')||t.closest('svg')||t.closest('button')||t.closest('input')||t.closest('.fd-resize'))return;
+  fdDragStart(ev,id);
+}
+function fdDragStart(ev,id){
+  ev.preventDefault();
+  const el=fdFindEl(id);if(!el)return;
+  const canvas=document.getElementById('fdCanvas');if(!canvas)return;
+  const rect=canvas.getBoundingClientRect();
+  const startX=el.x,startY=el.y,startClientX=ev.clientX,startClientY=ev.clientY;
+  const node=document.getElementById('fdEl-'+id);
+  const move=mv=>{
+    const dxPct=(mv.clientX-startClientX)/rect.width*100,dyPct=(mv.clientY-startClientY)/rect.height*100;
+    el.x=lpClamp(startX+dxPct,0,100-el.w);el.y=lpClamp(startY+dyPct,0,100-el.h);
+    if(node){node.style.left=el.x+'%';node.style.top=el.y+'%';}
+  };
+  const up=()=>{document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',up);};
+  document.addEventListener('pointermove',move);document.addEventListener('pointerup',up);
+}
+function fdResizeStart(ev,id){
+  ev.preventDefault();ev.stopPropagation();
+  const el=fdFindEl(id);if(!el)return;
+  const canvas=document.getElementById('fdCanvas');if(!canvas)return;
+  const rect=canvas.getBoundingClientRect();
+  const startW=el.w,startH=el.h,startClientX=ev.clientX,startClientY=ev.clientY;
+  const node=document.getElementById('fdEl-'+id);
+  const move=mv=>{
+    const dxPct=(mv.clientX-startClientX)/rect.width*100,dyPct=(mv.clientY-startClientY)/rect.height*100;
+    el.w=lpClamp(startW+dxPct,4,100-el.x);el.h=lpClamp(startH+dyPct,4,100-el.y);
+    if(node){node.style.width=el.w+'%';node.style.height=el.h+'%';}
+  };
+  const up=()=>{document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',up);};
+  document.addEventListener('pointermove',move);document.addEventListener('pointerup',up);
+}
+function fdDeleteSel(){
+  if(!FD_SELECTED)return;
+  FD_EDIT.elementos=(FD_EDIT.elementos||[]).filter(x=>x.id!==FD_SELECTED);
+  FD_SELECTED=null;FD_GSEL=null;
+  fdRenderCanvas();
+}
+function fdCopySel(){
+  if(!FD_SELECTED)return;
+  const el=fdFindEl(FD_SELECTED);if(!el)return;
+  FD_CLIPBOARD=JSON.parse(JSON.stringify(el));
+}
+function fdPasteClipboard(){
+  if(!FD_CLIPBOARD)return;
+  const id='fde'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+  const copy=Object.assign(JSON.parse(JSON.stringify(FD_CLIPBOARD)),{id,x:lpClamp((FD_CLIPBOARD.x||0)+3,0,100-(FD_CLIPBOARD.w||10)),y:lpClamp((FD_CLIPBOARD.y||0)+3,0,100-(FD_CLIPBOARD.h||10))});
+  FD_EDIT.elementos=FD_EDIT.elementos||[];FD_EDIT.elementos.push(copy);
+  FD_SELECTED=id;FD_GSEL=null;
+  fdRenderCanvas();
+}
+function fdAddText(){
+  if(!can('content'))return;
+  const id='fde'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+  FD_EDIT.elementos=FD_EDIT.elementos||[];
+  FD_EDIT.elementos.push({id,type:'texto',x:10,y:10,w:40,h:18,html:''});
+  FD_SELECTED=id;FD_GSEL=null;
+  fdRenderCanvas();
+}
+function fdAddTable(){
+  if(!can('content'))return;
+  const id='fde'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+  FD_EDIT.elementos=FD_EDIT.elementos||[];
+  FD_EDIT.elementos.push({id,type:'tabla',x:10,y:10,w:45,h:20,rows:[['',''],['','']]});
+  FD_SELECTED=id;FD_GSEL=null;
+  fdRenderCanvas();
+}
+function fdAddGraphic(){
+  if(!can('content'))return;
+  const id='fde'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+  FD_EDIT.elementos=FD_EDIT.elementos||[];
+  FD_EDIT.elementos.push({id,type:'grafico',x:10,y:10,w:45,h:30,court:'none',courtScale:1,courtWidth:1,elements:[],shapes:[]});
+  FD_SELECTED=id;FD_GSEL=null;
+  fdRenderCanvas();
+}
+function fdTextInner(el){
+  const editable=can('content');
+  return editable?rteBox('fdText-'+el.id,'',el.html,60,'Escribí acá…',`fdSetTextHtml('${el.id}',rteGet(this))`):`<div class="rte" style="border:1px solid var(--line);border-radius:8px;background:var(--card);height:100%;overflow:auto">${fmtRaw(el.html||'')}</div>`;
+}
+function fdSetTextHtml(id,html){const el=fdFindEl(id);if(!el)return;el.html=html;}
+function fdTableInner(el){
+  const editable=can('content');
+  const rows=el.rows&&el.rows.length?el.rows:[['','']];
+  const controls=editable?`<div style="display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap">
+    <button type="button" class="btn sm ghost" onclick="fdTableAddRow('${el.id}')">+ Fila</button>
+    <button type="button" class="btn sm ghost" onclick="fdTableAddCol('${el.id}')">+ Columna</button>
+    <button type="button" class="btn sm ghost" onclick="fdTableDelRow('${el.id}')">- Fila</button>
+    <button type="button" class="btn sm ghost" onclick="fdTableDelCol('${el.id}')">- Columna</button>
+  </div>`:'';
+  const table=`<table class="fdtable"><tbody>${rows.map((row,ri)=>`<tr>${row.map((cell,ci)=>`<td ${editable?'contenteditable="true"':''} oninput="fdSetCell('${el.id}',${ri},${ci},this.textContent)">${esc(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  return controls+table;
+}
+function fdSetCell(id,ri,ci,val){const el=fdFindEl(id);if(!el||!el.rows[ri])return;el.rows[ri][ci]=val;}
+function fdTableAddRow(id){const el=fdFindEl(id);if(!el)return;const cols=el.rows[0]?el.rows[0].length:2;el.rows.push(new Array(cols).fill(''));fdRenderTable(id);}
+function fdTableAddCol(id){const el=fdFindEl(id);if(!el)return;el.rows.forEach(r=>r.push(''));fdRenderTable(id);}
+function fdTableDelRow(id){const el=fdFindEl(id);if(!el||el.rows.length<=1)return;el.rows.pop();fdRenderTable(id);}
+function fdTableDelCol(id){const el=fdFindEl(id);if(!el||!el.rows[0]||el.rows[0].length<=1)return;el.rows.forEach(r=>r.pop());fdRenderTable(id);}
+function fdRenderTable(id){const node=document.getElementById('fdEl-'+id);const el=fdFindEl(id);if(!node||!el)return;node.outerHTML=fdElHTML(el);}
+function fdRenderGraphicEl(id){const node=document.getElementById('fdEl-'+id);const el=fdFindEl(id);if(!node||!el)return;node.outerHTML=fdElHTML(el);}
+function fdGraphicInner(el){
+  const editable=can('content');
+  const selHere=FD_GSEL&&FD_GSEL.elId===el.id;
+  const drawHere=FD_GDRAW&&FD_GDRAW.elId===el.id;
+  const selEl=selHere&&FD_GSEL.kind==='el'?(el.elements||[]).find(x=>x.id===FD_GSEL.id):null;
+  const selShape=selHere&&FD_GSEL.kind==='shape'?(el.shapes||[]).find(x=>x.id===FD_GSEL.id):null;
+  const elsSvg=(el.elements||[]).map(e=>{
+    const sel=selHere&&FD_GSEL.kind==='el'&&FD_GSEL.id===e.id;
+    return `<g transform="translate(${e.x},${e.y}) rotate(${e.rot||0}) scale(${e.scale||1})" onpointerdown="fdGElPointerDown(event,'${el.id}','${e.id}')" style="cursor:move">${sel?'<circle r="5" fill="none" stroke="#2563eb" stroke-width="0.6" stroke-dasharray="1.4,1"/>':''}<circle r="4.2" fill="transparent"/>${lpElGlyph(e.kind,e.color,e.label,e.id)}</g>`;
+  }).join('');
+  const shapesSvg=(el.shapes||[]).map(s=>{
+    const sel=selHere&&FD_GSEL.kind==='shape'&&FD_GSEL.id===s.id;
+    return `<g id="fdShape-${s.id}" onpointerdown="fdGShapePointerDown(event,'${el.id}','${s.id}')" style="cursor:pointer">${lpShapeInnerSvg(s,sel)}</g>`;
+  }).join('');
+  const courtSvg=lpCourtBg(el.court,el.courtScale||1,el.courtWidth||1);
+  const svgHtml=`<svg viewBox="0 0 100 ${LP_CH}" preserveAspectRatio="none" class="fdgcanvas" onpointerdown="fdGCanvasPointerDown(event,'${el.id}')"><g>${courtSvg}</g>${shapesSvg}${elsSvg}</svg>`;
+  if(!editable)return svgHtml;
+  const courtBtn=(v,label)=>`<button type="button" class="btn sm ${el.court===v?'':'ghost'}" onclick="fdSetCourt('${el.id}','${v}')">${esc(label)}</button>`;
+  const drawBtn=(t,label)=>`<button type="button" class="btn sm ${drawHere&&FD_GDRAW.type===t?'':'ghost'}" onclick="fdArmDraw('${el.id}','${t}')">${esc(label)}</button>`;
+  const iconBtn=(k,label,lbl)=>`<button type="button" class="btn sm ghost" onclick="fdAddIcon('${el.id}','${k}','${lbl||''}')">${esc(label)}</button>`;
+  const toolbar=`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px">
+    <span class="small" style="align-self:center;color:var(--muted)">Fondo:</span>${courtBtn('none','Sin cancha')}${courtBtn('mini','Mini')}${courtBtn('full','Completa')}
+    <span class="small" style="align-self:center;color:var(--muted);margin-left:6px">Agregar:</span>${iconBtn('jugador','🧍','A')}${iconBtn('jugador','🧑‍🏫','P')}${iconBtn('raqueta','🎾')}${iconBtn('pelota','🟡')}${iconBtn('canasto','🧺')}${iconBtn('cono','🔶')}${iconBtn('conobajo','🔻')}${iconBtn('aro','⭕')}${iconBtn('escalera','🪜')}${iconBtn('pisada','👣')}${iconBtn('soga','➰')}${iconBtn('red','🥅')}
+    <span class="small" style="align-self:center;color:var(--muted);margin-left:6px">Dibujar:</span>${drawBtn('linea','—')}${drawBtn('flecha','→')}${drawBtn('flechaPunteada','⇢')}${drawBtn('flechaDoble','⇔')}${drawBtn('flechaCurva','⤳')}${drawBtn('dibujo','✏️ Libre')}
+    ${FD_GCLIPBOARD?`<button type="button" class="btn sm ghost" onclick="fdGPasteClipboard('${el.id}')">📌 Pegar</button>`:''}
+    ${drawHere?'<span class="small" style="color:#c0392b;align-self:center">Tocá y arrastrá sobre el gráfico…</span>':''}
+  </div>`;
+  const selElBar=selEl?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px">${LP_COLORS.map(cl=>`<button type="button" title="Color" onclick="fdSetElColor('${cl}')" style="width:18px;height:18px;border-radius:50%;border:2px solid ${(selEl.color||'#111827')===cl?'#111':'#fff'};box-shadow:0 0 0 1px var(--line);background:${cl};cursor:pointer;padding:0"></button>`).join('')}<button type="button" class="btn sm ghost" onclick="fdRotateSel(-15)">⟲</button><button type="button" class="btn sm ghost" onclick="fdRotateSel(15)">⟳</button><button type="button" class="btn sm ghost" onclick="fdScaleSel(-0.1)">－</button><button type="button" class="btn sm ghost" onclick="fdScaleSel(0.1)">＋</button></div>`:'';
+  const selShapeBar=selShape?`<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-bottom:4px">${LP_COLORS.map(cl=>`<button type="button" title="Color" onclick="fdSetShapeColor('${cl}')" style="width:18px;height:18px;border-radius:50%;border:2px solid ${(selShape.color||'#c0392b')===cl?'#111':'#fff'};box-shadow:0 0 0 1px var(--line);background:${cl};cursor:pointer;padding:0"></button>`).join('')}<span class="small" style="color:var(--muted)">Tamaño:</span><input type="range" min="0.4" max="2.2" step="0.1" value="${selShape.width||0.8}" oninput="fdSetShapeWidth(this.value)" style="width:80px"></div>`:'';
+  const selActions=(selEl||selShape)?`<div style="margin-bottom:4px;display:flex;gap:4px;flex-wrap:wrap"><button type="button" class="btn sm ghost" onclick="fdGCopySel()">📋 Copiar</button><button type="button" class="btn sm ghost" onclick="fdGCutSel()">✂️ Cortar</button><button type="button" class="btn sm ghost" onclick="fdGDeleteSel()">🗑 Eliminar</button></div>`:'';
+  return toolbar+svgHtml+selElBar+selShapeBar+selActions;
+}
+function fdSetCourt(elId,court){const el=fdFindGraphicEl(elId);if(!el)return;el.court=court;fdRenderGraphicEl(elId);}
+function fdAddIcon(elId,kind,label){
+  const el=fdFindGraphicEl(elId);if(!el)return;
+  el.elements=el.elements||[];
+  const id='fge'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+  el.elements.push({id,kind,x:50,y:LP_CY,rot:0,scale:1,label:label||'',color:'#111827'});
+  FD_SELECTED=elId;FD_GSEL={elId,kind:'el',id};
+  fdRenderGraphicEl(elId);
+}
+function fdArmDraw(elId,type){FD_SELECTED=elId;FD_GDRAW={elId,type};fdRenderGraphicEl(elId);}
+function fdGCanvasPointerDown(ev,elId){
+  ev.stopPropagation();
+  if(!can('content')||!FD_GDRAW||FD_GDRAW.elId!==elId)return;
+  const svg=ev.currentTarget;
+  const start=svgPoint(svg,ev.clientX,ev.clientY);
+  const startC=lpClamp(start.x,0,100),startCy=lpClamp(start.y,0,LP_CH);
+  const type=FD_GDRAW.type;
+  if(type==='dibujo'){
+    const pts=[{x:startC,y:startCy}];
+    const pathEl=document.createElementNS('http://www.w3.org/2000/svg','path');
+    pathEl.setAttribute('d',`M${startC},${startCy}`);pathEl.setAttribute('fill','none');pathEl.setAttribute('stroke','#c0392b');pathEl.setAttribute('stroke-width','0.8');pathEl.setAttribute('stroke-linecap','round');pathEl.setAttribute('stroke-linejoin','round');
+    svg.appendChild(pathEl);
+    const move=mv=>{const p=svgPoint(svg,mv.clientX,mv.clientY);pts.push({x:lpClamp(p.x,0,100),y:lpClamp(p.y,0,LP_CH)});pathEl.setAttribute('d','M'+pts.map(pt=>`${pt.x},${pt.y}`).join(' L'));};
+    const up=()=>{
+      document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',up);
+      const g=fdFindGraphicEl(elId);
+      if(g&&pts.length>1){g.shapes=g.shapes||[];g.shapes.push({id:'fgs'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),type:'dibujo',pts,color:'#c0392b',width:0.8});}
+      FD_GDRAW=null;
+      fdRenderGraphicEl(elId);
+    };
+    document.addEventListener('pointermove',move);document.addEventListener('pointerup',up);
+    return;
+  }
+  const isCurve=type==='flechaCurva';
+  const el=document.createElementNS('http://www.w3.org/2000/svg',isCurve?'path':'line');
+  if(isCurve){el.setAttribute('d',`M${startC},${startCy} Q${startC},${startCy} ${startC},${startCy}`);el.setAttribute('fill','none');el.setAttribute('marker-start','url(#lpArrow-c0392b)');el.setAttribute('marker-end','url(#lpArrow-c0392b)');}
+  else{
+    el.setAttribute('x1',startC);el.setAttribute('y1',startCy);el.setAttribute('x2',startC);el.setAttribute('y2',startCy);
+    if(type!=='linea')el.setAttribute('marker-end','url(#lpArrow-c0392b)');
+    if(type==='flechaDoble')el.setAttribute('marker-start','url(#lpArrow-c0392b)');
+  }
+  el.setAttribute('stroke','#c0392b');el.setAttribute('stroke-width','0.8');
+  if(type==='flechaPunteada')el.setAttribute('stroke-dasharray','1.6,1.2');
+  svg.appendChild(el);
+  const move=mv=>{
+    const p=svgPoint(svg,mv.clientX,mv.clientY);
+    const px=lpClamp(p.x,0,100),py=lpClamp(p.y,0,LP_CH);
+    if(isCurve){const {cx,cy}=lpCurveCtrl(startC,startCy,px,py);el.setAttribute('d',`M${startC},${startCy} Q${cx},${cy} ${px},${py}`);}
+    else{el.setAttribute('x2',px);el.setAttribute('y2',py);}
+  };
+  const up=mv=>{
+    document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',up);
+    const p=svgPoint(svg,mv.clientX,mv.clientY);
+    const g=fdFindGraphicEl(elId);
+    if(g){g.shapes=g.shapes||[];g.shapes.push({id:'fgs'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),type,x1:startC,y1:startCy,x2:lpClamp(p.x,0,100),y2:lpClamp(p.y,0,LP_CH),color:'#c0392b',width:0.8});}
+    FD_GDRAW=null;
+    fdRenderGraphicEl(elId);
+  };
+  document.addEventListener('pointermove',move);document.addEventListener('pointerup',up);
+}
+function fdGElPointerDown(ev,elId,subId){
+  ev.stopPropagation();
+  if(FD_GDRAW||!can('content'))return;
+  FD_SELECTED=elId;FD_GSEL={elId,kind:'el',id:subId};
+  const grp=ev.currentTarget,svg=grp.closest('svg');
+  const start=svgPoint(svg,ev.clientX,ev.clientY);
+  const g=fdFindGraphicEl(elId),subEl=g&&g.elements.find(x=>x.id===subId);
+  if(!subEl){fdRenderGraphicEl(elId);return;}
+  const startX=subEl.x,startY=subEl.y;
+  const move=mv=>{const p=svgPoint(svg,mv.clientX,mv.clientY);subEl.x=lpClamp(startX+(p.x-start.x),0,100);subEl.y=lpClamp(startY+(p.y-start.y),0,LP_CH);grp.setAttribute('transform',`translate(${subEl.x},${subEl.y}) rotate(${subEl.rot||0}) scale(${subEl.scale||1})`);};
+  const up=()=>{document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',up);fdRenderGraphicEl(elId);};
+  document.addEventListener('pointermove',move);document.addEventListener('pointerup',up);
+}
+function fdGShapePointerDown(ev,elId,shapeId){
+  ev.stopPropagation();
+  if(FD_GDRAW||!can('content'))return;
+  FD_SELECTED=elId;FD_GSEL={elId,kind:'shape',id:shapeId};
+  const grp=ev.currentTarget,svg=grp.closest('svg');
+  const start=svgPoint(svg,ev.clientX,ev.clientY);
+  const g=fdFindGraphicEl(elId),sh=g&&(g.shapes||[]).find(x=>x.id===shapeId);
+  if(!sh){fdRenderGraphicEl(elId);return;}
+  if(sh.type==='dibujo'){
+    const startPts=sh.pts.map(p=>({x:p.x,y:p.y}));
+    const xs=startPts.map(p=>p.x),ys=startPts.map(p=>p.y);
+    const minDx=-Math.min(...xs),maxDx=100-Math.max(...xs),minDy=-Math.min(...ys),maxDy=LP_CH-Math.max(...ys);
+    const move=mv=>{const p=svgPoint(svg,mv.clientX,mv.clientY);const dx=lpClamp(p.x-start.x,minDx,maxDx),dy=lpClamp(p.y-start.y,minDy,maxDy);sh.pts=startPts.map(pt=>({x:pt.x+dx,y:pt.y+dy}));fdRedrawShape(elId,shapeId);};
+    const up=()=>{document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',up);fdRenderGraphicEl(elId);};
+    document.addEventListener('pointermove',move);document.addEventListener('pointerup',up);
+    return;
+  }
+  const startX1=sh.x1,startY1=sh.y1,startX2=sh.x2,startY2=sh.y2;
+  const minDx=-Math.min(startX1,startX2),maxDx=100-Math.max(startX1,startX2),minDy=-Math.min(startY1,startY2),maxDy=LP_CH-Math.max(startY1,startY2);
+  const move=mv=>{const p=svgPoint(svg,mv.clientX,mv.clientY);const dx=lpClamp(p.x-start.x,minDx,maxDx),dy=lpClamp(p.y-start.y,minDy,maxDy);sh.x1=startX1+dx;sh.y1=startY1+dy;sh.x2=startX2+dx;sh.y2=startY2+dy;fdRedrawShape(elId,shapeId);};
+  const up=()=>{document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',up);fdRenderGraphicEl(elId);};
+  document.addEventListener('pointermove',move);document.addEventListener('pointerup',up);
+}
+function fdRedrawShape(elId,shapeId){
+  const g=fdFindGraphicEl(elId);if(!g)return;
+  const s=(g.shapes||[]).find(x=>x.id===shapeId);if(!s)return;
+  const node=document.getElementById('fdShape-'+shapeId);if(!node)return;
+  const sel=FD_GSEL&&FD_GSEL.elId===elId&&FD_GSEL.kind==='shape'&&FD_GSEL.id===shapeId;
+  node.innerHTML=lpShapeInnerSvg(s,sel);
+}
+function fdSetElColor(color){if(!FD_GSEL||FD_GSEL.kind!=='el')return;const g=fdFindGraphicEl(FD_GSEL.elId);if(!g)return;const e=g.elements.find(x=>x.id===FD_GSEL.id);if(!e)return;e.color=color;fdRenderGraphicEl(FD_GSEL.elId);}
+function fdRotateSel(delta){if(!FD_GSEL||FD_GSEL.kind!=='el')return;const g=fdFindGraphicEl(FD_GSEL.elId);if(!g)return;const e=g.elements.find(x=>x.id===FD_GSEL.id);if(!e)return;e.rot=((e.rot||0)+delta+360)%360;fdRenderGraphicEl(FD_GSEL.elId);}
+function fdScaleSel(delta){if(!FD_GSEL||FD_GSEL.kind!=='el')return;const g=fdFindGraphicEl(FD_GSEL.elId);if(!g)return;const e=g.elements.find(x=>x.id===FD_GSEL.id);if(!e)return;e.scale=Math.round(Math.max(0.4,Math.min(2.5,(e.scale||1)+delta))*100)/100;fdRenderGraphicEl(FD_GSEL.elId);}
+function fdSetShapeColor(color){if(!FD_GSEL||FD_GSEL.kind!=='shape')return;const g=fdFindGraphicEl(FD_GSEL.elId);if(!g)return;const s=(g.shapes||[]).find(x=>x.id===FD_GSEL.id);if(!s)return;s.color=color;fdRenderGraphicEl(FD_GSEL.elId);}
+function fdSetShapeWidth(val){if(!FD_GSEL||FD_GSEL.kind!=='shape')return;const g=fdFindGraphicEl(FD_GSEL.elId);if(!g)return;const s=(g.shapes||[]).find(x=>x.id===FD_GSEL.id);if(!s)return;s.width=Math.max(0.4,Math.min(2.2,parseFloat(val)||0.8));fdRedrawShape(FD_GSEL.elId,FD_GSEL.id);}
+function fdGDeleteSel(){
+  if(!FD_GSEL)return;
+  const g=fdFindGraphicEl(FD_GSEL.elId);if(!g)return;
+  if(FD_GSEL.kind==='el')g.elements=g.elements.filter(x=>x.id!==FD_GSEL.id);
+  else g.shapes=g.shapes.filter(x=>x.id!==FD_GSEL.id);
+  const elId=FD_GSEL.elId;FD_GSEL=null;
+  fdRenderGraphicEl(elId);
+}
+function fdGCopySel(){
+  if(!FD_GSEL)return;
+  const g=fdFindGraphicEl(FD_GSEL.elId);if(!g)return;
+  if(FD_GSEL.kind==='el'){const e=(g.elements||[]).find(x=>x.id===FD_GSEL.id);if(!e)return;FD_GCLIPBOARD={kind:'el',data:{...e}};}
+  else{const s=(g.shapes||[]).find(x=>x.id===FD_GSEL.id);if(!s)return;FD_GCLIPBOARD={kind:'shape',data:JSON.parse(JSON.stringify(s))};}
+}
+function fdGCutSel(){fdGCopySel();fdGDeleteSel();}
+function fdGPasteClipboard(elId){
+  if(!FD_GCLIPBOARD)return;
+  const g=fdFindGraphicEl(elId);if(!g)return;
+  if(FD_GCLIPBOARD.kind==='el'){
+    const src=FD_GCLIPBOARD.data,id='fge'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+    g.elements=g.elements||[];g.elements.push({...src,id,x:lpClamp((src.x||50)+5,0,100),y:lpClamp((src.y||LP_CY)+5,0,LP_CH)});
+    FD_GSEL={elId,kind:'el',id};
+  }else{
+    const src=FD_GCLIPBOARD.data,id='fgs'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+    g.shapes=g.shapes||[];
+    if(src.type==='dibujo')g.shapes.push({...src,id,pts:(src.pts||[]).map(p=>({x:lpClamp(p.x+5,0,100),y:lpClamp(p.y+5,0,LP_CH)}))});
+    else g.shapes.push({...src,id,x1:lpClamp((src.x1||10)+5,0,100),y1:lpClamp((src.y1||10)+5,0,LP_CH),x2:lpClamp((src.x2||90)+5,0,100),y2:lpClamp((src.y2||10)+5,0,LP_CH)});
+    FD_GSEL={elId,kind:'shape',id};
+  }
+  FD_SELECTED=elId;
+  fdRenderGraphicEl(elId);
+}
+document.addEventListener('keydown',e=>{
+  if(!FD_EDIT)return;
+  const ae=document.activeElement;
+  if(ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'||ae.isContentEditable))return;
+  if(e.ctrlKey||e.metaKey){
+    const k=(e.key||'').toLowerCase();
+    if(k==='c'){if(FD_GSEL){fdGCopySel();e.preventDefault();}else if(FD_SELECTED){fdCopySel();e.preventDefault();}}
+    else if(k==='v'){if(FD_GSEL&&FD_GCLIPBOARD){fdGPasteClipboard(FD_GSEL.elId);e.preventDefault();}else if(FD_CLIPBOARD){fdPasteClipboard();e.preventDefault();}}
+    return;
+  }
+  if(e.key==='Delete'||e.key==='Backspace'){
+    if(FD_GSEL){fdGDeleteSel();e.preventDefault();}
+    else if(FD_SELECTED){fdDeleteSel();e.preventDefault();}
+  }
+});
+function fdPrint(id){
+  const d=(FD_EDIT&&FD_EDIT.id===id)?FD_EDIT:FREEDOCS.find(x=>x.id===id);
+  if(!d){alert('No se encontró la hoja.');return;}
+  fdGeneratePDF(d);
+}
+function fdElPrintHTML(el){
+  const style=`left:${el.x}%;top:${el.y}%;width:${el.w}%;height:${el.h}%`;
+  if(el.type==='texto')return `<div class="fpel" style="${style}"><div class="fprte">${fmtRaw(el.html||'')}</div></div>`;
+  if(el.type==='tabla'){
+    const rows=el.rows||[];
+    const table=`<table class="fptable"><tbody>${rows.map(row=>`<tr>${row.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    return `<div class="fpel" style="${style}">${table}</div>`;
+  }
+  const shapesSvg=(el.shapes||[]).map(s=>{
+    if(s.type==='dibujo'){const pts=(s.pts||[]);if(pts.length<2)return '';const d='M'+pts.map(p=>`${p.x},${p.y}`).join(' L');return `<path d="${d}" fill="none" stroke="${s.color||'#c0392b'}" stroke-width="${s.width||0.9}" stroke-linecap="round" stroke-linejoin="round"/>`;}
+    const col=s.color||'#c0392b',w=s.width||0.9,mk=`url(#lppArrow-${lpColorId(col)})`;
+    if(s.type==='flechaCurva'){const c=lpCurveCtrl(s.x1,s.y1,s.x2,s.y2);return `<path d="M${s.x1},${s.y1} Q${c.cx},${c.cy} ${s.x2},${s.y2}" fill="none" stroke="${col}" stroke-width="${w}" marker-start="${mk}" marker-end="${mk}"/>`;}
+    const dash=s.type==='flechaPunteada'?' stroke-dasharray="1.6,1.2"':'';
+    const mEnd=s.type!=='linea'?` marker-end="${mk}"`:'';
+    const mStart=s.type==='flechaDoble'?` marker-start="${mk}"`:'';
+    return `<line x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}" stroke="${col}" stroke-width="${w}"${dash}${mEnd}${mStart}/>`;
+  }).join('');
+  const elsSvg=(el.elements||[]).map(e=>`<g transform="translate(${e.x},${e.y}) rotate(${e.rot||0}) scale(${e.scale||1})">${lpElGlyph(e.kind,e.color,e.label,e.id)}</g>`).join('');
+  const courtSvg=lpCourtBg(el.court,el.courtScale||1,el.courtWidth||1);
+  return `<div class="fpel" style="${style}"><svg viewBox="0 0 100 ${LP_CH}" preserveAspectRatio="none" style="width:100%;height:100%;display:block">${courtSvg}${shapesSvg}${elsSvg}</svg></div>`;
+}
+function fdGeneratePDF(d){
+  const w=window.open('','_blank');
+  if(!w){alert('Tu navegador bloqueó la ventana emergente. Permitila para generar el PDF.');return;}
+  const elsHtml=(d.elementos||[]).map(fdElPrintHTML).join('');
+  const safeTitle=String(d.nombre||'Hoja').replace(/[<>]/g,'');
+  const html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+esc(safeTitle)+'</title><style>'
+    +'@page{size:A4 portrait;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0}'
+    +'body{font-family:"Segoe UI",Arial,Helvetica,sans-serif;color:#26313a}'
+    +'#page{position:relative;width:210mm;height:297mm}'
+    +'.fpel{position:absolute;overflow:hidden}'
+    +'.fprte{font-size:12px;line-height:1.4;width:100%;height:100%;overflow:hidden}'
+    +'.fptable{border-collapse:collapse;width:100%;font-size:11px}'
+    +'.fptable td{border:1px solid #999;padding:3px 6px}'
+    +'</style></head><body>'
+    +'<svg width="0" height="0" style="position:absolute"><defs>'+LP_COLORS.map(c=>`<marker id="lppArrow-${lpColorId(c)}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="${c}"/></marker>`).join('')+'</defs></svg>'
+    +'<div id="page">'+elsHtml+'</div>'
+    +'<scr'+'ipt>window.onload=function(){setTimeout(function(){window.print();},350);};</scr'+'ipt>'
+    +'</body></html>';
+  w.document.write(html);
+  w.document.close();
+}
+
 async function renderMessages(){
   const post=document.getElementById('msgPost'),w=document.getElementById('msgsWrap');
   w.innerHTML='<div class="card empty"><p>Cargando…</p></div>';
@@ -2521,8 +2965,8 @@ function showTab(t){
   const top=document.querySelector('.tab[data-tab="'+t+'"]');
   if(top)top.classList.add('active');
   else{const sub=document.querySelector('.tabdrop button[data-tab="'+t+'"]');if(sub){const tt=sub.closest('.tabmenu').querySelector('.tabtop');if(tt)tt.classList.add('active');}}
-  ['alumnos','canchas','recuperaciones','historial','asistencia','competencias','estadisticas','ranking','informes','capacitaciones','evaluaciones','tecevals','planificaciones','comunicaciones','calendario','config','usuarios'].forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.style.display=x===t?'':'none';});
-  if(t==='canchas'){courtAttDate='';loadRegistros().then(renderCourts);}if(t==='asistencia')renderAtt();if(t==='usuarios')renderUsers();if(t==='alumnos')loadStats();if(t==='estadisticas')renderStatsPanel();if(t==='ranking')renderRanking();if(t==='informes')rptInit();if(t==='capacitaciones')loadTrainings();if(t==='evaluaciones')loadEvaluations();if(t==='tecevals')loadTecEvals();if(t==='config')loadStorageInfo();if(t==='planificaciones')showPlanSub(planSubTab);if(t==='comunicaciones')renderMessages();if(t==='calendario')renderCalendar();if(t==='recuperaciones')renderRecoveries();if(t==='competencias')renderCompetitions();if(t==='historial')renderChanges();
+  ['alumnos','canchas','recuperaciones','historial','asistencia','competencias','estadisticas','ranking','informes','capacitaciones','evaluaciones','tecevals','planificaciones','documentos','comunicaciones','calendario','config','usuarios'].forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.style.display=x===t?'':'none';});
+  if(t==='canchas'){courtAttDate='';loadRegistros().then(renderCourts);}if(t==='asistencia')renderAtt();if(t==='usuarios')renderUsers();if(t==='alumnos')loadStats();if(t==='estadisticas')renderStatsPanel();if(t==='ranking')renderRanking();if(t==='informes')rptInit();if(t==='capacitaciones')loadTrainings();if(t==='evaluaciones')loadEvaluations();if(t==='tecevals')loadTecEvals();if(t==='config')loadStorageInfo();if(t==='planificaciones')showPlanSub(planSubTab);if(t==='documentos')renderFreeDocs();if(t==='comunicaciones')renderMessages();if(t==='calendario')renderCalendar();if(t==='recuperaciones')renderRecoveries();if(t==='competencias')renderCompetitions();if(t==='historial')renderChanges();
 }
 function menuToggle(e,btn){e.stopPropagation();const d=btn.parentElement.querySelector('.tabdrop');const open=d.classList.contains('open');document.querySelectorAll('.tabdrop.open').forEach(x=>x.classList.remove('open'));if(!open)d.classList.add('open');}
 document.addEventListener('click',e=>{if(!e.target.closest('.tabmenu'))document.querySelectorAll('.tabdrop.open').forEach(d=>d.classList.remove('open'));});
@@ -3002,7 +3446,7 @@ function toggleDarkMode(){
 /* ===== Diseño: orden y visibilidad de pestañas ===== */
 const TAB_MANAGE_DOMAINS=[
   {key:'flat', label:'Fila principal', containerSel:'.tabs', anchorSel:'#menuEval', menuSel:null,
-    items:[{id:'asistencia',label:'Asistencia'},{id:'competencias',label:'Competencias'},{id:'planificaciones',label:'Planificaciones'}]},
+    items:[{id:'asistencia',label:'Asistencia'},{id:'competencias',label:'Competencias'},{id:'planificaciones',label:'Planificaciones'},{id:'documentos',label:'Documentos'}]},
   {key:'canchas', label:'Menú "Canchas ▾"', containerSel:'#canchasDrop', anchorSel:null, menuSel:'#menuCanchas',
     items:[{id:'canchas',label:'Distribución por cancha'},{id:'recuperaciones',label:'Recuperaciones e invitaciones'},{id:'historial',label:'Historial de cambios'}]},
   {key:'gestion', label:'Menú "Gestión ▾"', containerSel:'#gestionDrop', anchorSel:null, menuSel:'#menuGestion',
