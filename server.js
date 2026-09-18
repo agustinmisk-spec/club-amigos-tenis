@@ -223,7 +223,7 @@ const cleanEl = e => ({
 const cleanPt = p => ({ x: num(p && p.x, 0, 100, 0), y: num(p && p.y, 0, 100, 0) });
 const cleanShape = s => ({
   id: String((s && s.id) || '').slice(0, 40),
-  type: ['linea', 'flecha', 'flechaPunteada', 'flechaDoble', 'flechaCurva', 'dibujo'].includes(s && s.type) ? s.type : 'linea',
+  type: ['linea', 'flecha', 'flechaPunteada', 'flechaDoble', 'flechaCurva', 'dibujo', 'rectangulo', 'circulo', 'triangulo'].includes(s && s.type) ? s.type : 'linea',
   x1: num(s && s.x1, 0, 100, 10), y1: num(s && s.y1, 0, 100, 10),
   x2: num(s && s.x2, 0, 100, 90), y2: num(s && s.y2, 0, 100, 90),
   pts: Array.isArray(s && s.pts) ? s.pts.slice(0, 300).map(cleanPt) : [],
@@ -310,7 +310,7 @@ app.put('/api/library/:id', auth, need('planner'), async (req, res) => {
 app.delete('/api/library/:id', auth, need('planner'), async (req, res) => { await store.deleteLibraryItem(req.params.id); res.json({ ok: true }); });
 
 /* ---------------- Documentos libres (hoja en blanco: texto, tablas, gráficos) ---------------- */
-const cleanFreeCell = c => String(c == null ? '' : c).slice(0, 500);
+const cleanFreeCell = c => String(c == null ? '' : c).slice(0, 2000);
 const cleanFreeRow = r => Array.isArray(r) ? r.slice(0, 20).map(cleanFreeCell) : [];
 const cleanCancha = c => ({
   id: String((c && c.id) || '').slice(0, 40),
