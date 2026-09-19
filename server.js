@@ -321,7 +321,10 @@ const cleanFreeElement = e => {
     x: num(e && e.x, 0, 100, 10), y: num(e && e.y, 0, 100, 10),
     w: num(e && e.w, 2, 100, 30), h: num(e && e.h, 2, 100, 20)
   };
-  if (type === 'texto') return Object.assign(base, { html: String((e && e.html) || '').slice(0, 8000) });
+  if (type === 'texto') return Object.assign(base, {
+    html: String((e && e.html) || '').slice(0, 8000),
+    rot: num(e && e.rot, -360, 360, 0)
+  });
   if (type === 'tabla') return Object.assign(base, { rows: Array.isArray(e && e.rows) ? e.rows.slice(0, 30).map(cleanFreeRow) : [['', '']] });
   if (type === 'cancha') return Object.assign(base, {
     tipo: ['mini', 'full'].includes(e && e.tipo) ? e.tipo : 'mini',

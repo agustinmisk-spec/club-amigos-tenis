@@ -2540,7 +2540,11 @@ function fdElHTML(el){
   else if(el.type==='cancha')inner=fdCanchaInner(el);
   else if(el.type==='icono')inner=fdIconoInner(el);
   else inner=fdFormaInner(el);
-  const bodyStyle=el.type==='cancha'?' style="overflow:visible"':'';
+  const textRot=el.type==='texto'?(el.rot||0):0;
+  const bodyStyleParts=[];
+  if(el.type==='cancha'||textRot)bodyStyleParts.push('overflow:visible');
+  if(textRot)bodyStyleParts.push(`transform:rotate(${textRot}deg)`);
+  const bodyStyle=bodyStyleParts.length?` style="${bodyStyleParts.join(';')}"`:'';
   return `<div class="fd-el${sel?' sel':''}" id="fdEl-${el.id}" style="left:${el.x}%;top:${el.y}%;width:${el.w}%;height:${el.h}%" onpointerdown="fdElPointerDown(event,'${el.id}')">
     ${editable&&sel?`<div class="fd-toolbar"><span class="fd-grab">⠿ Arrastrar${FD_MULTISEL.size>1?' ('+FD_MULTISEL.size+')':''}</span><button type="button" onclick="fdCopySel()">📋</button><button type="button" onclick="fdDeleteSel()">🗑</button></div>`:''}
     <div class="fd-el-body"${bodyStyle}>${inner}</div>
@@ -2641,7 +2645,7 @@ function fdAddText(){
   if(!can('content'))return;
   const id=fdNewId('fde');
   FD_EDIT.elementos=FD_EDIT.elementos||[];
-  FD_EDIT.elementos.push({id,type:'texto',x:10,y:10,w:40,h:18,html:''});
+  FD_EDIT.elementos.push({id,type:'texto',x:10,y:10,w:40,h:18,html:'',rot:0});
   fdSelectOnly(id);
   fdRenderCanvas();
 }
@@ -2810,6 +2814,12 @@ function fdRotateCancha(delta){
   el.rot=((el.rot||0)+delta+360)%360;
   fdRenderOne(FD_SELECTED);
 }
+function fdRotateTexto(delta){
+  if(!FD_SELECTED||FD_MULTISEL.size>1)return;
+  const el=fdFindEl(FD_SELECTED);if(!el||el.type!=='texto')return;
+  el.rot=((el.rot||0)+delta+360)%360;
+  fdRenderOne(FD_SELECTED);
+}
 function fdSetCanchaWidth(val){
   if(!FD_SELECTED||FD_MULTISEL.size>1)return;
   const el=fdFindEl(FD_SELECTED);if(!el||el.type!=='cancha')return;
@@ -2851,9 +2861,10 @@ function fdToolbarHTML(){
   const hiliteSwatches=FD_HILITE_COLORS.map(c=>`<button type="button" class="fdswatch" style="background:${c}" title="Resaltar" onmousedown="fdHiliteClick(event,'${c}')"></button>`).join('')
     +`<button type="button" class="fdswatch" style="background:#fff;background-image:linear-gradient(to top left,transparent calc(50% - 1px),#c0392b,transparent calc(50% + 1px))" title="Sin resaltado" onmousedown="fdHiliteClick(event,'transparent')"></button>`;
   const isLineForma=singleEl&&singleEl.type==='forma'&&!['rectangulo','circulo','triangulo'].includes(singleEl.shapeType);
-  const contextBar=singleEl&&(singleEl.type==='icono'||singleEl.type==='forma'||singleEl.type==='cancha')?`<span class="fdsep"></span>
+  const contextBar=singleEl&&(singleEl.type==='icono'||singleEl.type==='forma'||singleEl.type==='cancha'||singleEl.type==='texto')?`<span class="fdsep"></span>
     ${singleEl.type==='icono'?`<button type="button" class="btn sm ghost" onclick="fdRotateIcon(-15)">⟲</button><button type="button" class="btn sm ghost" onclick="fdRotateIcon(15)">⟳</button>`:''}
     ${singleEl.type==='cancha'?`<button type="button" class="btn sm ghost" onclick="fdRotateCancha(-15)">⟲</button><button type="button" class="btn sm ghost" onclick="fdRotateCancha(15)">⟳</button><span class="small" style="color:var(--muted)">Ancho:</span><input type="range" min="0.5" max="2" step="0.05" value="${singleEl.wScale||1}" oninput="fdSetCanchaWidth(this.value)" style="width:80px">`:''}
+    ${singleEl.type==='texto'?`<button type="button" class="btn sm ghost" onclick="fdRotateTexto(-15)">⟲</button><button type="button" class="btn sm ghost" onclick="fdRotateTexto(15)">⟳</button>`:''}
     ${isLineForma?`<span class="small" style="color:var(--muted)">Grosor:</span><input type="range" min="0.4" max="2.2" step="0.1" value="${singleEl.width||0.8}" oninput="fdSetFormaWidth(this.value)" style="width:80px">`:''}
   `:'';
   return `
@@ -2909,7 +2920,10 @@ function fdShapePrintSvg(s){
 }
 function fdElPrintHTML(el){
   const style=`left:${el.x}%;top:${el.y}%;width:${el.w}%;height:${el.h}%`;
-  if(el.type==='texto')return `<div class="fpel" style="${style}"><div class="fprte">${fmtRaw(el.html||'')}</div></div>`;
+  if(el.type==='texto'){
+    const rot=el.rot||0;
+    return `<div class="fpel" style="${style}${rot?';overflow:visible':''}"><div class="fprte"${rot?` style="transform:rotate(${rot}deg)"`:''}>${fmtRaw(el.html||'')}</div></div>`;
+  }
   if(el.type==='tabla'){
     const rows=el.rows||[];
     const table=`<table class="fptable"><tbody>${rows.map(row=>`<tr>${row.map(c=>`<td>${fmtRaw(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
