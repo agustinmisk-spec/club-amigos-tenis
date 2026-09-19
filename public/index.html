@@ -378,6 +378,7 @@
   .fdgcanvas{width:100%;height:100%;display:block;background:#fff}
   .fdgcanvas-clear{width:100%;height:100%;display:block}
   .fdtoolbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;margin-bottom:8px;background:var(--card);border:1px solid var(--line);border-radius:8px}
+  .fd-sticky-toolbar{position:sticky;top:0;z-index:40;background:var(--bg);padding-top:10px;margin-top:-10px}
   .fdtoolbar .fdsep{width:1px;align-self:stretch;background:var(--line);margin:0 2px}
   .fddisabled{opacity:.4;pointer-events:none}
   .fddrop{position:relative}
@@ -2494,18 +2495,20 @@ function renderFdEditor(){
   const wrap=document.getElementById('fdWrap');if(!wrap)return;
   const editable=can('content');
   wrap.innerHTML=`
-    <div class="toolbar" style="margin-bottom:10px;flex-wrap:wrap">
-      <button class="btn sec sm" onclick="fdCancel()">← ${editable?'Cancelar':'Volver'}</button>
-      <input value="${esc(FD_EDIT.nombre||'')}" placeholder="Título de la hoja" oninput="FD_EDIT.nombre=this.value" style="flex:1;min-width:160px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-weight:600" ${editable?'':'disabled'}>
-      <div class="spacer"></div>
-      ${editable?'<button class="btn sm" onclick="fdSave()">💾 Guardar hoja</button>':''}
+    <div class="fd-sticky-toolbar">
+      <div class="toolbar" style="margin-bottom:10px;flex-wrap:wrap">
+        <button class="btn sec sm" onclick="fdCancel()">← ${editable?'Cancelar':'Volver'}</button>
+        <input value="${esc(FD_EDIT.nombre||'')}" placeholder="Título de la hoja" oninput="FD_EDIT.nombre=this.value" style="flex:1;min-width:160px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-weight:600" ${editable?'':'disabled'}>
+        <div class="spacer"></div>
+        ${editable?'<button class="btn sm" onclick="fdSave()">💾 Guardar hoja</button>':''}
+      </div>
+      ${editable?`<div class="toolbar" style="margin-bottom:8px;flex-wrap:wrap">
+        <button type="button" class="btn sm ghost" onclick="fdAddText()">+ Texto</button>
+        <button type="button" class="btn sm ghost" onclick="fdAddTable()">+ Tabla</button>
+        <span class="small" style="align-self:center;color:var(--muted)">Arrastrá los elementos para moverlos; usá la esquina para cambiar el tamaño.</span>
+      </div>
+      <div id="fdToolbar" class="fdtoolbar">${fdToolbarHTML()}</div>`:''}
     </div>
-    ${editable?`<div class="toolbar" style="margin-bottom:8px;flex-wrap:wrap">
-      <button type="button" class="btn sm ghost" onclick="fdAddText()">+ Texto</button>
-      <button type="button" class="btn sm ghost" onclick="fdAddTable()">+ Tabla</button>
-      <span class="small" style="align-self:center;color:var(--muted)">Arrastrá los elementos para moverlos; usá la esquina para cambiar el tamaño.</span>
-    </div>
-    <div id="fdToolbar" class="fdtoolbar">${fdToolbarHTML()}</div>`:''}
     <div id="fdCanvas" class="fdcanvas" onpointerdown="fdCanvasBgPointerDown(event)">${(FD_EDIT.elementos||[]).map(fdElHTML).join('')}</div>
   `;
 }
@@ -2536,7 +2539,7 @@ function fdElHTML(el){
 function fdElPointerDown(ev,id){
   ev.stopPropagation();
   const t=ev.target;
-  const isInner=!!(t.closest('[contenteditable="true"]')||t.closest('table')||t.closest('svg')||t.closest('button')||t.closest('input')||t.closest('.fd-resize'));
+  const isInner=!!(t.closest('[contenteditable="true"]')||t.closest('table')||t.closest('button')||t.closest('input')||t.closest('.fd-resize'));
   const isControl=!!(t.closest('button')||t.closest('input')||t.closest('.fd-resize'));
   const ctrl=ev.ctrlKey||ev.metaKey;
   if(ctrl&&!isControl){
