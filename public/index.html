@@ -2409,7 +2409,7 @@ async function renderFreeDocs(){
 function renderFdList(){
   const wrap=document.getElementById('fdWrap');if(!wrap)return;
   const editable=can('content');
-  const listHtml=FREEDOCS.length?`<div class="feed">${FREEDOCS.map(d=>`<div class="item"><div class="top"><span class="ti">📝 ${esc(d.nombre||'Sin título')}</span><span>${editable?`<button class="att-btn" title="Eliminar" onclick="fdDelete('${d.id}')">🗑</button> `:''}<button class="btn sec sm" onclick="fdPrint('${d.id}')">🖨️ Imprimir</button> <button class="btn sec sm" onclick="fdOpen('${d.id}')">${editable?'Editar':'Ver'}</button></span></div><div class="meta2">${esc(fmtFecha(d.fecha))} · ${esc(d.autor||'')} · ${(d.elementos||[]).length} elemento(s)</div></div>`).join('')}</div>`:'<div class="card empty"><div class="big">📝</div><p>Todavía no hay hojas creadas.</p></div>';
+  const listHtml=FREEDOCS.length?`<div class="feed">${FREEDOCS.map(d=>`<div class="item"><div class="top"><span class="ti">📝 ${esc(d.nombre||'Sin título')}</span><span>${editable?`<button class="att-btn" title="Eliminar" onclick="fdDelete('${d.id}')">🗑</button> `:''}<button class="btn sec sm" onclick="fdPrint('${d.id}')">🖨️ Imprimir</button> ${editable?`<button class="btn sec sm" title="Duplicar" onclick="fdDuplicate('${d.id}')">⧉ Duplicar</button> `:''}<button class="btn sec sm" onclick="fdOpen('${d.id}')">${editable?'Editar':'Ver'}</button></span></div><div class="meta2">${esc(fmtFecha(d.fecha))} · ${esc(d.autor||'')} · ${(d.elementos||[]).length} elemento(s)</div></div>`).join('')}</div>`:'<div class="card empty"><div class="big">📝</div><p>Todavía no hay hojas creadas.</p></div>';
   wrap.innerHTML=`<div class="toolbar" style="margin-bottom:10px">${editable?'<button class="btn" onclick="fdNew()">+ Nueva hoja</button>':''}<div class="spacer"></div></div>${listHtml}`;
 }
 function fdNew(){
@@ -2440,6 +2440,17 @@ async function fdDelete(id){
   if(!can('content'))return;
   if(!confirm('¿Eliminar esta hoja?'))return;
   try{await api('DELETE','/api/freedocs/'+id);FREEDOCS=FREEDOCS.filter(x=>x.id!==id);renderFdList();}catch(e){alert(e.message);}
+}
+async function fdDuplicate(id){
+  if(!can('content'))return;
+  const d=FREEDOCS.find(x=>x.id===id);if(!d)return;
+  const elementos=fdMigrateElements(JSON.parse(JSON.stringify(d.elementos||[])));
+  const body={nombre:(d.nombre||'Sin título')+' (copia)',elementos};
+  try{
+    const saved=await api('POST','/api/freedocs',body);
+    FREEDOCS.unshift(saved);
+    renderFdList();
+  }catch(e){alert(e.message);}
 }
 function fdFindEl(id){return FD_EDIT&&(FD_EDIT.elementos||[]).find(x=>x.id===id);}
 function fdNewId(pfx){return pfx+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
