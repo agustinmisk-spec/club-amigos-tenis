@@ -366,6 +366,7 @@
   html[data-theme="dark"] .attdot.none{border-color:var(--muted)}
   html[data-theme="dark"] .login-ov{background:linear-gradient(135deg,#0d1a2e,#070d17)}
   .fdcanvas{position:relative;width:100%;max-width:860px;aspect-ratio:210/297;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);overflow:hidden;margin:0 auto;touch-action:none}
+  .fdcanvas.horizontal{max-width:1100px;aspect-ratio:297/210}
   .fd-el{position:absolute;box-sizing:border-box;min-width:16px;min-height:16px}
   .fd-el-body{width:100%;height:100%;overflow:auto;padding:2px}
   .fd-el .rtewrap,.fd-el .rte{height:100%}
@@ -427,7 +428,7 @@
   <button class="tab" data-tab="asistencia" onclick="showTab('asistencia')">Asistencia</button>
   <button class="tab" data-tab="competencias" onclick="showTab('competencias')">Competencias</button>
   <button class="tab" data-tab="planificaciones" onclick="showTab('planificaciones')">Planificaciones</button>
-  <button class="tab" data-tab="documentos" onclick="showTab('documentos')">Documentos</button>
+  <button class="tab" data-tab="documentos" onclick="showTab('documentos')">Pizarra+</button>
   <div class="tabmenu" id="menuEval">
     <button class="tab tabtop" onclick="menuToggle(event,this)">Evaluaciones ▾</button>
     <div class="tabdrop" id="evalPeriodDrop"></div>
@@ -2406,28 +2407,75 @@ async function renderFreeDocs(){
   try{FREEDOCS=await api('GET','/api/freedocs');}catch(e){wrap.innerHTML='<div class="card empty"><p>No se pudo cargar.</p></div>';return;}
   renderFdList();
 }
+function fdDocPages(d){
+  const raw=Array.isArray(d&&d.paginas)&&d.paginas.length?d.paginas:[{elementos:(d&&d.elementos)||[]}];
+  return raw.map(p=>({elementos:fdMigrateElements(p.elementos||[])}));
+}
+function fdDocOrientacion(d){return (d&&d.orientacion)==='horizontal'?'horizontal':'vertical';}
 function renderFdList(){
   const wrap=document.getElementById('fdWrap');if(!wrap)return;
   const editable=can('content');
-  const listHtml=FREEDOCS.length?`<div class="feed">${FREEDOCS.map(d=>`<div class="item"><div class="top"><span class="ti">📝 ${esc(d.nombre||'Sin título')}</span><span>${editable?`<button class="att-btn" title="Eliminar" onclick="fdDelete('${d.id}')">🗑</button> `:''}<button class="btn sec sm" onclick="fdPrint('${d.id}')">🖨️ Imprimir</button> ${editable?`<button class="btn sec sm" title="Duplicar" onclick="fdDuplicate('${d.id}')">⧉ Duplicar</button> `:''}<button class="btn sec sm" onclick="fdOpen('${d.id}')">${editable?'Editar':'Ver'}</button></span></div><div class="meta2">${esc(fmtFecha(d.fecha))} · ${esc(d.autor||'')} · ${(d.elementos||[]).length} elemento(s)</div></div>`).join('')}</div>`:'<div class="card empty"><div class="big">📝</div><p>Todavía no hay hojas creadas.</p></div>';
+  const listHtml=FREEDOCS.length?`<div class="feed">${FREEDOCS.map(d=>{
+    const pages=fdDocPages(d);
+    const totalEl=pages.reduce((s,p)=>s+p.elementos.length,0);
+    return `<div class="item"><div class="top"><span class="ti">📝 ${esc(d.nombre||'Sin título')}</span><span>${editable?`<button class="att-btn" title="Eliminar" onclick="fdDelete('${d.id}')">🗑</button> `:''}<button class="btn sec sm" onclick="fdPrint('${d.id}')">🖨️ Imprimir</button> ${editable?`<button class="btn sec sm" title="Duplicar" onclick="fdDuplicate('${d.id}')">⧉ Duplicar</button> `:''}<button class="btn sec sm" onclick="fdOpen('${d.id}')">${editable?'Editar':'Ver'}</button></span></div><div class="meta2">${esc(fmtFecha(d.fecha))} · ${esc(d.autor||'')} · ${fdDocOrientacion(d)==='horizontal'?'Horizontal':'Vertical'} · ${pages.length} página(s) · ${totalEl} elemento(s)</div></div>`;
+  }).join('')}</div>`:'<div class="card empty"><div class="big">📝</div><p>Todavía no hay hojas creadas.</p></div>';
   wrap.innerHTML=`<div class="toolbar" style="margin-bottom:10px">${editable?'<button class="btn" onclick="fdNew()">+ Nueva hoja</button>':''}<div class="spacer"></div></div>${listHtml}`;
 }
+function fdSyncPage(){if(FD_EDIT&&FD_EDIT.paginas)FD_EDIT.paginas[FD_EDIT.pageIdx].elementos=FD_EDIT.elementos;}
 function fdNew(){
   if(!can('content'))return;
-  FD_EDIT={id:null,nombre:'',elementos:[]};FD_SELECTED=null;FD_MULTISEL=new Set();FD_DRAW=null;
+  FD_EDIT={id:null,nombre:'',orientacion:'vertical',paginas:[{elementos:[]}],pageIdx:0};
+  FD_EDIT.elementos=FD_EDIT.paginas[0].elementos;
+  FD_SELECTED=null;FD_MULTISEL=new Set();FD_DRAW=null;
   renderFdEditor();
 }
 function fdOpen(id){
   const d=FREEDOCS.find(x=>x.id===id);if(!d)return;
-  FD_EDIT=JSON.parse(JSON.stringify(d));
-  FD_EDIT.elementos=fdMigrateElements(FD_EDIT.elementos);
+  const clone=JSON.parse(JSON.stringify(d));
+  FD_EDIT={id:clone.id,nombre:clone.nombre,orientacion:fdDocOrientacion(clone),paginas:fdDocPages(clone),pageIdx:0};
+  FD_EDIT.elementos=FD_EDIT.paginas[0].elementos;
   FD_SELECTED=null;FD_MULTISEL=new Set();FD_DRAW=null;
   renderFdEditor();
 }
 function fdCancel(){FD_EDIT=null;FD_SELECTED=null;FD_MULTISEL=new Set();FD_DRAW=null;renderFdList();}
+function fdSetOrientation(o){
+  if(!can('content')||!FD_EDIT)return;
+  FD_EDIT.orientacion=o==='horizontal'?'horizontal':'vertical';
+  renderFdEditor();
+}
+function fdGoToPage(idx){
+  if(!FD_EDIT||!FD_EDIT.paginas[idx]||idx===FD_EDIT.pageIdx)return;
+  fdSyncPage();
+  FD_EDIT.pageIdx=idx;
+  FD_EDIT.elementos=FD_EDIT.paginas[idx].elementos;
+  FD_SELECTED=null;FD_MULTISEL=new Set();FD_DRAW=null;
+  renderFdEditor();
+}
+function fdAddPage(){
+  if(!can('content')||!FD_EDIT)return;
+  fdSyncPage();
+  FD_EDIT.paginas.push({elementos:[]});
+  FD_EDIT.pageIdx=FD_EDIT.paginas.length-1;
+  FD_EDIT.elementos=FD_EDIT.paginas[FD_EDIT.pageIdx].elementos;
+  FD_SELECTED=null;FD_MULTISEL=new Set();FD_DRAW=null;
+  renderFdEditor();
+}
+function fdDeletePage(idx){
+  if(!can('content')||!FD_EDIT||FD_EDIT.paginas.length<=1)return;
+  if(!confirm('¿Eliminar esta página?'))return;
+  fdSyncPage();
+  FD_EDIT.paginas.splice(idx,1);
+  const newIdx=Math.min(FD_EDIT.pageIdx>idx?FD_EDIT.pageIdx-1:FD_EDIT.pageIdx,FD_EDIT.paginas.length-1);
+  FD_EDIT.pageIdx=newIdx;
+  FD_EDIT.elementos=FD_EDIT.paginas[newIdx].elementos;
+  FD_SELECTED=null;FD_MULTISEL=new Set();FD_DRAW=null;
+  renderFdEditor();
+}
 async function fdSave(){
   if(!can('content'))return;
-  const body={nombre:FD_EDIT.nombre||'Sin título',elementos:FD_EDIT.elementos||[]};
+  fdSyncPage();
+  const body={nombre:FD_EDIT.nombre||'Sin título',orientacion:FD_EDIT.orientacion==='horizontal'?'horizontal':'vertical',paginas:FD_EDIT.paginas.map(p=>({elementos:p.elementos||[]}))};
   try{
     const saved=FD_EDIT.id?await api('PUT','/api/freedocs/'+FD_EDIT.id,body):await api('POST','/api/freedocs',body);
     if(FD_EDIT.id){const i=FREEDOCS.findIndex(x=>x.id===FD_EDIT.id);if(i>=0)FREEDOCS[i]=saved;}
@@ -2444,8 +2492,8 @@ async function fdDelete(id){
 async function fdDuplicate(id){
   if(!can('content'))return;
   const d=FREEDOCS.find(x=>x.id===id);if(!d)return;
-  const elementos=fdMigrateElements(JSON.parse(JSON.stringify(d.elementos||[])));
-  const body={nombre:(d.nombre||'Sin título')+' (copia)',elementos};
+  const paginas=fdDocPages(JSON.parse(JSON.stringify(d)));
+  const body={nombre:(d.nombre||'Sin título')+' (copia)',orientacion:fdDocOrientacion(d),paginas};
   try{
     const saved=await api('POST','/api/freedocs',body);
     FREEDOCS.unshift(saved);
@@ -2505,6 +2553,8 @@ function fdMigrateElements(elementos){
 function renderFdEditor(){
   const wrap=document.getElementById('fdWrap');if(!wrap)return;
   const editable=can('content');
+  const orient=FD_EDIT.orientacion==='horizontal'?'horizontal':'vertical';
+  const pageTabs=FD_EDIT.paginas.map((p,i)=>`<button type="button" class="btn sm ${i===FD_EDIT.pageIdx?'':'ghost'}" onclick="fdGoToPage(${i})">${i+1}</button>`).join('');
   wrap.innerHTML=`
     <div class="fd-sticky-toolbar">
       <div class="toolbar" style="margin-bottom:10px;flex-wrap:wrap">
@@ -2513,6 +2563,14 @@ function renderFdEditor(){
         <div class="spacer"></div>
         ${editable?'<button class="btn sm" onclick="fdSave()">💾 Guardar hoja</button>':''}
       </div>
+      <div class="toolbar" style="margin-bottom:8px;flex-wrap:wrap;gap:6px">
+        ${editable?`<span class="small" style="color:var(--muted)">Formato:</span>
+        <button type="button" class="btn sm ${orient==='vertical'?'':'ghost'}" onclick="fdSetOrientation('vertical')">📄 Vertical</button>
+        <button type="button" class="btn sm ${orient==='horizontal'?'':'ghost'}" onclick="fdSetOrientation('horizontal')">🖥️ Horizontal</button>`:''}
+        <span class="small" style="color:var(--muted);margin-left:${editable?'10px':'0'}">Páginas:</span>
+        ${pageTabs}
+        ${editable?`<button type="button" class="btn sec sm" onclick="fdAddPage()" title="Agregar página">+ Página</button>${FD_EDIT.paginas.length>1?`<button type="button" class="att-btn" title="Eliminar página actual" onclick="fdDeletePage(${FD_EDIT.pageIdx})">🗑</button>`:''}`:''}
+      </div>
       ${editable?`<div class="toolbar" style="margin-bottom:8px;flex-wrap:wrap">
         <button type="button" class="btn sm ghost" onclick="fdAddText()">+ Texto</button>
         <button type="button" class="btn sm ghost" onclick="fdAddTable()">+ Tabla</button>
@@ -2520,7 +2578,7 @@ function renderFdEditor(){
       </div>
       <div id="fdToolbar" class="fdtoolbar">${fdToolbarHTML()}</div>`:''}
     </div>
-    <div id="fdCanvas" class="fdcanvas" onpointerdown="fdCanvasBgPointerDown(event)">${(FD_EDIT.elementos||[]).map(fdElHTML).join('')}</div>
+    <div id="fdCanvas" class="fdcanvas${orient==='horizontal'?' horizontal':''}" onpointerdown="fdCanvasBgPointerDown(event)">${(FD_EDIT.elementos||[]).map(fdElHTML).join('')}</div>
   `;
 }
 function fdRenderCanvas(){const wrap=document.getElementById('fdCanvas');if(!wrap)return;wrap.innerHTML=(FD_EDIT.elementos||[]).map(fdElHTML).join('');fdRenderToolbar();}
@@ -2904,7 +2962,8 @@ document.addEventListener('click',e=>{
 function fdPrint(id){
   const raw=(FD_EDIT&&FD_EDIT.id===id)?FD_EDIT:FREEDOCS.find(x=>x.id===id);
   if(!raw){alert('No se encontró la hoja.');return;}
-  fdGeneratePDF(Object.assign({},raw,{elementos:fdMigrateElements(raw.elementos)}));
+  if(FD_EDIT&&FD_EDIT.id===id)fdSyncPage();
+  fdGeneratePDF({nombre:raw.nombre,orientacion:fdDocOrientacion(raw),paginas:fdDocPages(raw)});
 }
 function fdShapePrintSvg(s){
   if(s.type==='dibujo'){const pts=(s.pts||[]);if(pts.length<2)return '';const d='M'+pts.map(p=>`${p.x},${p.y}`).join(' L');return `<path d="${d}" fill="none" stroke="${s.color||'#c0392b'}" stroke-width="${s.width||0.9}" stroke-linecap="round" stroke-linejoin="round"/>`;}
@@ -2945,19 +3004,23 @@ function fdElPrintHTML(el){
 function fdGeneratePDF(d){
   const w=window.open('','_blank');
   if(!w){alert('Tu navegador bloqueó la ventana emergente. Permitila para generar el PDF.');return;}
-  const elsHtml=(d.elementos||[]).map(fdElPrintHTML).join('');
+  const landscape=fdDocOrientacion(d)==='horizontal';
+  const pages=fdDocPages(d);
+  const pageW=landscape?'297mm':'210mm',pageH=landscape?'210mm':'297mm';
+  const pagesHtml=pages.map(p=>'<div class="page">'+p.elementos.map(fdElPrintHTML).join('')+'</div>').join('');
   const safeTitle=String(d.nombre||'Hoja').replace(/[<>]/g,'');
   const html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+esc(safeTitle)+'</title><style>'
-    +'@page{size:A4 portrait;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0}'
+    +`@page{size:${pageW} ${pageH};margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0}`
     +'body{font-family:"Segoe UI",Arial,Helvetica,sans-serif;color:#26313a}'
-    +'#page{position:relative;width:210mm;height:297mm}'
+    +`.page{position:relative;width:${pageW};height:${pageH};overflow:hidden;page-break-after:always}`
+    +'.page:last-child{page-break-after:auto}'
     +'.fpel{position:absolute;overflow:hidden}'
     +'.fprte{font-size:12px;line-height:1.4;width:100%;height:100%;overflow:hidden}'
     +'.fptable{border-collapse:collapse;width:100%;font-size:11px}'
     +'.fptable td{border:1px solid #999;padding:3px 6px}'
     +'</style></head><body>'
     +'<svg width="0" height="0" style="position:absolute"><defs>'+LP_COLORS.map(c=>`<marker id="lppArrow-${lpColorId(c)}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="${c}"/></marker>`).join('')+'</defs></svg>'
-    +'<div id="page">'+elsHtml+'</div>'
+    +pagesHtml
     +'<scr'+'ipt>window.onload=function(){setTimeout(function(){window.print();},350);};</scr'+'ipt>'
     +'</body></html>';
   w.document.write(html);
@@ -3631,7 +3694,7 @@ function toggleDarkMode(){
 /* ===== Diseño: orden y visibilidad de pestañas ===== */
 const TAB_MANAGE_DOMAINS=[
   {key:'flat', label:'Fila principal', containerSel:'.tabs', anchorSel:'#menuEval', menuSel:null,
-    items:[{id:'asistencia',label:'Asistencia'},{id:'competencias',label:'Competencias'},{id:'planificaciones',label:'Planificaciones'},{id:'documentos',label:'Documentos'}]},
+    items:[{id:'asistencia',label:'Asistencia'},{id:'competencias',label:'Competencias'},{id:'planificaciones',label:'Planificaciones'},{id:'documentos',label:'Pizarra+'}]},
   {key:'canchas', label:'Menú "Canchas ▾"', containerSel:'#canchasDrop', anchorSel:null, menuSel:'#menuCanchas',
     items:[{id:'canchas',label:'Distribución por cancha'},{id:'recuperaciones',label:'Recuperaciones e invitaciones'},{id:'historial',label:'Historial de cambios'}]},
   {key:'gestion', label:'Menú "Gestión ▾"', containerSel:'#gestionDrop', anchorSel:null, menuSel:'#menuGestion',

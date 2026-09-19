@@ -347,9 +347,13 @@ const cleanFreeElement = e => {
     width: num(e && e.width, 0.4, 2.2, 0.8)
   });
 };
+const cleanFreePage = p => ({ elementos: Array.isArray(p && p.elementos) ? p.elementos.slice(0, 80).map(cleanFreeElement) : [] });
 const cleanFreeDoc = b => ({
   nombre: String((b && b.nombre) || '').slice(0, 150),
-  elementos: Array.isArray(b && b.elementos) ? b.elementos.slice(0, 80).map(cleanFreeElement) : []
+  orientacion: (b && b.orientacion) === 'horizontal' ? 'horizontal' : 'vertical',
+  paginas: Array.isArray(b && b.paginas) && b.paginas.length
+    ? b.paginas.slice(0, 30).map(cleanFreePage)
+    : [cleanFreePage({ elementos: b && b.elementos })]
 });
 app.get('/api/freedocs', auth, async (req, res) => { res.json(await store.listFreeDocs()); });
 app.post('/api/freedocs', auth, need('content'), async (req, res) => {
