@@ -1936,12 +1936,20 @@ function lpAddElement(blockId,graphId,kind,label){
   lpRenderGraphic(blockId,graphId);
 }
 function lpArmDraw(blockId,graphId,type){LP_DRAW={blockId,graphId,type};lpRenderGraphic(blockId,graphId);}
-function lpCourtLines(x,y,w,h){
-  const col='#8fae8f',inCol='#c3d6c3';
+function lpTint(hex,ratio){
+  const h=String(hex||'').replace('#','');
+  const full=h.length===3?h.split('').map(c=>c+c).join(''):h;
+  const r=parseInt(full.substr(0,2),16),g=parseInt(full.substr(2,2),16),b=parseInt(full.substr(4,2),16);
+  if(!Number.isFinite(r)||!Number.isFinite(g)||!Number.isFinite(b))return hex;
+  const mix=c=>Math.round(c+(255-c)*ratio);
+  return '#'+[mix(r),mix(g),mix(b)].map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+function lpCourtLines(x,y,w,h,color){
+  const col=color||'#8fae8f',inCol=color?lpTint(color,0.55):'#c3d6c3',fillCol=color?lpTint(color,0.85):'#eaf3ea';
   const inset=w*0.125,sx1=x+inset,sx2=x+w-inset;
   const netY=y+h/2,off=(h/2)*0.5385,sy1=netY-off,sy2=netY+off;
   const midx=x+w/2;
-  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#eaf3ea" stroke="${col}" stroke-width="0.6"/>
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fillCol}" stroke="${col}" stroke-width="0.6"/>
     <line x1="${sx1}" y1="${y}" x2="${sx1}" y2="${y+h}" stroke="${inCol}" stroke-width="0.32"/>
     <line x1="${sx2}" y1="${y}" x2="${sx2}" y2="${y+h}" stroke="${inCol}" stroke-width="0.32"/>
     <line x1="${x}" y1="${netY}" x2="${x+w}" y2="${netY}" stroke="${col}" stroke-width="0.7"/>
@@ -1951,13 +1959,13 @@ function lpCourtLines(x,y,w,h){
     <line x1="${midx-1.1}" y1="${y}" x2="${midx+1.1}" y2="${y}" stroke="${col}" stroke-width="0.5"/>
     <line x1="${midx-1.1}" y1="${y+h}" x2="${midx+1.1}" y2="${y+h}" stroke="${col}" stroke-width="0.5"/>`;
 }
-function lpMiniCourtLines(x,y,w,h){
-  const col='#8fae8f';
+function lpMiniCourtLines(x,y,w,h,color){
+  const col=color||'#8fae8f',fillCol=color?lpTint(color,0.85):'#eaf3ea';
   const topH=h*0.13,botH=h*0.13,midH=h-topH-botH;
   const midY0=y+topH,midY1=y+h-botH,netY=midY0+midH/2,midx=x+w/2,ext=w*0.28;
-  return `<rect x="${x}" y="${y}" width="${w}" height="${topH}" fill="#eaf3ea" stroke="${col}" stroke-width="0.6"/>
-    <rect x="${x}" y="${midY0}" width="${w}" height="${midH}" fill="#eaf3ea" stroke="${col}" stroke-width="0.6"/>
-    <rect x="${x}" y="${midY1}" width="${w}" height="${botH}" fill="#eaf3ea" stroke="${col}" stroke-width="0.6"/>
+  return `<rect x="${x}" y="${y}" width="${w}" height="${topH}" fill="${fillCol}" stroke="${col}" stroke-width="0.6"/>
+    <rect x="${x}" y="${midY0}" width="${w}" height="${midH}" fill="${fillCol}" stroke="${col}" stroke-width="0.6"/>
+    <rect x="${x}" y="${midY1}" width="${w}" height="${botH}" fill="${fillCol}" stroke="${col}" stroke-width="0.6"/>
     <line x1="${midx}" y1="${midY0}" x2="${midx}" y2="${midY1}" stroke="${col}" stroke-width="0.45"/>
     <line x1="${x-ext}" y1="${netY}" x2="${x+w+ext}" y2="${netY}" stroke="${col}" stroke-width="0.7"/>`;
 }
@@ -2447,7 +2455,7 @@ function fdMigrateGrafico(el){
     const s=Math.max(0.4,Math.min(2,c.scale||1)),ws=Math.max(0.5,Math.min(2.2,c.width||1));
     const dims=lpCourtDims(c.tipo==='full'?22:13,c.tipo==='full'?47.7:36,s,ws);
     const box=toPage(c.x-dims.w/2,c.y-dims.h/2,dims.w,dims.h);
-    out.push({id:fdNewId('fde'),type:'cancha',x:box.x,y:box.y,w:box.w,h:box.h,tipo:c.tipo||'mini'});
+    out.push({id:fdNewId('fde'),type:'cancha',x:box.x,y:box.y,w:box.w,h:box.h,tipo:c.tipo||'mini',wScale:1,rot:0,color:null});
   });
   (el.elements||[]).forEach(e=>{
     const sc=e.scale||1,lw=9*sc,lh=9*sc;
@@ -2518,9 +2526,10 @@ function fdElHTML(el){
   else if(el.type==='cancha')inner=fdCanchaInner(el);
   else if(el.type==='icono')inner=fdIconoInner(el);
   else inner=fdFormaInner(el);
+  const bodyStyle=el.type==='cancha'?' style="overflow:visible"':'';
   return `<div class="fd-el${sel?' sel':''}" id="fdEl-${el.id}" style="left:${el.x}%;top:${el.y}%;width:${el.w}%;height:${el.h}%" onpointerdown="fdElPointerDown(event,'${el.id}')">
     ${editable&&sel?`<div class="fd-toolbar"><span class="fd-grab">⠿ Arrastrar${FD_MULTISEL.size>1?' ('+FD_MULTISEL.size+')':''}</span><button type="button" onclick="fdCopySel()">📋</button><button type="button" onclick="fdDeleteSel()">🗑</button></div>`:''}
-    <div class="fd-el-body">${inner}</div>
+    <div class="fd-el-body"${bodyStyle}>${inner}</div>
     ${editable&&sel?`<div class="fd-resize" onpointerdown="fdResizeStart(event,'${el.id}')"></div>`:''}
   </div>`;
 }
@@ -2655,9 +2664,12 @@ function fdTableDelRow(id){const el=fdFindEl(id);if(!el||el.rows.length<=1)retur
 function fdTableDelCol(id){const el=fdFindEl(id);if(!el||!el.rows[0]||el.rows[0].length<=1)return;el.rows.forEach(r=>r.pop());fdRenderOne(id);}
 function fdCanchaInner(el){
   const full=el.tipo==='full';
-  const vw=full?22:13,vh=full?47.7:36;
-  const draw=full?lpCourtLines(0,0,vw,vh):lpMiniCourtLines(0,0,vw,vh);
-  return `<svg viewBox="0 0 ${vw} ${vh}" preserveAspectRatio="xMidYMid meet" class="fdgcanvas">${draw}</svg>`;
+  const baseVw=full?22:13,vh=full?47.7:36;
+  const wScale=Math.max(0.5,Math.min(2,el.wScale||1));
+  const vw=baseVw*wScale;
+  const draw=full?lpCourtLines(0,0,vw,vh,el.color):lpMiniCourtLines(0,0,vw,vh,el.color);
+  const rot=el.rot||0;
+  return `<svg viewBox="0 0 ${vw} ${vh}" preserveAspectRatio="xMidYMid meet" class="fdgcanvas"${rot?` style="transform:rotate(${rot}deg)"`:''}>${draw}</svg>`;
 }
 function fdIconoInner(el){
   return `<svg viewBox="-6 -6 12 12" preserveAspectRatio="xMidYMid meet" class="fdgcanvas-clear"><g transform="rotate(${el.rot||0})">${lpElGlyph(el.kind,el.color,el.label,el.id)}</g></svg>`;
@@ -2672,7 +2684,7 @@ function fdAddCanchaTop(tipo){
   const id=fdNewId('fde');
   const dims=tipo==='full'?{w:30,h:65}:{w:20,h:55};
   FD_EDIT.elementos=FD_EDIT.elementos||[];
-  FD_EDIT.elementos.push({id,type:'cancha',x:10,y:10,w:dims.w,h:dims.h,tipo});
+  FD_EDIT.elementos.push({id,type:'cancha',x:10,y:10,w:dims.w,h:dims.h,tipo,wScale:1,rot:0,color:null});
   fdSelectOnly(id);
   fdRenderCanvas();
 }
@@ -2778,6 +2790,19 @@ function fdSetFormaWidth(val){
   const node=document.querySelector(`#fdEl-${el.id} svg`);
   if(node){const s={type:el.shapeType,x1:el.x1,y1:el.y1,x2:el.x2,y2:el.y2,pts:el.pts,color:el.color,width:el.width};node.innerHTML=lpShapeInnerSvg(s,true);}
 }
+function fdRotateCancha(delta){
+  if(!FD_SELECTED||FD_MULTISEL.size>1)return;
+  const el=fdFindEl(FD_SELECTED);if(!el||el.type!=='cancha')return;
+  el.rot=((el.rot||0)+delta+360)%360;
+  fdRenderOne(FD_SELECTED);
+}
+function fdSetCanchaWidth(val){
+  if(!FD_SELECTED||FD_MULTISEL.size>1)return;
+  const el=fdFindEl(FD_SELECTED);if(!el||el.type!=='cancha')return;
+  el.wScale=Math.max(0.5,Math.min(2,parseFloat(val)||1));
+  const body=document.querySelector(`#fdEl-${el.id} .fd-el-body`);
+  if(body)body.innerHTML=fdCanchaInner(el);
+}
 const FD_SHAPE_ITEMS=[['rectangulo','▭','Rectángulo'],['circulo','◯','Círculo'],['triangulo','△','Triángulo']];
 const FD_ARROW_ITEMS=[['linea','—','Línea'],['flecha','→','Flecha'],['flechaPunteada','⇢','Flecha punteada'],['flechaDoble','⇔','Flecha doble'],['flechaCurva','⤳','Flecha curva']];
 const FD_TENNIS_ITEMS=[['jugador','🧍','Jugador','A'],['jugador','🧑‍🏫','Profesor','P'],['raqueta','🎾','Raqueta',''],['pelota','🟡','Pelota',''],['canasto','🧺','Canasto',''],['cono','🔶','Cono',''],['conobajo','🔻','Cono bajo',''],['aro','⭕','Aro',''],['escalera','🪜','Escalera',''],['pisada','👣','Pisada',''],['soga','➰','Soga',''],['red','🥅','Red','']];
@@ -2790,7 +2815,7 @@ function fdColorClick(e,color){
     try{document.execCommand('foreColor',false,color);}catch(_){}
   }else if(FD_SELECTED&&FD_MULTISEL.size<=1){
     const el=fdFindEl(FD_SELECTED);
-    if(el&&(el.type==='icono'||el.type==='forma')){el.color=color;fdRenderOne(FD_SELECTED);return;}
+    if(el&&(el.type==='icono'||el.type==='forma'||el.type==='cancha')){el.color=color;fdRenderOne(FD_SELECTED);return;}
   }
   fdRenderToolbar();
 }
@@ -2812,8 +2837,9 @@ function fdToolbarHTML(){
   const hiliteSwatches=FD_HILITE_COLORS.map(c=>`<button type="button" class="fdswatch" style="background:${c}" title="Resaltar" onmousedown="fdHiliteClick(event,'${c}')"></button>`).join('')
     +`<button type="button" class="fdswatch" style="background:#fff;background-image:linear-gradient(to top left,transparent calc(50% - 1px),#c0392b,transparent calc(50% + 1px))" title="Sin resaltado" onmousedown="fdHiliteClick(event,'transparent')"></button>`;
   const isLineForma=singleEl&&singleEl.type==='forma'&&!['rectangulo','circulo','triangulo'].includes(singleEl.shapeType);
-  const contextBar=singleEl&&(singleEl.type==='icono'||singleEl.type==='forma')?`<span class="fdsep"></span>
+  const contextBar=singleEl&&(singleEl.type==='icono'||singleEl.type==='forma'||singleEl.type==='cancha')?`<span class="fdsep"></span>
     ${singleEl.type==='icono'?`<button type="button" class="btn sm ghost" onclick="fdRotateIcon(-15)">⟲</button><button type="button" class="btn sm ghost" onclick="fdRotateIcon(15)">⟳</button>`:''}
+    ${singleEl.type==='cancha'?`<button type="button" class="btn sm ghost" onclick="fdRotateCancha(-15)">⟲</button><button type="button" class="btn sm ghost" onclick="fdRotateCancha(15)">⟳</button><span class="small" style="color:var(--muted)">Ancho:</span><input type="range" min="0.5" max="2" step="0.05" value="${singleEl.wScale||1}" oninput="fdSetCanchaWidth(this.value)" style="width:80px">`:''}
     ${isLineForma?`<span class="small" style="color:var(--muted)">Grosor:</span><input type="range" min="0.4" max="2.2" step="0.1" value="${singleEl.width||0.8}" oninput="fdSetFormaWidth(this.value)" style="width:80px">`:''}
   `:'';
   return `
@@ -2877,9 +2903,12 @@ function fdElPrintHTML(el){
   }
   if(el.type==='cancha'){
     const full=el.tipo==='full';
-    const vw=full?22:13,vh=full?47.7:36;
-    const draw=full?lpCourtLines(0,0,vw,vh):lpMiniCourtLines(0,0,vw,vh);
-    return `<div class="fpel" style="${style}"><svg viewBox="0 0 ${vw} ${vh}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block">${draw}</svg></div>`;
+    const baseVw=full?22:13,vh=full?47.7:36;
+    const wScale=Math.max(0.5,Math.min(2,el.wScale||1));
+    const vw=baseVw*wScale;
+    const draw=full?lpCourtLines(0,0,vw,vh,el.color):lpMiniCourtLines(0,0,vw,vh,el.color);
+    const rot=el.rot||0;
+    return `<div class="fpel" style="${style}${rot?';overflow:visible':''}"><svg viewBox="0 0 ${vw} ${vh}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block${rot?`;transform:rotate(${rot}deg)`:''}">${draw}</svg></div>`;
   }
   if(el.type==='icono')return `<div class="fpel" style="${style}"><svg viewBox="-6 -6 12 12" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block"><g transform="rotate(${el.rot||0})">${lpElGlyph(el.kind,el.color,el.label,el.id)}</g></svg></div>`;
   const s={type:el.shapeType,x1:el.x1,y1:el.y1,x2:el.x2,y2:el.y2,pts:el.pts,color:el.color,width:el.width};

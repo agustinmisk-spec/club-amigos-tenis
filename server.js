@@ -323,7 +323,12 @@ const cleanFreeElement = e => {
   };
   if (type === 'texto') return Object.assign(base, { html: String((e && e.html) || '').slice(0, 8000) });
   if (type === 'tabla') return Object.assign(base, { rows: Array.isArray(e && e.rows) ? e.rows.slice(0, 30).map(cleanFreeRow) : [['', '']] });
-  if (type === 'cancha') return Object.assign(base, { tipo: ['mini', 'full'].includes(e && e.tipo) ? e.tipo : 'mini' });
+  if (type === 'cancha') return Object.assign(base, {
+    tipo: ['mini', 'full'].includes(e && e.tipo) ? e.tipo : 'mini',
+    wScale: num(e && e.wScale, 0.5, 2, 1),
+    rot: num(e && e.rot, -360, 360, 0),
+    color: /^#[0-9a-fA-F]{3,8}$/.test(e && e.color) ? e.color : null
+  });
   if (type === 'icono') return Object.assign(base, {
     kind: String((e && e.kind) || '').slice(0, 30),
     label: String((e && e.label) || '').slice(0, 10),
