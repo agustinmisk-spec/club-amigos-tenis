@@ -3463,13 +3463,14 @@ function progCupos(mc,prog){return mc.filter(c=>c.prog===prog).reduce((a,c)=>({o
 function renderStats(){
   const act=DB.students.filter(s=>s.estado==='Activo');const prueba=DB.students.filter(s=>s.estado==='Prueba').length;const prog={};act.forEach(s=>prog[s.programa]=(prog[s.programa]||0)+1);
   const mc=modCells();
-  const cuposLbl=p=>{const c=progCupos(mc,p);return `${c.oc}/${c.cup} cupos`;};
+  const cuposLbl=p=>{const c=progCupos(mc,p);return `${c.oc}/${c.cup} cupos (${statPct(c.oc,c.cup)}%)`;};
+  const miniMulti=act.filter(s=>s.programa==='MINI DEPORTE'&&sessionsOf(s).length>=2).length;
   stats.innerHTML=`
     <div class="stat"><div class="n">${act.length}</div><div class="l">Alumnos activos</div></div>
     <div class="stat"><div class="n">${prog['MINI DEPORTE']||0}</div><div class="l">Mini deporte</div><div class="c">${cuposLbl('MINI DEPORTE')}</div></div>
     <div class="stat"><div class="n">${prog['ESCUELA DE TENIS']||0}</div><div class="l">Escuela de tenis</div><div class="c">${cuposLbl('ESCUELA DE TENIS')}</div></div>
     <div class="stat"><div class="n">${prog['ENTRENAMIENTO']||0}</div><div class="l">Entrenamiento</div><div class="c">${cuposLbl('ENTRENAMIENTO')}</div></div>
-    <div class="stat"><div class="n">${act.filter(s=>sessionsOf(s).length>=2).length}</div><div class="l">Con 2+ clases/sem</div></div>
+    <div class="stat"><div class="n">${miniMulti}</div><div class="l">Mini deporte con 2+ clases/sem</div></div>
     <div class="stat"><div class="n">${prueba}</div><div class="l">A prueba</div></div>`;
 }
 
