@@ -431,7 +431,6 @@
   <button class="tab" data-tab="asistencia" onclick="showTab('asistencia')">Asistencia</button>
   <button class="tab" data-tab="competencias" onclick="showTab('competencias')">Competencias</button>
   <button class="tab" data-tab="planificaciones" onclick="showTab('planificaciones')">Planificaciones</button>
-  <button class="tab" data-tab="documentos" onclick="showTab('documentos')">Pizarra+</button>
   <div class="tabmenu" id="menuEval">
     <button class="tab tabtop" onclick="menuToggle(event,this)">Evaluaciones ▾</button>
     <div class="tabdrop" id="evalPeriodDrop"></div>
@@ -444,6 +443,7 @@
       <button data-tab="comunicaciones" onclick="showTab('comunicaciones')">Comunicaciones</button>
       <button id="tabbtn-estadisticas" data-tab="estadisticas" onclick="showTab('estadisticas')">Datos de la escuela</button>
       <button id="tabbtn-informes" data-tab="informes" onclick="showTab('informes')">Informes (PDF)</button>
+      <button data-tab="documentos" onclick="showTab('documentos')">Pizarra</button>
       <button data-tab="ranking" onclick="showTab('ranking')">Ranking por año</button>
     </div>
   </div>
@@ -545,9 +545,14 @@
 
   <section id="tab-estadisticas" style="display:none">
     <div class="card" style="padding:18px;margin-bottom:14px">
-      <div class="sectitle">Datos de la escuela</div>
-      <p class="small" style="margin:2px 0 10px">Elegí qué información querés ver y usá ↑/↓ para ordenarla a tu gusto (se muestra en dos columnas). La ocupación se calcula sobre los cupos de cada grupo (Mini Deporte y resto de programas, según Configuración).</p>
-      <div id="statsPick" style="display:flex;flex-direction:column;gap:6px;max-width:480px"></div>
+      <div class="sectitle" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span>Datos de la escuela</span>
+        <button type="button" class="btn sm ghost" id="statsPickToggle" onclick="statTogglePickerUI()" style="text-transform:none;letter-spacing:normal;font-weight:600">▸ Elegir y ordenar</button>
+      </div>
+      <div id="statsPickWrap" style="display:none;margin-top:6px">
+        <p class="small" style="margin:2px 0 10px">Elegí qué información querés ver y usá ↑/↓ para ordenarla a tu gusto (se muestra en dos columnas). La ocupación se calcula sobre los cupos de cada grupo (Mini Deporte y resto de programas, según Configuración).</p>
+        <div id="statsPick" style="display:flex;flex-direction:column;gap:6px;max-width:480px"></div>
+      </div>
       <div id="statsColors"></div>
     </div>
     <div id="statsOut"></div>
@@ -3246,7 +3251,22 @@ function statByProf(){const m={};statActive().forEach(s=>{const ps=new Set(sessi
 function cupoTurno(dia,hora,prog){const c=DB.config,k=dia+'|'+hora+'|'+prog;if(c.cuposTurno&&c.cuposTurno[k]!=null)return c.cuposTurno[k];return prog==='MINI DEPORTE'?(c.capMini||5):(c.capGeneral||6);}
 function setCupoTurno(dia,hora,prog,val){if(!can('config'))return;const c=DB.config;c.cuposTurno=c.cuposTurno||{};const k=dia+'|'+hora+'|'+prog,n=parseInt(val,10);if(!n||n<0)delete c.cuposTurno[k];else c.cuposTurno[k]=n;clearTimeout(_cfgT);_cfgT=setTimeout(()=>api('PUT','/api/config',DB.config).catch(e=>console.warn(e)),500);renderStatsOut();}
 function occByTurnoProg(){const m={};statActive().forEach(s=>{sessionsOf(s).forEach(x=>{if(!x.dia||!x.hora)return;const k=x.dia+'|'+x.hora;const row=m[k]||(m[k]={});row[s.programa]=(row[s.programa]||0)+1;});});return m;}
-function occCells(){const m=occByTurnoProg(),cells=[];Object.keys(m).forEach(k=>{const i=k.indexOf('|'),dia=k.slice(0,i),hora=k.slice(i+1);Object.keys(m[k]).forEach(prog=>{cells.push({dia,hora,prog,oc:m[k][prog],cup:cupoTurno(dia,hora,prog)});});});return cells;}
+function occCells(){
+  const m=occByTurnoProg(),cells=[],seen=new Set();
+  Object.keys(m).forEach(k=>{
+    const i=k.indexOf('|'),dia=k.slice(0,i),hora=k.slice(i+1);
+    Object.keys(m[k]).forEach(prog=>{
+      cells.push({dia,hora,prog,oc:m[k][prog],cup:cupoTurno(dia,hora,prog)});
+      seen.add(dia+'|'+hora+'|'+prog);
+    });
+  });
+  officialTurnoSlots().forEach(({dia,hora,prog})=>{
+    const k=dia+'|'+hora+'|'+prog;
+    if(seen.has(k))return;
+    cells.push({dia,hora,prog,oc:0,cup:cupoTurno(dia,hora,prog)});
+  });
+  return cells;
+}
 function turnoCmp(a,b){const c=DB.config,ia=a.indexOf('|'),ib=b.indexOf('|'),da=a.slice(0,ia),ha=a.slice(ia+1),db=b.slice(0,ib),hb=b.slice(ib+1);const idx=(v,arr)=>{const x=(arr||[]).indexOf(v);return x<0?999:x;};return idx(da,c.dias)-idx(db,c.dias)||idx(ha,c.horas)-idx(hb,c.horas)||ha.localeCompare(hb,'es');}
 /* ---- Modalidad por programa: Mini por horario; Escuela y Entrenamiento por módulo de 2 sesiones ---- */
 const DAYABBR={'Lunes':'Lun','Martes':'Mar','Miércoles':'Mié','Jueves':'Jue','Viernes':'Vie','Sábado':'Sáb','Domingo':'Dom'};
@@ -3260,6 +3280,14 @@ function addMiniSlot(){if(!can('config'))return;const dia=(document.getElementBy
 const ESC_MODS=[['Lunes 17:30','Viernes 17:30'],['Lunes 18:30','Sábado 15:00'],['Martes 17:30','Jueves 17:30'],['Martes 18:30','Sábado 11:00'],['Miércoles 17:30','Sábado 16:00'],['Miércoles 18:30','Sábado 12:00'],['Jueves 18:30','Sábado 14:00']];
 const ENTREN_MODS=[['Martes 17:30','Sábado 10:00'],['Miércoles 17:30','Sábado 10:00'],['Jueves 17:30','Sábado 17:00'],['Viernes 18:30','Domingo 10:00']];
 function modRows(mods){return mods.map(m=>({label:m.map(abbrSlot).join(' + '),slots:m}));}
+function officialTurnoSlots(){
+  const out=[],seen=new Set();
+  const add=(sl,prog)=>{const i=sl.indexOf(' ');if(i<0)return;const dia=sl.slice(0,i),hora=sl.slice(i+1),k=dia+'|'+hora+'|'+prog;if(seen.has(k))return;seen.add(k);out.push({dia,hora,prog});};
+  miniSlotList().forEach(sl=>add(sl,'MINI DEPORTE'));
+  ESC_MODS.forEach(mod=>mod.forEach(sl=>add(sl,'ESCUELA DE TENIS')));
+  ENTREN_MODS.forEach(mod=>mod.forEach(sl=>add(sl,'ENTRENAMIENTO')));
+  return out;
+}
 function studSlots(s){return new Set(sessionsOf(s).map(x=>x.dia+' '+x.hora));}
 function occModule(prog,slots){let n=0;statActive().forEach(s=>{if(s.programa!==prog)return;const set=studSlots(s);if(slots.every(sl=>set.has(sl)))n++;});return n;}
 function cupoMod(prog,slots){const c=DB.config,k=prog+'|'+slots.join('+');if(c.cuposTurno&&c.cuposTurno[k]!=null)return c.cuposTurno[k];return prog==='MINI DEPORTE'?(c.capMini||5):(c.capGeneral||6);}
@@ -3274,10 +3302,25 @@ function statChartBox(id,h){return `<div style="position:relative;height:${h||20
 function statBuildCharts(){STAT_CHARTS.forEach(ch=>{try{ch.destroy();}catch(e){}});STAT_CHARTS=[];if(!window.Chart)return;STAT_JOBS.forEach(j=>{const el=document.getElementById(j.id);if(!el)return;try{STAT_CHARTS.push(new Chart(el,j.cfg));}catch(e){console.warn(e);}});}
 function statCountCard(title,map,order,opt){opt=opt||{};const keys=statSortKeys(Object.keys(map),order),vals=keys.map(k=>map[k]),id='ch_'+(STAT_CID++),dough=opt.type==='doughnut';const ds={data:vals,backgroundColor:keys.map((k,i)=>statColorFor(opt.key,k,i)),borderRadius:dough?0:4,borderWidth:dough?2:0,borderColor:'#fff'};const opts={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:dough,position:'right',labels:{font:{size:11},boxWidth:12}}}};if(!dough){opts.indexAxis=opt.horizontal?'y':'x';opts.scales=opt.horizontal?{y:{ticks:{font:{size:10}}},x:{beginAtZero:true,ticks:{precision:0,font:{size:10}}}}:{x:{ticks:{font:{size:10}}},y:{beginAtZero:true,ticks:{precision:0,font:{size:10}}}};}STAT_JOBS.push({id,cfg:{type:opt.type||'bar',data:{labels:keys,datasets:[ds]},options:opts}});const tot=vals.reduce((a,b)=>a+b,0);const tbl=`<table class="stbl"><tbody>${keys.map((k,i)=>`<tr><td>${esc(k)}</td><td style="text-align:right"><b>${vals[i]}</b></td></tr>`).join('')}${opt.noTotal?'':`<tr class="sttot"><td>Total</td><td style="text-align:right"><b>${tot}</b></td></tr>`}</tbody></table>`;return statCard(title,statChartBox(id,opt.h)+tbl+(opt.note?`<div class="small" style="margin-top:6px">${esc(opt.note)}</div>`:'')+statCardColors(opt.key,keys));}
 function statOccCard(title,cells,keyFn,order){const b={};cells.forEach(g=>{const k=keyFn(g);if(k==null||k==='')return;(b[k]=b[k]||{n:0,cap:0});b[k].n+=g.oc;b[k].cap+=g.cup;});const keys=statSortKeys(Object.keys(b),order),pcts=keys.map(k=>statPct(b[k].n,b[k].cap)),cols=pcts.map(p=>p>100?'#c0392b':(p>=85?'#1f7a4d':'#2563eb')),id='ch_'+(STAT_CID++);STAT_JOBS.push({id,cfg:{type:'bar',data:{labels:keys,datasets:[{label:'% ocupación',data:pcts,backgroundColor:cols,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.parsed.y+'%'}}},scales:{y:{beginAtZero:true,suggestedMax:100,ticks:{font:{size:10},callback:v=>v+'%'}},x:{ticks:{font:{size:10}}}}}}});const tn=keys.reduce((s,k)=>s+b[k].n,0),tc=keys.reduce((s,k)=>s+b[k].cap,0);const tbl=`<table class="stbl"><thead><tr><th></th><th style="text-align:center">Alum./Cupos</th><th>Ocupación</th></tr></thead><tbody>${keys.map(k=>statBarRow(k,b[k].n,b[k].cap)).join('')}${statBarRow('Total',tn,tc,true)}</tbody></table>`;return statCard(title,statChartBox(id,200)+tbl);}
-function statTurnoTable(){const c=DB.config,m=occByTurnoProg(),progs=c.programas||[],keys=Object.keys(m).sort(turnoCmp),editable=can('config');if(!keys.length)return statCard('Ocupación por turno (día y hora)','<p class="small">No hay clases cargadas.</p>');
+function statTurnoTable(){
+  const c=DB.config,editable=can('config'),progs=c.programas||[];
+  const byKey={};
+  occCells().forEach(cell=>{const k=cell.dia+'|'+cell.hora;(byKey[k]=byKey[k]||{})[cell.prog]=cell;});
+  const keys=Object.keys(byKey).sort(turnoCmp);
+  if(!keys.length)return statCard('Ocupación por turno (día y hora)','<p class="small">No hay clases cargadas.</p>');
   const head=`<tr><th rowspan="2" style="vertical-align:bottom">Día / Hora</th>${progs.map((p,i)=>`<th colspan="3" style="text-align:center;border-left:2px solid var(--line);color:${STAT_PAL[i%STAT_PAL.length]}">${esc(p)}</th>`).join('')}</tr><tr>${progs.map(()=>`<th style="text-align:center;border-left:2px solid var(--line)">Ocup.</th><th style="text-align:center">Cupo</th><th style="text-align:center">%</th>`).join('')}</tr>`;
-  const body=keys.map(k=>{const i=k.indexOf('|'),dia=k.slice(0,i),hora=k.slice(i+1);return `<tr><td style="white-space:nowrap"><b>${esc(dia)}</b> ${esc(hora)}</td>`+progs.map(p=>{const oc=m[k][p]||0,cup=cupoTurno(dia,hora,p),pct=statPct(oc,cup),col=pct>100?'#c0392b':(pct>=85?'#1f7a4d':'#1b3a6b');const pe=p.replace(/'/g,"");const cupCell=editable?`<input type="number" min="0" value="${cup}" style="width:46px;text-align:center;padding:2px;border:1px solid var(--line);border-radius:5px;font-size:12px" onchange="setCupoTurno('${esc(dia)}','${esc(hora)}','${esc(pe)}',this.value)">`:cup;return `<td style="text-align:center;border-left:2px solid var(--line)">${oc}</td><td style="text-align:center">${cupCell}</td><td style="text-align:center;color:${col};font-weight:700">${oc?pct+'%':'—'}</td>`;}).join('')+'</tr>';}).join('');
-  return statCard('Ocupación por turno (día y hora)',`<div style="overflow-x:auto"><table class="stbl stturno">${head}${body}</table></div>${editable?'<div class="small" style="margin-top:6px">El cupo de cada programa en cada turno es editable; se guarda solo. Vacío o 0 = vuelve al cupo por defecto (Mini '+(c.capMini||5)+' · resto '+(c.capGeneral||6)+').</div>':''}`);}
+  const body=keys.map(k=>{
+    const i=k.indexOf('|'),dia=k.slice(0,i),hora=k.slice(i+1);
+    return `<tr><td style="white-space:nowrap"><b>${esc(dia)}</b> ${esc(hora)}</td>`+progs.map(p=>{
+      const cell=byKey[k][p];
+      if(!cell)return `<td style="text-align:center;border-left:2px solid var(--line);color:var(--muted)">—</td><td style="text-align:center;color:var(--muted)">—</td><td style="text-align:center;color:var(--muted)">—</td>`;
+      const oc=cell.oc,cup=cell.cup,pct=statPct(oc,cup),col=pct>100?'#c0392b':(pct>=85?'#1f7a4d':'#1b3a6b');
+      const pe=p.replace(/'/g,"");
+      const cupCell=editable?`<input type="number" min="0" value="${cup}" style="width:46px;text-align:center;padding:2px;border:1px solid var(--line);border-radius:5px;font-size:12px" onchange="setCupoTurno('${esc(dia)}','${esc(hora)}','${esc(pe)}',this.value)">`:cup;
+      return `<td style="text-align:center;border-left:2px solid var(--line)">${oc}</td><td style="text-align:center">${cupCell}</td><td style="text-align:center;color:${col};font-weight:700">${cup?pct+'%':'—'}</td>`;
+    }).join('')+'</tr>';
+  }).join('');
+  return statCard('Ocupación por turno (día y hora)',`<div style="overflow-x:auto"><table class="stbl stturno">${head}${body}</table></div>${editable?'<div class="small" style="margin-top:6px">El cupo de cada programa en cada turno es editable; se guarda solo. Vacío o 0 = vuelve al cupo por defecto (Mini '+(c.capMini||5)+' · resto '+(c.capGeneral||6)+'). "—" indica que ese programa no tiene clase en ese día y horario.</div>':''}`);}
 function statPalette(){const c=DB.config;return (Array.isArray(c.chartColors)&&c.chartColors.length)?c.chartColors:STAT_PAL;}
 function statPalArr(){const c=DB.config;return (Array.isArray(c.chartColors)&&c.chartColors.length)?c.chartColors.slice():STAT_PAL.slice();}
 function statSaveColors(){clearTimeout(_cfgT);_cfgT=setTimeout(()=>api('PUT','/api/config',DB.config).catch(e=>console.warn(e)),500);}
@@ -3291,6 +3334,13 @@ function statColorFor(key,label,i){const m=statColorMap()[key];return (m&&m[labe
 function statSetCatColor(key,labelEnc,v){if(!can('config'))return;const label=decodeURIComponent(labelEnc);const m=statColorMap();(m[key]=m[key]||{})[label]=v;statSaveColors();renderStatsOut();}
 function statResetCatColors(key){if(!can('config'))return;const m=statColorMap();delete m[key];statSaveColors();renderStatsOut();}
 function statCardColors(key,labels){if(!can('config'))return '';return `<div style="margin-top:10px;border-top:1px dashed var(--line);padding-top:8px"><div class="small" style="font-weight:600;margin-bottom:5px">🎨 Colores de este gráfico</div><div style="display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center">${labels.map((lb,i)=>`<label style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px"><input type="color" value="${esc(statColorFor(key,lb,i))}" onchange="statSetCatColor('${key}','${encodeURIComponent(lb)}',this.value)" style="width:26px;height:22px;padding:0;border:1px solid var(--line);border-radius:5px;cursor:pointer">${esc(lb)}</label>`).join('')}<button class="btn sm ghost" onclick="statResetCatColors('${key}')">Restaurar</button></div></div>`;}
+function statTogglePickerUI(){
+  const wrap=document.getElementById('statsPickWrap'),btn=document.getElementById('statsPickToggle');
+  if(!wrap)return;
+  const opening=wrap.style.display==='none';
+  wrap.style.display=opening?'':'none';
+  if(btn)btn.textContent=(opening?'▾':'▸')+' Elegir y ordenar';
+}
 function renderStatsPanel(){
   const sel=statSel(),blocks=statOrderedBlocks();
   document.getElementById('statsPick').innerHTML=blocks.map((b,i)=>`<div style="display:flex;align-items:center;gap:8px;font-size:13px;background:#f5f7fb;border:1px solid var(--line);border-radius:8px;padding:5px 8px 5px 12px">
@@ -3728,11 +3778,11 @@ function toggleDarkMode(){
 /* ===== Diseño: orden y visibilidad de pestañas ===== */
 const TAB_MANAGE_DOMAINS=[
   {key:'flat', label:'Fila principal', containerSel:'.tabs', anchorSel:'#menuEval', menuSel:null,
-    items:[{id:'asistencia',label:'Asistencia'},{id:'competencias',label:'Competencias'},{id:'planificaciones',label:'Planificaciones'},{id:'documentos',label:'Pizarra+'}]},
+    items:[{id:'asistencia',label:'Asistencia'},{id:'competencias',label:'Competencias'},{id:'planificaciones',label:'Planificaciones'}]},
   {key:'canchas', label:'Menú "Canchas ▾"', containerSel:'#canchasDrop', anchorSel:null, menuSel:'#menuCanchas',
     items:[{id:'canchas',label:'Distribución por cancha'},{id:'recuperaciones',label:'Recuperaciones e invitaciones'},{id:'historial',label:'Historial de cambios'}]},
   {key:'gestion', label:'Menú "Gestión ▾"', containerSel:'#gestionDrop', anchorSel:null, menuSel:'#menuGestion',
-    items:[{id:'calendario',label:'Calendario'},{id:'capacitaciones',label:'Capacitaciones'},{id:'comunicaciones',label:'Comunicaciones'},{id:'estadisticas',label:'Datos de la escuela',perm:'reports'},{id:'informes',label:'Informes (PDF)',perm:'reports'},{id:'ranking',label:'Ranking por año'}]}
+    items:[{id:'calendario',label:'Calendario'},{id:'capacitaciones',label:'Capacitaciones'},{id:'comunicaciones',label:'Comunicaciones'},{id:'estadisticas',label:'Datos de la escuela',perm:'reports'},{id:'informes',label:'Informes (PDF)',perm:'reports'},{id:'documentos',label:'Pizarra'},{id:'ranking',label:'Ranking por año'}]}
 ];
 function orderedDomainItems(domain){
   const order=DB.config.tabsOrder||[];
