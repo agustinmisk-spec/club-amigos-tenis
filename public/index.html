@@ -431,7 +431,6 @@
   <button class="tab" data-tab="asistencia" onclick="showTab('asistencia')">Asistencia</button>
   <button class="tab" data-tab="competencias" onclick="showTab('competencias')">Competencias</button>
   <button class="tab" data-tab="planificaciones" onclick="showTab('planificaciones')">Planificaciones</button>
-  <button class="tab" data-tab="documentos" onclick="showTab('documentos')">Pizarra+</button>
   <div class="tabmenu" id="menuEval">
     <button class="tab tabtop" onclick="menuToggle(event,this)">Evaluaciones ▾</button>
     <div class="tabdrop" id="evalPeriodDrop"></div>
@@ -444,6 +443,7 @@
       <button data-tab="comunicaciones" onclick="showTab('comunicaciones')">Comunicaciones</button>
       <button id="tabbtn-estadisticas" data-tab="estadisticas" onclick="showTab('estadisticas')">Datos de la escuela</button>
       <button id="tabbtn-informes" data-tab="informes" onclick="showTab('informes')">Informes (PDF)</button>
+      <button data-tab="documentos" onclick="showTab('documentos')">Pizarra</button>
       <button data-tab="ranking" onclick="showTab('ranking')">Ranking por año</button>
     </div>
   </div>
@@ -545,9 +545,14 @@
 
   <section id="tab-estadisticas" style="display:none">
     <div class="card" style="padding:18px;margin-bottom:14px">
-      <div class="sectitle">Datos de la escuela</div>
-      <p class="small" style="margin:2px 0 10px">Elegí qué información querés ver y usá ↑/↓ para ordenarla a tu gusto (se muestra en dos columnas). La ocupación se calcula sobre los cupos de cada grupo (Mini Deporte y resto de programas, según Configuración).</p>
-      <div id="statsPick" style="display:flex;flex-direction:column;gap:6px;max-width:480px"></div>
+      <div class="sectitle" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span>Datos de la escuela</span>
+        <button type="button" class="btn sm ghost" id="statsPickToggle" onclick="statTogglePickerUI()" style="text-transform:none;letter-spacing:normal;font-weight:600">▸ Elegir y ordenar</button>
+      </div>
+      <div id="statsPickWrap" style="display:none;margin-top:6px">
+        <p class="small" style="margin:2px 0 10px">Elegí qué información querés ver y usá ↑/↓ para ordenarla a tu gusto (se muestra en dos columnas). La ocupación se calcula sobre los cupos de cada grupo (Mini Deporte y resto de programas, según Configuración).</p>
+        <div id="statsPick" style="display:flex;flex-direction:column;gap:6px;max-width:480px"></div>
+      </div>
       <div id="statsColors"></div>
     </div>
     <div id="statsOut"></div>
@@ -3291,6 +3296,13 @@ function statColorFor(key,label,i){const m=statColorMap()[key];return (m&&m[labe
 function statSetCatColor(key,labelEnc,v){if(!can('config'))return;const label=decodeURIComponent(labelEnc);const m=statColorMap();(m[key]=m[key]||{})[label]=v;statSaveColors();renderStatsOut();}
 function statResetCatColors(key){if(!can('config'))return;const m=statColorMap();delete m[key];statSaveColors();renderStatsOut();}
 function statCardColors(key,labels){if(!can('config'))return '';return `<div style="margin-top:10px;border-top:1px dashed var(--line);padding-top:8px"><div class="small" style="font-weight:600;margin-bottom:5px">🎨 Colores de este gráfico</div><div style="display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center">${labels.map((lb,i)=>`<label style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px"><input type="color" value="${esc(statColorFor(key,lb,i))}" onchange="statSetCatColor('${key}','${encodeURIComponent(lb)}',this.value)" style="width:26px;height:22px;padding:0;border:1px solid var(--line);border-radius:5px;cursor:pointer">${esc(lb)}</label>`).join('')}<button class="btn sm ghost" onclick="statResetCatColors('${key}')">Restaurar</button></div></div>`;}
+function statTogglePickerUI(){
+  const wrap=document.getElementById('statsPickWrap'),btn=document.getElementById('statsPickToggle');
+  if(!wrap)return;
+  const opening=wrap.style.display==='none';
+  wrap.style.display=opening?'':'none';
+  if(btn)btn.textContent=(opening?'▾':'▸')+' Elegir y ordenar';
+}
 function renderStatsPanel(){
   const sel=statSel(),blocks=statOrderedBlocks();
   document.getElementById('statsPick').innerHTML=blocks.map((b,i)=>`<div style="display:flex;align-items:center;gap:8px;font-size:13px;background:#f5f7fb;border:1px solid var(--line);border-radius:8px;padding:5px 8px 5px 12px">
@@ -3728,11 +3740,11 @@ function toggleDarkMode(){
 /* ===== Diseño: orden y visibilidad de pestañas ===== */
 const TAB_MANAGE_DOMAINS=[
   {key:'flat', label:'Fila principal', containerSel:'.tabs', anchorSel:'#menuEval', menuSel:null,
-    items:[{id:'asistencia',label:'Asistencia'},{id:'competencias',label:'Competencias'},{id:'planificaciones',label:'Planificaciones'},{id:'documentos',label:'Pizarra+'}]},
+    items:[{id:'asistencia',label:'Asistencia'},{id:'competencias',label:'Competencias'},{id:'planificaciones',label:'Planificaciones'}]},
   {key:'canchas', label:'Menú "Canchas ▾"', containerSel:'#canchasDrop', anchorSel:null, menuSel:'#menuCanchas',
     items:[{id:'canchas',label:'Distribución por cancha'},{id:'recuperaciones',label:'Recuperaciones e invitaciones'},{id:'historial',label:'Historial de cambios'}]},
   {key:'gestion', label:'Menú "Gestión ▾"', containerSel:'#gestionDrop', anchorSel:null, menuSel:'#menuGestion',
-    items:[{id:'calendario',label:'Calendario'},{id:'capacitaciones',label:'Capacitaciones'},{id:'comunicaciones',label:'Comunicaciones'},{id:'estadisticas',label:'Datos de la escuela',perm:'reports'},{id:'informes',label:'Informes (PDF)',perm:'reports'},{id:'ranking',label:'Ranking por año'}]}
+    items:[{id:'calendario',label:'Calendario'},{id:'capacitaciones',label:'Capacitaciones'},{id:'comunicaciones',label:'Comunicaciones'},{id:'estadisticas',label:'Datos de la escuela',perm:'reports'},{id:'informes',label:'Informes (PDF)',perm:'reports'},{id:'documentos',label:'Pizarra'},{id:'ranking',label:'Ranking por año'}]}
 ];
 function orderedDomainItems(domain){
   const order=DB.config.tabsOrder||[];
