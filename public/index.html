@@ -3248,7 +3248,13 @@ function statSelSave(s){try{localStorage.setItem('et_stats_sel',JSON.stringify(s
 function statActive(){return DB.students.filter(s=>s.estado==='Activo');}
 function statCountBy(arr,fn){const m={};arr.forEach(x=>{const k=fn(x)||'(sin dato)';m[k]=(m[k]||0)+1;});return m;}
 function statByProf(){const m={};statActive().forEach(s=>{const ps=new Set(sessionsOf(s).map(x=>x.prof).filter(Boolean));ps.forEach(p=>{m[p]=(m[p]||0)+1;});});return m;}
-function cupoTurno(dia,hora,prog){const c=DB.config,k=dia+'|'+hora+'|'+prog;if(c.cuposTurno&&c.cuposTurno[k]!=null)return c.cuposTurno[k];return prog==='MINI DEPORTE'?(c.capMini||5):(c.capGeneral||6);}
+function cupoTurno(dia,hora,prog){
+  const c=DB.config,k=dia+'|'+hora+'|'+prog;
+  if(c.cuposTurno&&c.cuposTurno[k]!=null)return c.cuposTurno[k];
+  const mods=findOfficialModules(dia,hora,prog);
+  if(mods.length)return mods.reduce((s,m)=>s+cupoMod(prog,m),0);
+  return prog==='MINI DEPORTE'?(c.capMini||5):(c.capGeneral||6);
+}
 function setCupoTurno(dia,hora,prog,val){if(!can('config'))return;const c=DB.config;c.cuposTurno=c.cuposTurno||{};const k=dia+'|'+hora+'|'+prog,n=parseInt(val,10);if(!n||n<0)delete c.cuposTurno[k];else c.cuposTurno[k]=n;clearTimeout(_cfgT);_cfgT=setTimeout(()=>api('PUT','/api/config',DB.config).catch(e=>console.warn(e)),500);renderStatsOut();}
 function occByTurnoProg(){const m={};statActive().forEach(s=>{sessionsOf(s).forEach(x=>{if(!x.dia||!x.hora)return;const k=x.dia+'|'+x.hora;const row=m[k]||(m[k]={});row[s.programa]=(row[s.programa]||0)+1;});});return m;}
 function occCells(){
@@ -3287,6 +3293,13 @@ function officialTurnoSlots(){
   ESC_MODS.forEach(mod=>mod.forEach(sl=>add(sl,'ESCUELA DE TENIS')));
   ENTREN_MODS.forEach(mod=>mod.forEach(sl=>add(sl,'ENTRENAMIENTO')));
   return out;
+}
+function findOfficialModules(dia,hora,prog){
+  const sl=dia+' '+hora;
+  if(prog==='MINI DEPORTE')return miniSlotList().includes(sl)?[[sl]]:[];
+  const mods=prog==='ESCUELA DE TENIS'?ESC_MODS:(prog==='ENTRENAMIENTO'?ENTREN_MODS:null);
+  if(!mods)return [];
+  return mods.filter(m=>m.includes(sl));
 }
 function studSlots(s){return new Set(sessionsOf(s).map(x=>x.dia+' '+x.hora));}
 function occModule(prog,slots){let n=0;statActive().forEach(s=>{if(s.programa!==prog)return;const set=studSlots(s);if(slots.every(sl=>set.has(sl)))n++;});return n;}
