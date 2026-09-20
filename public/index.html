@@ -1165,6 +1165,12 @@ let LIB_PICK_FIELDS={nombre:true,descripcion:true,graficos:true};
 let LIB_EDIT=null,LIB_EDITING=false,LIB_LP_STASH,LIB_FILTER={q:'',momento:'',contenido:''};
 const LP_CH=90,LP_CY=45;
 const LP_BLOCK_CATALOG=[{tipo:'inicio',label:'Inicio de clase'},{tipo:'calentamiento',label:'Calentamiento'},{tipo:'drill',label:'Drill'},{tipo:'saques',label:'Saques'},{tipo:'juego',label:'Juego final'},{tipo:'cierre',label:'Cierre de clase'}];
+const LP_DEFAULT_MINUTOS={
+  'MINI DEPORTE':{inicio:2,calentamiento:18,drill:15,saques:10,juego:13,cierre:2},
+  'ESCUELA DE TENIS':{inicio:2,calentamiento:13,drill:20,saques:10,juego:13,cierre:2},
+  'ENTRENAMIENTO':{inicio:2,calentamiento:13,drill:15,saques:10,juego:18,cierre:2}
+};
+function lpDefaultMinutos(programa,tipo){return (LP_DEFAULT_MINUTOS[programa]&&LP_DEFAULT_MINUTOS[programa][tipo])||0;}
 const LP_COLORS=['#111827','#c0392b','#1f8a4d','#2563eb','#ff7a1a','#f1c40f'];
 const LP_DEFAULT_COLOR={jugador:'#111827',raqueta:'#111827',pelota:'#cfe61c',canasto:'#e9c46a',cono:'#ff7a1a',conobajo:'#ff7a1a',aro:'#e0338c'};
 const LP_COLORABLE=new Set(Object.keys(LP_DEFAULT_COLOR));
@@ -1522,7 +1528,14 @@ async function lpSavePlan(){
     renderLPView();
   }catch(e){alert('No se pudo guardar: '+e.message);}
 }
-function lpSetTop(field,val){if(LP_EDIT)LP_EDIT[field]=val;}
+function lpSetTop(field,val){
+  if(!LP_EDIT)return;
+  LP_EDIT[field]=val;
+  if(field==='programa'){
+    (LP_EDIT.bloques||[]).forEach(b=>{if(!b.minutos)b.minutos=lpDefaultMinutos(val,b.tipo);});
+    lpRenderBlockCards();
+  }
+}
 function lpEditorHTML(){
   const c=DB.config,editable=can('planner'),isNew=!LP_EDIT.id;
   return `<div class="toolbar" style="margin-bottom:10px">
@@ -1578,7 +1591,7 @@ function lpRenderBlockCards(){
 function lpToggleBlock(tipo,label,checked){
   LP_EDIT.bloques=LP_EDIT.bloques||[];
   if(checked){
-    if(!LP_EDIT.bloques.some(b=>b.tipo===tipo))LP_EDIT.bloques.push({id:'blk'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),tipo,titulo:label,minutos:0,descripcion:'',graficos:[]});
+    if(!LP_EDIT.bloques.some(b=>b.tipo===tipo))LP_EDIT.bloques.push({id:'blk'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),tipo,titulo:label,minutos:lpDefaultMinutos(LP_EDIT.programa,tipo),descripcion:'',graficos:[]});
   }else{
     LP_EDIT.bloques=LP_EDIT.bloques.filter(b=>b.tipo!==tipo);
   }
