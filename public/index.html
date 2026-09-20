@@ -3238,7 +3238,7 @@ let STAT_JOBS=[],STAT_CHARTS=[],STAT_CID=0;
 function statSel(){try{const v=JSON.parse(localStorage.getItem('et_stats_sel'));if(v&&typeof v==='object')return Object.assign(statSelDef(),v);}catch(e){}return statSelDef();}
 function statSelDef(){const d={};STAT_BLOCKS.forEach(b=>d[b.k]=true);return d;}
 function statSelSave(s){try{localStorage.setItem('et_stats_sel',JSON.stringify(s));}catch(e){}}
-function statActive(){return DB.students.filter(s=>s.estado!=='Baja');}
+function statActive(){return DB.students.filter(s=>s.estado==='Activo');}
 function statCountBy(arr,fn){const m={};arr.forEach(x=>{const k=fn(x)||'(sin dato)';m[k]=(m[k]||0)+1;});return m;}
 function statByProf(){const m={};statActive().forEach(s=>{const ps=new Set(sessionsOf(s).map(x=>x.prof).filter(Boolean));ps.forEach(p=>{m[p]=(m[p]||0)+1;});});return m;}
 function cupoTurno(dia,hora,prog){const c=DB.config,k=dia+'|'+hora+'|'+prog;if(c.cuposTurno&&c.cuposTurno[k]!=null)return c.cuposTurno[k];return prog==='MINI DEPORTE'?(c.capMini||5):(c.capGeneral||6);}
