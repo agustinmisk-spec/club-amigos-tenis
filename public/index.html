@@ -3251,8 +3251,8 @@ function statByProf(){const m={};statActive().forEach(s=>{const ps=new Set(sessi
 function cupoTurno(dia,hora,prog){
   const c=DB.config,k=dia+'|'+hora+'|'+prog;
   if(c.cuposTurno&&c.cuposTurno[k]!=null)return c.cuposTurno[k];
-  const mod=findOfficialModule(dia,hora,prog);
-  if(mod)return cupoMod(prog,mod);
+  const mods=findOfficialModules(dia,hora,prog);
+  if(mods.length)return mods.reduce((s,m)=>s+cupoMod(prog,m),0);
   return prog==='MINI DEPORTE'?(c.capMini||5):(c.capGeneral||6);
 }
 function setCupoTurno(dia,hora,prog,val){if(!can('config'))return;const c=DB.config;c.cuposTurno=c.cuposTurno||{};const k=dia+'|'+hora+'|'+prog,n=parseInt(val,10);if(!n||n<0)delete c.cuposTurno[k];else c.cuposTurno[k]=n;clearTimeout(_cfgT);_cfgT=setTimeout(()=>api('PUT','/api/config',DB.config).catch(e=>console.warn(e)),500);renderStatsOut();}
@@ -3294,12 +3294,12 @@ function officialTurnoSlots(){
   ENTREN_MODS.forEach(mod=>mod.forEach(sl=>add(sl,'ENTRENAMIENTO')));
   return out;
 }
-function findOfficialModule(dia,hora,prog){
+function findOfficialModules(dia,hora,prog){
   const sl=dia+' '+hora;
-  if(prog==='MINI DEPORTE')return miniSlotList().includes(sl)?[sl]:null;
+  if(prog==='MINI DEPORTE')return miniSlotList().includes(sl)?[[sl]]:[];
   const mods=prog==='ESCUELA DE TENIS'?ESC_MODS:(prog==='ENTRENAMIENTO'?ENTREN_MODS:null);
-  if(!mods)return null;
-  return mods.find(m=>m.includes(sl))||null;
+  if(!mods)return [];
+  return mods.filter(m=>m.includes(sl));
 }
 function studSlots(s){return new Set(sessionsOf(s).map(x=>x.dia+' '+x.hora));}
 function occModule(prog,slots){let n=0;statActive().forEach(s=>{if(s.programa!==prog)return;const set=studSlots(s);if(slots.every(sl=>set.has(sl)))n++;});return n;}
