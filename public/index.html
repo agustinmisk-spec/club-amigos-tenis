@@ -852,11 +852,32 @@
 </div>
 
 <div class="overlay" id="pickOverlay">
-  <div class="modal" style="max-width:520px">
+  <div class="modal" style="max-width:720px">
     <h2 id="pickTitle">Seleccionar alumnos</h2>
     <div class="body">
       <input type="search" id="pickSearch" placeholder="Buscar alumno…" oninput="renderPickList()" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px">
-      <div id="pickList" style="max-height:52vh;overflow:auto"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px">
+        <span id="pkProg"></span>
+        <span id="pkNivel"></span>
+        <span id="pkCat"></span>
+        <span id="pkSexo"></span>
+        <span id="pkAnio"></span>
+        <span id="pkEdad"></span>
+        <span id="pkDia"></span>
+        <span id="pkHora"></span>
+        <span id="pkProf"></span>
+        <span id="pkCourt"></span>
+        <span id="pkFreq"></span>
+        <select id="pkEstado" onchange="renderPickList()" style="padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px">
+          <option value="">Activos y a prueba (sin bajas)</option>
+          <option value="Activo">Solo activos</option>
+          <option value="Prueba">Solo a prueba</option>
+          <option value="__todos__">Todos (incl. bajas)</option>
+          <option value="Baja">Solo bajas</option>
+        </select>
+        <button class="btn ghost sm" type="button" onclick="pickClearFilters()">Borrar filtros</button>
+      </div>
+      <div id="pickList" style="max-height:48vh;overflow:auto"></div>
     </div>
     <div class="foot"><button class="btn ghost" onclick="closePick()">Cancelar</button><button class="btn" id="pickBtn" onclick="confirmPick()">Agregar</button></div>
   </div>
@@ -1244,8 +1265,59 @@ async function toggleChangeClosed(id,val){try{await api('PATCH','/api/changes/'+
 async function delChange(id){if(!confirm('¿Eliminar este registro del historial?'))return;try{await api('DELETE','/api/changes/'+id);renderChanges();}catch(e){alert(e.message);}}
 
 /* ===== Selección múltiple de alumnos ===== */
-function openStudentPicker(title,cb){pickSel=new Set();pickCb=cb;document.getElementById('pickTitle').textContent=title||'Seleccionar alumnos';document.getElementById('pickSearch').value='';renderPickList();document.getElementById('pickOverlay').classList.add('show');}
-function renderPickList(){const q=(document.getElementById('pickSearch').value||'').toLowerCase().trim();const list=DB.students.filter(s=>s.estado!=='Baja'&&fullName(s).toLowerCase().includes(q)).sort((a,b)=>fullName(a).localeCompare(fullName(b),'es')).slice(0,400);document.getElementById('pickList').innerHTML=list.map(s=>`<label style="display:flex;gap:8px;align-items:center;padding:6px;border-bottom:1px solid var(--line);font-size:13.5px;cursor:pointer"><input type="checkbox" ${pickSel.has(s.id)?'checked':''} onchange="pickToggle('${s.id}',this.checked)"> ${esc(fullName(s))} <span class="small">${esc(s.programa||'')}</span></label>`).join('')||'<p class="small">Sin resultados.</p>';document.getElementById('pickBtn').textContent='Agregar'+(pickSel.size?' ('+pickSel.size+')':'');}
+function openStudentPicker(title,cb){pickSel=new Set();pickCb=cb;document.getElementById('pickTitle').textContent=title||'Seleccionar alumnos';document.getElementById('pickSearch').value='';pickInitFilters();renderPickList();document.getElementById('pickOverlay').classList.add('show');}
+function pickInitFilters(){
+  const c=DB.config;
+  ['pkProg','pkNivel','pkCat','pkSexo','pkAnio','pkEdad','pkDia','pkHora','pkProf','pkCourt','pkFreq'].forEach(k=>{MSEL[k]=new Set();});
+  const O=arr=>arr.map(x=>({v:x,t:x}));
+  msInit('pkProg',O(c.programas),'Todos los programas','Programas');
+  msInit('pkNivel',O(c.niveles),'Todos los niveles','Niveles');
+  msInit('pkCat',O(c.categorias),'Todas las categorías','Categorías');
+  msInit('pkSexo',[{v:'M',t:'Masculino'},{v:'F',t:'Femenino'}],'Ambos sexos','Sexo');
+  msInit('pkAnio',O([...new Set(DB.students.map(s=>s.anioNac).filter(Boolean))].sort()),'Todos los años nac.','Años');
+  msInit('pkEdad',O([...new Set(DB.students.map(s=>s.edad).filter(Boolean))].sort((a,b)=>a-b)),'Todas las edades','Edades');
+  msInit('pkDia',O(c.dias),'Todos los días','Días');
+  msInit('pkHora',O(c.horas),'Todos los horarios','Horarios');
+  msInit('pkProf',O(c.profs),'Todos los profes','Profes');
+  msInit('pkCourt',[...O(c.courts),{v:'__sin__',t:'Sin cancha asignada'}],'Todas las canchas','Canchas');
+  const _maxF=Math.max(1,...DB.students.filter(s=>s.estado!=='Baja').map(s=>sessionsOf(s).length),1);
+  const _freqOpts=[];for(let k=1;k<=_maxF;k++)_freqOpts.push({v:'f'+k,t:k===1?'Viene 1 vez/semana':'Viene '+k+' veces/semana'});
+  _freqOpts.push({v:'inv',t:'Con invitación fija'});
+  msInit('pkFreq',_freqOpts,'Modalidad','Modalidad');
+  const est=document.getElementById('pkEstado');if(est)est.value='';
+}
+function pickClearFilters(){
+  document.getElementById('pickSearch').value='';
+  ['pkProg','pkNivel','pkCat','pkSexo','pkAnio','pkEdad','pkDia','pkHora','pkProf','pkCourt','pkFreq'].forEach(msClear);
+  const est=document.getElementById('pkEstado');if(est)est.value='';
+  renderPickList();
+}
+function renderPickList(){
+  const q=(document.getElementById('pickSearch').value||'').toLowerCase().trim();
+  const sp=msVal('pkProg'),sn=msVal('pkNivel'),sca=msVal('pkCat'),sx=msVal('pkSexo'),sa=msVal('pkAnio'),sed=msVal('pkEdad'),sd=msVal('pkDia'),sh=msVal('pkHora'),spr=msVal('pkProf'),sc=msVal('pkCourt'),sf=msVal('pkFreq');
+  const est=(document.getElementById('pkEstado')||{}).value||'';
+  const list=DB.students.filter(s=>{
+    if(est==='__todos__'){/* incluye bajas */}
+    else if(est){if(s.estado!==est)return false;}
+    else{if(s.estado==='Baja')return false;}
+    if(q&&!fullName(s).toLowerCase().includes(q))return false;
+    if(sp.length&&!sp.includes(s.programa))return false;
+    if(sn.length&&!sn.includes(s.nivel))return false;
+    if(sca.length&&!sca.includes(s.categoria))return false;
+    if(sx.length&&!sx.includes(s.sexo))return false;
+    if(sa.length&&!sa.includes(s.anioNac))return false;
+    if(sed.length&&!sed.includes(String(s.edad)))return false;
+    const ss=sessionsOf(s);
+    if(sd.length&&!ss.some(x=>sd.includes(x.dia)))return false;
+    if(sh.length&&!ss.some(x=>sh.includes(x.hora)))return false;
+    if(spr.length&&!ss.some(x=>spr.includes(x.prof)))return false;
+    if(sc.length){const sinSel=sc.includes('__sin__');if(!ss.some(x=>(sinSel&&!x.court)||sc.includes(x.court)))return false;}
+    if(sf.length){const cnt=ss.length;const ok=sf.some(v=>{if(v==='inv')return ss.some(x=>x.inv);const m=/^f(\d+)$/.exec(v);if(m)return cnt===+m[1];return false;});if(!ok)return false;}
+    return true;
+  }).sort((a,b)=>fullName(a).localeCompare(fullName(b),'es')).slice(0,400);
+  document.getElementById('pickList').innerHTML=list.map(s=>`<label style="display:flex;gap:8px;align-items:center;padding:6px;border-bottom:1px solid var(--line);font-size:13.5px;cursor:pointer"><input type="checkbox" ${pickSel.has(s.id)?'checked':''} onchange="pickToggle('${s.id}',this.checked)"> ${esc(fullName(s))} <span class="small">${esc(s.programa||'')}</span></label>`).join('')||'<p class="small">Sin resultados.</p>';
+  document.getElementById('pickBtn').textContent='Agregar'+(pickSel.size?' ('+pickSel.size+')':'');
+}
 function pickToggle(id,ch){if(ch)pickSel.add(id);else pickSel.delete(id);document.getElementById('pickBtn').textContent='Agregar'+(pickSel.size?' ('+pickSel.size+')':'');}
 function closePick(){document.getElementById('pickOverlay').classList.remove('show');}
 function confirmPick(){const studs=[...pickSel].map(id=>DB.students.find(s=>s.id===id)).filter(Boolean);closePick();if(pickCb)pickCb(studs);}
@@ -3176,7 +3248,7 @@ function msInit(key,opts,allLabel,shortLabel){
 }
 function msLabel(key){const el=document.getElementById(key);if(!el)return;const n=MSEL[key].size;const b=el.querySelector('.ms-btn');if(b)b.textContent=(n?el.dataset.short+': '+n:el.dataset.all)+' ▾';}
 function msToggle(key){const pn=document.getElementById('msp-'+key);if(!pn)return;const open=pn.classList.contains('open');document.querySelectorAll('.ms-panel.open').forEach(x=>x.classList.remove('open'));if(!open)pn.classList.add('open');}
-function msChange(key){const pn=document.getElementById('msp-'+key);MSEL[key]=new Set([...pn.querySelectorAll('input:checked')].map(i=>i.value));msLabel(key);if(key.indexOf('att')===0)renderAtt();else if(key.indexOf('rptEv')===0){}else if(key.indexOf('tec')===0)tecRenderList();else if(key.indexOf('ev')===0)renderEvalList();else render();}
+function msChange(key){const pn=document.getElementById('msp-'+key);MSEL[key]=new Set([...pn.querySelectorAll('input:checked')].map(i=>i.value));msLabel(key);if(key.indexOf('att')===0)renderAtt();else if(key.indexOf('rptEv')===0){}else if(key.indexOf('tec')===0)tecRenderList();else if(key.indexOf('ev')===0)renderEvalList();else if(key.indexOf('pk')===0)renderPickList();else render();}
 function msVal(key){return MSEL[key]?[...MSEL[key]]:[];}
 function msClear(key){if(MSEL[key])MSEL[key].clear();const pn=document.getElementById('msp-'+key);if(pn)pn.querySelectorAll('input').forEach(i=>i.checked=false);msLabel(key);}
 function msSet(key,arr){MSEL[key]=new Set(arr||[]);const pn=document.getElementById('msp-'+key);if(pn)pn.querySelectorAll('input').forEach(i=>i.checked=MSEL[key].has(i.value));msLabel(key);}
