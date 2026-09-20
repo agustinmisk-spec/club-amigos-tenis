@@ -136,7 +136,9 @@
   .stbl th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);text-align:left;padding:4px 8px;border-bottom:1px solid var(--line)}
   .stbl td{padding:6px 8px;border-bottom:1px solid #eef0f4}
   .stbl tr.sttot td{border-top:2px solid var(--line);border-bottom:none;font-weight:700;background:#f7f9fc}
-  #statsOut .card{max-width:640px}
+  #statsOut{column-count:2;column-gap:16px}
+  #statsOut .card{break-inside:avoid;-webkit-column-break-inside:avoid}
+  @media(max-width:900px){#statsOut{column-count:1}}
   .ficha-sec{margin-bottom:12px;background:#f7f9fc;border:1px solid var(--line);border-radius:8px;padding:9px 11px}
   .ficha-h{font-weight:700;color:var(--green);margin-bottom:3px;font-size:13px}
   .equip-link{cursor:pointer;text-decoration:underline}
@@ -544,8 +546,8 @@
   <section id="tab-estadisticas" style="display:none">
     <div class="card" style="padding:18px;margin-bottom:14px">
       <div class="sectitle">Datos de la escuela</div>
-      <p class="small" style="margin:2px 0 10px">Elegí qué información querés ver. La ocupación se calcula sobre los cupos de cada grupo (Mini Deporte y resto de programas, según Configuración).</p>
-      <div id="statsPick" style="display:flex;flex-wrap:wrap;gap:10px 16px"></div>
+      <p class="small" style="margin:2px 0 10px">Elegí qué información querés ver y usá ↑/↓ para ordenarla a tu gusto (se muestra en dos columnas). La ocupación se calcula sobre los cupos de cada grupo (Mini Deporte y resto de programas, según Configuración).</p>
+      <div id="statsPick" style="display:flex;flex-direction:column;gap:6px;max-width:480px"></div>
       <div id="statsColors"></div>
     </div>
     <div id="statsOut"></div>
@@ -3289,22 +3291,50 @@ function statColorFor(key,label,i){const m=statColorMap()[key];return (m&&m[labe
 function statSetCatColor(key,labelEnc,v){if(!can('config'))return;const label=decodeURIComponent(labelEnc);const m=statColorMap();(m[key]=m[key]||{})[label]=v;statSaveColors();renderStatsOut();}
 function statResetCatColors(key){if(!can('config'))return;const m=statColorMap();delete m[key];statSaveColors();renderStatsOut();}
 function statCardColors(key,labels){if(!can('config'))return '';return `<div style="margin-top:10px;border-top:1px dashed var(--line);padding-top:8px"><div class="small" style="font-weight:600;margin-bottom:5px">🎨 Colores de este gráfico</div><div style="display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center">${labels.map((lb,i)=>`<label style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px"><input type="color" value="${esc(statColorFor(key,lb,i))}" onchange="statSetCatColor('${key}','${encodeURIComponent(lb)}',this.value)" style="width:26px;height:22px;padding:0;border:1px solid var(--line);border-radius:5px;cursor:pointer">${esc(lb)}</label>`).join('')}<button class="btn sm ghost" onclick="statResetCatColors('${key}')">Restaurar</button></div></div>`;}
-function renderStatsPanel(){const sel=statSel();document.getElementById('statsPick').innerHTML=STAT_BLOCKS.map(b=>`<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;background:#f5f7fb;border:1px solid var(--line);border-radius:8px;padding:5px 10px"><input type="checkbox" ${sel[b.k]?'checked':''} onchange="statToggle('${b.k}',this.checked)">${esc(b.t)}</label>`).join('');const sc=document.getElementById('statsColors');if(sc)sc.innerHTML='';renderStatsOut();}
+function renderStatsPanel(){
+  const sel=statSel(),blocks=statOrderedBlocks();
+  document.getElementById('statsPick').innerHTML=blocks.map((b,i)=>`<div style="display:flex;align-items:center;gap:8px;font-size:13px;background:#f5f7fb;border:1px solid var(--line);border-radius:8px;padding:5px 8px 5px 12px">
+    <label style="display:flex;align-items:center;gap:6px;flex:1;cursor:pointer"><input type="checkbox" ${sel[b.k]?'checked':''} onchange="statToggle('${b.k}',this.checked)">${esc(b.t)}</label>
+    <button type="button" class="btn sm ghost" ${i===0?'disabled':''} onclick="statMove('${b.k}',-1)" title="Subir">↑</button>
+    <button type="button" class="btn sm ghost" ${i===blocks.length-1?'disabled':''} onclick="statMove('${b.k}',1)" title="Bajar">↓</button>
+  </div>`).join('')+`<button class="btn sm ghost" type="button" style="margin-top:2px;align-self:flex-start" onclick="statResetOrder()">Restablecer orden</button>`;
+  const sc=document.getElementById('statsColors');if(sc)sc.innerHTML='';renderStatsOut();
+}
 function statToggle(k,v){const s=statSel();s[k]=v;statSelSave(s);renderStatsOut();}
 function statFreqCard(){const act=statActive();const mini=act.filter(s=>s.programa==='MINI DEPORTE');const miniMulti=mini.filter(s=>sessionsOf(s).length>1).length;const allMulti=act.filter(s=>sessionsOf(s).length>1).length;const inv=act.filter(s=>sessionsOf(s).some(x=>x.inv)).length;const row=(l,v,b)=>`<tr class="${b?'sttot':''}"><td>${esc(l)}</td><td style="text-align:right"><b>${v}</b></td></tr>`;return statCard('Frecuencia e invitaciones',`<table class="stbl"><tbody>${row('Mini Deporte (total)',mini.length)}${row('Mini Deporte que vienen más de 1 vez/semana',miniMulti)}${row('Alumnos que vienen más de 1 vez/semana (todos)',allMulti)}${row('Alumnos con invitación fija',inv)}</tbody></table>`);}
+function statOrder(){try{const v=JSON.parse(localStorage.getItem('et_stats_order'));if(Array.isArray(v))return v;}catch(e){}return [];}
+function statOrderSave(order){try{localStorage.setItem('et_stats_order',JSON.stringify(order));}catch(e){}}
+function statOrderedBlocks(){
+  const order=statOrder();
+  const idxOf=k=>{const i=order.indexOf(k);return i<0?9999:i;};
+  return STAT_BLOCKS.slice().sort((a,b)=>(idxOf(a.k)-idxOf(b.k))||(STAT_BLOCKS.indexOf(a)-STAT_BLOCKS.indexOf(b)));
+}
+function statMove(k,dir){
+  const keys=statOrderedBlocks().map(b=>b.k);
+  const i=keys.indexOf(k),j=i+dir;
+  if(i<0||j<0||j>=keys.length)return;
+  [keys[i],keys[j]]=[keys[j],keys[i]];
+  statOrderSave(keys);
+  renderStatsPanel();
+}
+function statResetOrder(){statOrderSave([]);renderStatsPanel();}
 function renderStatsOut(){
   STAT_JOBS=[];
-  const sel=statSel(),c=DB.config,act=statActive(),cells=occCells();let out='';
-  if(sel.tot)out+=statCard('Total de alumnos',`<div style="font-size:38px;font-weight:800;color:#1b3a6b;line-height:1">${act.length}</div><div class="small">alumnos activos (no incluye bajas)</div>`);
-  if(sel.prog)out+=statCountCard('Alumnos por programa',statCountBy(act,s=>s.programa),c.programas,{type:'doughnut',h:230,key:'prog'});
-  if(sel.nivel)out+=statCountCard('Alumnos por nivel',statCountBy(act,s=>s.nivel),c.niveles,{type:'bar',key:'nivel'});
-  if(sel.cat)out+=statCountCard('Alumnos por categoría',statCountBy(act,s=>s.categoria),c.categorias,{type:'doughnut',h:230,key:'cat'});
-  if(sel.prof)out+=statCountCard('Alumnos por profesor',statByProf(),c.profs,{type:'bar',horizontal:true,h:Math.max(180,(Object.keys(statByProf()).length)*26),noTotal:true,note:'Un alumno con más de un profesor se cuenta en cada uno.',key:'prof'});
-  if(sel.freq)out+=statFreqCard();
-  if(sel.octot){const mc=modCells();const tn=mc.reduce((s,g)=>s+g.oc,0),tc=mc.reduce((s,g)=>s+g.cup,0);out+=statCard('Ocupación total',`<table class="stbl"><tbody>${statBarRow('Todos los programas',tn,tc,true)}</tbody></table><div class="small" style="margin-top:6px">${tn} alumnos ubicados de ${tc} lugares disponibles (suma de los tres programas).</div>`);}
-  if(sel.octurno){out+=statOccModular('Ocupación · Mini Deporte (por horario)','MINI DEPORTE',miniRows(),'Horario',true);out+=statOccModular('Ocupación · Escuela de Tenis (por módulo)','ESCUELA DE TENIS',modRows(ESC_MODS),'Módulo');out+=statOccModular('Ocupación · Entrenamiento (por módulo)','ENTRENAMIENTO',modRows(ENTREN_MODS),'Módulo');}
-  if(sel.ocdia)out+=statOccCard('Ocupación por día (clases dictadas)',cells,g=>g.dia,c.dias);
-  if(sel.ocprog)out+=statOccCard('Ocupación por programa',modCells(),g=>g.prog,c.programas);
+  const sel=statSel(),c=DB.config,act=statActive(),cells=occCells();
+  const renderers={
+    tot:()=>statCard('Total de alumnos',`<div style="font-size:38px;font-weight:800;color:#1b3a6b;line-height:1">${act.length}</div><div class="small">alumnos activos (no incluye bajas)</div>`),
+    prog:()=>statCountCard('Alumnos por programa',statCountBy(act,s=>s.programa),c.programas,{type:'doughnut',h:230,key:'prog'}),
+    nivel:()=>statCountCard('Alumnos por nivel',statCountBy(act,s=>s.nivel),c.niveles,{type:'bar',key:'nivel'}),
+    cat:()=>statCountCard('Alumnos por categoría',statCountBy(act,s=>s.categoria),c.categorias,{type:'doughnut',h:230,key:'cat'}),
+    prof:()=>statCountCard('Alumnos por profesor',statByProf(),c.profs,{type:'bar',horizontal:true,h:Math.max(180,(Object.keys(statByProf()).length)*26),noTotal:true,note:'Un alumno con más de un profesor se cuenta en cada uno.',key:'prof'}),
+    freq:()=>statFreqCard(),
+    octot:()=>{const mc=modCells();const tn=mc.reduce((s,g)=>s+g.oc,0),tc=mc.reduce((s,g)=>s+g.cup,0);return statCard('Ocupación total',`<table class="stbl"><tbody>${statBarRow('Todos los programas',tn,tc,true)}</tbody></table><div class="small" style="margin-top:6px">${tn} alumnos ubicados de ${tc} lugares disponibles (suma de los tres programas).</div>`);},
+    octurno:()=>statOccModular('Ocupación · Mini Deporte (por horario)','MINI DEPORTE',miniRows(),'Horario',true)+statOccModular('Ocupación · Escuela de Tenis (por módulo)','ESCUELA DE TENIS',modRows(ESC_MODS),'Módulo')+statOccModular('Ocupación · Entrenamiento (por módulo)','ENTRENAMIENTO',modRows(ENTREN_MODS),'Módulo'),
+    ocdia:()=>statOccCard('Ocupación por día (clases dictadas)',cells,g=>g.dia,c.dias),
+    ocprog:()=>statOccCard('Ocupación por programa',modCells(),g=>g.prog,c.programas)
+  };
+  let out='';
+  statOrderedBlocks().forEach(b=>{if(sel[b.k])out+=renderers[b.k]();});
   if(!out)out='<div class="card empty"><p>Seleccioná al menos un dato para mostrar.</p></div>';
   document.getElementById('statsOut').innerHTML=out;
   statBuildCharts();
