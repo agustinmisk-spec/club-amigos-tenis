@@ -244,7 +244,8 @@ const cleanBlock = bl => ({
   titulo: String((bl && bl.titulo) || '').slice(0, 80),
   minutos: num(bl && bl.minutos, 0, 300, 0),
   descripcion: String((bl && bl.descripcion) || '').slice(0, 4000),
-  graficos: Array.isArray(bl && bl.graficos) ? bl.graficos.slice(0, 10).map(cleanGraph) : []
+  graficos: Array.isArray(bl && bl.graficos) ? bl.graficos.slice(0, 10).map(cleanGraph) : [],
+  graphLayout: ['auto', 'col', 'row', 'grid2'].includes(bl && bl.graphLayout) ? bl.graphLayout : 'auto'
 });
 const cleanLessonPlan = b => {
   return {

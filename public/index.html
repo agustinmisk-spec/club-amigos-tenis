@@ -1171,6 +1171,12 @@ const LP_DEFAULT_MINUTOS={
   'ENTRENAMIENTO':{inicio:2,calentamiento:13,drill:15,saques:10,juego:18,cierre:2}
 };
 function lpDefaultMinutos(programa,tipo){return (LP_DEFAULT_MINUTOS[programa]&&LP_DEFAULT_MINUTOS[programa][tipo])||0;}
+const LP_GRAPH_LAYOUTS=[
+  {v:'auto',t:'Automático'},
+  {v:'col',t:'Uno debajo del otro'},
+  {v:'row',t:'Uno al lado del otro'},
+  {v:'grid2',t:'De a dos por fila'}
+];
 const LP_COLORS=['#111827','#c0392b','#1f8a4d','#2563eb','#ff7a1a','#f1c40f'];
 const LP_DEFAULT_COLOR={jugador:'#111827',raqueta:'#111827',pelota:'#cfe61c',canasto:'#e9c46a',cono:'#ff7a1a',conobajo:'#ff7a1a',aro:'#e0338c'};
 const LP_COLORABLE=new Set(Object.keys(LP_DEFAULT_COLOR));
@@ -1630,6 +1636,7 @@ function lpBlockCardHTML(block){
       </span>
     </div>
     <div class="field" style="margin-top:8px"><label>Descripción del ejercicio</label>${editable?rteBox('','',block.descripcion,60,'Descripción del ejercicio…',`lpSetBlockField('${block.id}','descripcion',rteGet(this))`):`<div class="rte" style="border:1px solid var(--line);border-radius:8px;background:var(--card)">${fmtRaw(block.descripcion||'')}</div>`}</div>
+    ${(block.graficos||[]).length>1?`<div class="field" style="margin-top:8px;max-width:280px"><label>Orden de los gráficos (al imprimir/PDF)</label><select ${editable?'':'disabled'} onchange="lpSetBlockField('${block.id}','graphLayout',this.value)">${LP_GRAPH_LAYOUTS.map(o=>`<option value="${o.v}"${(block.graphLayout||'auto')===o.v?' selected':''}>${esc(o.t)}</option>`).join('')}</select></div>`:''}
     ${graphs}
     ${editable?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
       <button type="button" class="btn sm ghost" onclick="lpAddGraphic('${block.id}')">+ Agregar gráfico</button>
@@ -2388,8 +2395,16 @@ function lpGeneratePDF(p){
     const textLen=String(b.descripcion||'').replace(/<[^>]+>/g,'').trim().length;
     const gwRow=n<=1?195:(n===2?152:118);
     const gwCol=n===2?175:(n===3?150:130);
-    let colstack=false;
-    if(n>1){
+    const gwGrid2=130;
+    const layoutMode=n>1?(b.graphLayout||'auto'):'auto';
+    let colstack=false,gw=gwRow,graphsContainerStyle='';
+    if(layoutMode==='col'){
+      colstack=true;gw=gwCol;
+    }else if(layoutMode==='row'){
+      colstack=false;gw=gwRow;graphsContainerStyle=' style="flex-wrap:nowrap"';
+    }else if(layoutMode==='grid2'){
+      colstack=false;gw=gwGrid2;graphsContainerStyle=` style="max-width:calc(${gwGrid2*2+6}px * var(--s))"`;
+    }else if(n>1){
       const W=700,charW=6,lineH=17;
       const rowGW=n*gwRow+(n-1)*6;
       const charsRow=Math.max(20,W-rowGW-12)/charW;
@@ -2399,8 +2414,8 @@ function lpGeneratePDF(p){
       const rowTotal=Math.max(Math.ceil(textLen/charsRow)*lineH,rowGH);
       const colTotal=Math.max(Math.ceil(textLen/charsCol)*lineH,colGH);
       colstack=colTotal<rowTotal;
+      gw=colstack?gwCol:gwRow;
     }
-    const gw=colstack?gwCol:gwRow;
     const graphsHTML=(b.graficos||[]).map(g=>{
       const shapesSvg=(g.shapes||[]).map(s=>{
         const col=s.color||'#c0392b',w=s.width||0.9,mk=`url(#lppArrow-${lpColorId(col)})`;
@@ -2418,7 +2433,7 @@ function lpGeneratePDF(p){
       <div class="blkhd"><span>${st.icon}</span><b>${esc(b.titulo||'')}</b>${b.minutos?`<span class="blkmin">${esc(String(b.minutos))}′</span>`:''}</div>
       <div class="blkbody">
         ${b.descripcion?`<div class="blkdesc">${fmtRaw(b.descripcion)}</div>`:'<div class="blkdesc blkdesc-empty">—</div>'}
-        ${graphsHTML?`<div class="blkgraphs${colstack?' colstack':''}">${graphsHTML}</div>`:''}
+        ${graphsHTML?`<div class="blkgraphs${colstack?' colstack':''}"${graphsContainerStyle}>${graphsHTML}</div>`:''}
       </div>
     </div>`;
   }).join('');
