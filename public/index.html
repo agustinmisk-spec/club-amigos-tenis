@@ -1651,6 +1651,7 @@ function lpBlockCardHTML(block){
       </span>
     </div>
     <div class="field" style="margin-top:8px"><label>Descripción del ejercicio</label>${editable?rteBox('','',block.descripcion,60,'Descripción del ejercicio…',`lpSetBlockField('${block.id}','descripcion',rteGet(this))`):`<div class="rte" style="border:1px solid var(--line);border-radius:8px;background:var(--card)">${fmtRaw(block.descripcion||'')}</div>`}</div>
+    <div class="field" style="margin-top:8px;max-width:220px"><label>Columnas del texto (al imprimir/PDF)</label><select ${editable?'':'disabled'} onchange="lpSetBlockField('${block.id}','descColumns',parseInt(this.value,10))"><option value="1"${(block.descColumns||1)===1?' selected':''}>1 columna</option><option value="2"${block.descColumns===2?' selected':''}>2 columnas</option></select></div>
     ${(block.graficos||[]).length>1?`<div class="field" style="margin-top:8px;max-width:280px"><label>Orden de los gráficos (al imprimir/PDF)</label><select ${editable?'':'disabled'} onchange="lpSetBlockField('${block.id}','graphLayout',this.value)">${LP_GRAPH_LAYOUTS.map(o=>`<option value="${o.v}"${(block.graphLayout||'auto')===o.v?' selected':''}>${esc(o.t)}</option>`).join('')}</select></div>`:''}
     ${graphs}
     ${(block.graficos||[]).length>0?`<div class="field" style="margin-top:8px"><label>Texto debajo de los gráficos (opcional, ej: cronograma de partidos)</label>${editable?rteBox('','',block.notaGraficos,40,'Aparece a la derecha, debajo de los gráficos, en el PDF…',`lpSetBlockField('${block.id}','notaGraficos',rteGet(this))`):(block.notaGraficos?`<div class="rte" style="border:1px solid var(--line);border-radius:8px;background:var(--card)">${fmtRaw(block.notaGraficos)}</div>`:'')}</div>`:''}
@@ -2654,7 +2655,7 @@ function lpGeneratePDF(p){
       </div>`:'';
     const bodyHTML=(b.descripcion||graphsHTML||!hasCuadro)?`<div class="blkbody${hasCuadro?' blkbody-sec':''}">
         ${asideHTML}
-        ${b.descripcion?`<div class="blkdesc">${fmtRaw(b.descripcion)}</div>`:(hasCuadro?'':'<div class="blkdesc blkdesc-empty">—</div>')}
+        ${b.descripcion?`<div class="blkdesc${b.descColumns===2?' blkdesc-2col':''}">${fmtRaw(b.descripcion)}</div>`:(hasCuadro?'':'<div class="blkdesc blkdesc-empty">—</div>')}
       </div>`:'';
     return `<div class="blk">
       <div class="blkhd"><span>${st.icon}</span><b>${esc(b.titulo||'')}</b>${b.minutos?`<span class="blkmin">${esc(String(b.minutos))}′</span>`:''}</div>
@@ -2683,6 +2684,8 @@ function lpGeneratePDF(p){
     +'.blkmin{margin-left:auto;background:rgba(255,255,255,.25);border-radius:10px;padding:calc(1px * var(--s)) calc(9px * var(--s));font-size:calc(10.5px * var(--s));font-weight:600}'
     +'.blkbody{padding:calc(8px * var(--s) * var(--g)) calc(11px * var(--s));overflow:hidden}'
     +'.blkdesc{font-size:calc(11.5px * var(--s));line-height:calc(1.48 + 0.1 * (var(--g) - 1))}'
+    +'.blkdesc-2col{column-count:2;column-gap:calc(18px * var(--s))}'
+    +'.blkdesc-2col>*:first-child{margin-top:0}'
     +'.blkdesc-empty{color:#aab2b8}'
     +'.blkaside{float:right;margin:0 0 calc(6px * var(--s)) calc(14px * var(--s))}'
     +'.blkgraphs{display:flex;flex-wrap:wrap;gap:calc(6px * var(--s))}'
@@ -2698,14 +2701,14 @@ function lpGeneratePDF(p){
     +'.cdlabel{font-size:calc(9px * var(--s));font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:#8a95a1;text-align:center;margin-bottom:calc(5px * var(--s))}'
     +'.cdmatches{display:flex;flex-direction:column;justify-content:space-around;gap:calc(11px * var(--s));flex:1}'
     +'.cdmatch{border:1px solid #dde3de;border-radius:7px;padding:calc(8px * var(--s)) calc(11px * var(--cs));background:#fff}'
-    +'.cdslot{font-size:calc(13px * var(--s));padding:calc(3.5px * var(--s)) 0;border-bottom:1px dashed #e4e8e6;min-height:calc(19px * var(--s))}'
+    +'.cdslot{font-size:calc(13px * var(--s));padding:calc(3.5px * var(--s)) 0;border-bottom:1px dashed #e4e8e6;min-height:calc(19px * var(--s));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
     +'.cdslot:last-of-type{border-bottom:none}'
     +'.cdres{font-size:calc(10.5px * var(--s));color:#8a95a1;margin-top:calc(4px * var(--s))}'
     +'.cdchamp .cdmatch{background:#fff8e6;border-color:#d8a93a;font-weight:700;font-size:calc(14px * var(--s));text-align:center;display:flex;align-items:center;justify-content:center;min-height:calc(50px * var(--s))}'
     +'.rrptbl{border-collapse:collapse;font-size:calc(13px * var(--s));width:100%;table-layout:fixed}'
     +'.rrptbl th{padding:calc(5px * var(--s)) calc(4px * var(--cs));color:#8a95a1;font-weight:700;text-align:center}'
-    +'.rrptbl td{padding:calc(8px * var(--s)) calc(6px * var(--cs));text-align:center;border:1px solid #e4e8e6;word-break:break-word}'
-    +'.rrptbl td.rrname{text-align:left;font-weight:600;white-space:normal;border:none;padding-right:calc(8px * var(--cs))}'
+    +'.rrptbl td{padding:calc(8px * var(--s)) calc(6px * var(--cs));text-align:center;border:1px solid #e4e8e6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    +'.rrptbl td.rrname{text-align:left;font-weight:600;border:none;padding-right:calc(8px * var(--cs))}'
     +'.rrptbl td.rrdiag{background:#f2f4f2;color:#b7bdb7}'
     +'.lppg{background:#fff;border:1px solid #dde3de;border-radius:5px}'
     +'.ft{margin-top:calc(9px * var(--s) * var(--g));font-size:calc(8.5px * var(--s));color:#9aa4ab;text-align:right}'
@@ -2749,6 +2752,17 @@ function lpGeneratePDF(p){
     +'wrap.style.setProperty("--g",g);'
     +'}'
     +'}'
+    +'Array.prototype.forEach.call(document.querySelectorAll(".rrptbl"),function(tbl){'
+    +'var base=parseFloat(getComputedStyle(tbl).fontSize),scale=1;'
+    +'for(var k=0;k<10;k++){'
+    +'var fs=Math.max(7.5,base*scale);'
+    +'tbl.style.fontSize=fs+"px";'
+    +'var cells=tbl.querySelectorAll("td:not(.rrdiag)"),over=false;'
+    +'for(var i=0;i<cells.length;i++){if(cells[i].scrollWidth>cells[i].clientWidth+1){over=true;break;}}'
+    +'if(!over||fs<=7.5)break;'
+    +'scale*=0.92;'
+    +'}'
+    +'});'
     +'setTimeout(function(){window.print();},350);'
     +'};</scr'+'ipt>'
     +'</body></html>';
