@@ -1432,7 +1432,8 @@ async function renderLP(){
   }
   renderLPView();
 }
-let LP_FILTER={q:'',nivel:'',desde:'',hasta:''};
+let LP_FILTER={q:'',nivel:'',desde:'',hasta:'',sort:'alfabetico'};
+const LP_SORTS=[{v:'alfabetico',t:'Orden alfabético'},{v:'modificado',t:'Última modificación'},{v:'fecha',t:'Fecha de realización'}];
 function lpNivelesLabel(p){
   const niveles=(p.niveles&&p.niveles.length)?p.niveles.join(', '):(p.nivel||'');
   if(p.segmento)return niveles?niveles+' · '+p.segmento:p.segmento;
@@ -1444,9 +1445,17 @@ function lpPlanHeading(p){
   if(p.libre)return {title:'Planificación libre',subtitle:(p.programa||'')+(nl?' · '+nl:'')};
   return {title:(p.programa||'—')+(nl?' · '+nl:''),subtitle:''};
 }
+function lpSortPlans(list){
+  const items=list.slice();
+  const key=LP_FILTER.sort||'alfabetico';
+  if(key==='modificado')items.sort((a,b)=>(b.modificado||b.fecha||'').localeCompare(a.modificado||a.fecha||''));
+  else if(key==='fecha')items.sort((a,b)=>(a.fechaDesde||'').localeCompare(b.fechaDesde||''));
+  else items.sort((a,b)=>lpPlanHeading(a).title.toLowerCase().localeCompare(lpPlanHeading(b).title.toLowerCase(),'es'));
+  return items;
+}
 function lpFilteredPlans(){
   const q=LP_FILTER.q.trim().toLowerCase();
-  return LESSONPLANS.filter(p=>{
+  const list=LESSONPLANS.filter(p=>{
     const niveles=(p.niveles&&p.niveles.length)?p.niveles:(p.nivel?[p.nivel]:[]);
     if(LP_FILTER.nivel&&!niveles.includes(LP_FILTER.nivel))return false;
     if(LP_FILTER.desde&&p.fechaDesde&&p.fechaDesde<LP_FILTER.desde)return false;
@@ -1457,9 +1466,10 @@ function lpFilteredPlans(){
     }
     return true;
   });
+  return lpSortPlans(list);
 }
 function lpSetFilter(key,val){LP_FILTER[key]=val;lpRenderListResults();}
-function lpClearFilter(){LP_FILTER={q:'',nivel:'',desde:'',hasta:''};renderLPView();}
+function lpClearFilter(){LP_FILTER={q:'',nivel:'',desde:'',hasta:'',sort:'alfabetico'};renderLPView();}
 function lpRenderListResults(){const box=document.getElementById('lpListResults');if(box)box.innerHTML=lpListHTML();}
 function lpFilterBarHTML(){
   const c=DB.config;
@@ -1468,6 +1478,7 @@ function lpFilterBarHTML(){
     <select onchange="lpSetFilter('nivel',this.value)" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px">${lpOpt(c.niveles,'Todos los niveles',LP_FILTER.nivel)}</select>
     <input type="date" value="${esc(LP_FILTER.desde)}" onchange="lpSetFilter('desde',this.value)" title="Desde" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px">
     <input type="date" value="${esc(LP_FILTER.hasta)}" onchange="lpSetFilter('hasta',this.value)" title="Hasta" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px">
+    <select onchange="lpSetFilter('sort',this.value)" title="Ordenar por" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px">${LP_SORTS.map(o=>`<option value="${o.v}"${LP_FILTER.sort===o.v?' selected':''}>${esc(o.t)}</option>`).join('')}</select>
     <button type="button" class="btn ghost sm" onclick="lpClearFilter()">Borrar filtros</button>
   </div>`;
 }
