@@ -1453,7 +1453,7 @@ function lpSortPlans(list){
   let cmp;
   if(key==='modificado')cmp=(a,b)=>(a.modificado||a.fecha||'').localeCompare(b.modificado||b.fecha||'');
   else if(key==='fecha')cmp=(a,b)=>(a.fechaDesde||'').localeCompare(b.fechaDesde||'');
-  else cmp=(a,b)=>lpPlanHeading(a).title.toLowerCase().localeCompare(lpPlanHeading(b).title.toLowerCase(),'es');
+  else cmp=(a,b)=>lpPlanHeading(a).title.localeCompare(lpPlanHeading(b).title,'es',{numeric:true,sensitivity:'base'});
   items.sort((a,b)=>cmp(a,b)*dir);
   return items;
 }
