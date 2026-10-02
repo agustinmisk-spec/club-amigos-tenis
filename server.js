@@ -238,6 +238,44 @@ const cleanGraph = g => ({
   elements: Array.isArray(g && g.elements) ? g.elements.slice(0, 60).map(cleanEl) : [],
   shapes: Array.isArray(g && g.shapes) ? g.shapes.slice(0, 60).map(cleanShape) : []
 });
+const cleanCuadroMatch = m => ({
+  a: String((m && m.a) || '').slice(0, 40),
+  b: String((m && m.b) || '').slice(0, 40),
+  res: String((m && m.res) || '').slice(0, 40)
+});
+const cleanCuadroElim = c => {
+  const jugadores = [4, 8, 16, 32].includes(c && c.jugadores) ? c.jugadores : 8;
+  const totalRounds = Math.log2(jugadores);
+  const srcRounds = Array.isArray(c && c.rounds) ? c.rounds : [];
+  const rounds = [];
+  for (let r = 0; r < totalRounds; r++) {
+    const n = jugadores / Math.pow(2, r + 1);
+    const srcRound = Array.isArray(srcRounds[r]) ? srcRounds[r] : [];
+    rounds.push(Array.from({ length: n }, (_, i) => cleanCuadroMatch(srcRound[i])));
+  }
+  return { formato: 'eliminacion', jugadores, campeon: String((c && c.campeon) || '').slice(0, 40), rounds };
+};
+const cleanCuadroRR = c => {
+  const srcNombres = Array.isArray(c && c.nombres) ? c.nombres : [];
+  const n = Math.min(20, Math.max(2, srcNombres.length || 4));
+  const nombres = Array.from({ length: n }, (_, i) => String(srcNombres[i] || '').slice(0, 40));
+  const srcRes = Array.isArray(c && c.resultados) ? c.resultados : [];
+  const resultados = Array.from({ length: n }, (_, i) => {
+    const srcRow = Array.isArray(srcRes[i]) ? srcRes[i] : [];
+    return Array.from({ length: n }, (_, j) => String(srcRow[j] || '').slice(0, 24));
+  });
+  const srcPuntos = Array.isArray(c && c.puntos) ? c.puntos : [];
+  const srcDif = Array.isArray(c && c.diferencia) ? c.diferencia : [];
+  const srcPos = Array.isArray(c && c.posiciones) ? c.posiciones : [];
+  const puntos = Array.from({ length: n }, (_, i) => String(srcPuntos[i] || '').slice(0, 10));
+  const diferencia = Array.from({ length: n }, (_, i) => String(srcDif[i] || '').slice(0, 10));
+  const posiciones = Array.from({ length: n }, (_, i) => String(srcPos[i] || '').slice(0, 10));
+  return { formato: 'roundrobin', nombres, resultados, puntos, diferencia, posiciones };
+};
+const cleanCuadro = c => {
+  const base = { id: String((c && c.id) || '').slice(0, 40), nombre: String((c && c.nombre) || '').slice(0, 80) };
+  return Object.assign(base, (c && c.formato === 'roundrobin') ? cleanCuadroRR(c) : cleanCuadroElim(c));
+};
 const cleanBlock = bl => ({
   id: String((bl && bl.id) || '').slice(0, 40),
   tipo: String((bl && bl.tipo) || '').slice(0, 30),
@@ -245,7 +283,8 @@ const cleanBlock = bl => ({
   minutos: num(bl && bl.minutos, 0, 300, 0),
   descripcion: String((bl && bl.descripcion) || '').slice(0, 4000),
   graficos: Array.isArray(bl && bl.graficos) ? bl.graficos.slice(0, 10).map(cleanGraph) : [],
-  graphLayout: ['auto', 'col', 'row', 'grid2'].includes(bl && bl.graphLayout) ? bl.graphLayout : 'auto'
+  graphLayout: ['auto', 'col', 'row', 'grid2'].includes(bl && bl.graphLayout) ? bl.graphLayout : 'auto',
+  cuadros: Array.isArray(bl && bl.cuadros) ? bl.cuadros.slice(0, 6).map(cleanCuadro) : []
 });
 const cleanLessonPlan = b => {
   return {
