@@ -1479,7 +1479,7 @@ const LP_PROG_COLORS=['#2563eb','#1f8a4d','#c0392b','#ff7a1a','#7c3aed','#0891b2
 function lpPlanCardHTML(p){
   const mins=(p.bloques||[]).reduce((a,b)=>a+(b.minutos||0),0);
   const hd=lpPlanHeading(p);
-  return `<div class="item"><div class="top"><span class="ti">${p.libre?'🗒️':'📅'} ${esc(hd.title)}</span><span>${can('planner')?`<button class="att-btn" title="Eliminar" onclick="lpDeletePlan('${p.id}')">🗑</button> `:''}<button class="btn sec sm" onclick="lpPrintPlanById('${p.id}')">🖨️ Imprimir</button> <button class="btn sec sm" onclick="lpPrintPlanById('${p.id}')">📄 PDF</button> <button class="btn sec sm" onclick="lpEditPlan('${p.id}')">${can('planner')?'Editar':'Ver'}</button></span></div>${hd.subtitle?`<div class="small" style="color:var(--muted)">${esc(hd.subtitle)}</div>`:''}<div class="meta2">${esc(fmtFecha(p.fechaDesde))}${p.fechaHasta?' a '+esc(fmtFecha(p.fechaHasta)):''} · ${(p.bloques||[]).length} bloque(s) · ${mins} min · ${esc(p.autor||'')}</div>${p.objetivo?`<div class="small" style="margin-top:4px">${fmt(p.objetivo)}</div>`:''}</div>`;
+  return `<div class="item"><div class="top"><span class="ti">${p.libre?'🗒️':'📅'} ${esc(hd.title)}</span><span>${can('planner')?`<button class="att-btn" title="Eliminar" onclick="lpDeletePlan('${p.id}')">🗑</button> `:''}<button class="btn sec sm" onclick="lpPrintPlanById('${p.id}')">🖨️ Imprimir</button> <button class="btn sec sm" onclick="lpPrintPlanById('${p.id}')">📄 PDF</button> ${can('planner')?`<button class="btn sec sm" title="Duplicar" onclick="lpDuplicatePlan('${p.id}')">⧉ Duplicar</button> `:''}<button class="btn sec sm" onclick="lpEditPlan('${p.id}')">${can('planner')?'Editar':'Ver'}</button></span></div>${hd.subtitle?`<div class="small" style="color:var(--muted)">${esc(hd.subtitle)}</div>`:''}<div class="meta2">${esc(fmtFecha(p.fechaDesde))}${p.fechaHasta?' a '+esc(fmtFecha(p.fechaHasta)):''} · ${(p.bloques||[]).length} bloque(s) · ${mins} min · ${esc(p.autor||'')}</div>${p.objetivo?`<div class="small" style="margin-top:4px">${fmt(p.objetivo)}</div>`:''}</div>`;
 }
 function lpListHTML(){
   const list=lpFilteredPlans();
@@ -1527,6 +1527,17 @@ function lpEditPlan(id){
   renderLPView();
 }
 function lpBackToList(){LP_EDIT=null;LP_SELECTED=null;LP_DRAW=null;renderLPView();}
+async function lpDuplicatePlan(id){
+  if(!can('planner'))return;
+  const p=LESSONPLANS.find(x=>x.id===id);if(!p)return;
+  const clone=JSON.parse(JSON.stringify(p));
+  const body={titulo:clone.titulo?clone.titulo+' (copia)':'',programa:clone.programa||'',niveles:clone.niveles||[],segmento:clone.segmento||'',fechaDesde:clone.fechaDesde||'',fechaHasta:clone.fechaHasta||'',objetivo:clone.objetivo||'',contenido:clone.contenido||'',bloques:clone.bloques||[],libre:!!clone.libre};
+  try{
+    const saved=await api('POST','/api/lessonplans',body);
+    LESSONPLANS.unshift(saved);
+    renderLPView();
+  }catch(e){alert('No se pudo duplicar: '+e.message);}
+}
 async function lpDeletePlan(id){
   if(!can('planner'))return;
   if(!confirm('¿Eliminar esta planificación?'))return;
