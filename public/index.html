@@ -1436,6 +1436,7 @@ function lpNivelesLabel(p){
 function lpPlanHeading(p){
   const nl=lpNivelesLabel(p);
   if(p.titulo)return {title:p.titulo,subtitle:(p.programa||'')+(nl?' · '+nl:'')};
+  if(p.libre)return {title:'Planificación libre',subtitle:(p.programa||'')+(nl?' · '+nl:'')};
   return {title:(p.programa||'—')+(nl?' · '+nl:''),subtitle:''};
 }
 function lpFilteredPlans(){
@@ -1467,13 +1468,13 @@ function lpFilterBarHTML(){
 }
 function renderLPView(){
   const wrap=document.getElementById('lpWrap');if(!wrap)return;
-  wrap.innerHTML=LP_EDIT?lpEditorHTML():`<div class="toolbar" style="margin-bottom:10px">${can('planner')?'<button class="btn" onclick="lpNewPlan()">+ Nueva planificación</button>':''}<div class="spacer"></div></div>${lpFilterBarHTML()}<div id="lpListResults">${lpListHTML()}</div>`;
+  wrap.innerHTML=LP_EDIT?lpEditorHTML():`<div class="toolbar" style="margin-bottom:10px">${can('planner')?'<button class="btn" onclick="lpNewPlan()">+ Nueva planificación</button> <button class="btn sec" onclick="lpNewFreePlan()" title="Para casos especiales sin estructura fija, como un torneo">+ Planificación libre</button>':''}<div class="spacer"></div></div>${lpFilterBarHTML()}<div id="lpListResults">${lpListHTML()}</div>`;
 }
 const LP_PROG_COLORS=['#2563eb','#1f8a4d','#c0392b','#ff7a1a','#7c3aed','#0891b2','#db2777','#65a30d'];
 function lpPlanCardHTML(p){
   const mins=(p.bloques||[]).reduce((a,b)=>a+(b.minutos||0),0);
   const hd=lpPlanHeading(p);
-  return `<div class="item"><div class="top"><span class="ti">📅 ${esc(hd.title)}</span><span>${can('planner')?`<button class="att-btn" title="Eliminar" onclick="lpDeletePlan('${p.id}')">🗑</button> `:''}<button class="btn sec sm" onclick="lpPrintPlanById('${p.id}')">🖨️ Imprimir</button> <button class="btn sec sm" onclick="lpPrintPlanById('${p.id}')">📄 PDF</button> <button class="btn sec sm" onclick="lpEditPlan('${p.id}')">${can('planner')?'Editar':'Ver'}</button></span></div>${hd.subtitle?`<div class="small" style="color:var(--muted)">${esc(hd.subtitle)}</div>`:''}<div class="meta2">${esc(fmtFecha(p.fechaDesde))}${p.fechaHasta?' a '+esc(fmtFecha(p.fechaHasta)):''} · ${(p.bloques||[]).length} bloque(s) · ${mins} min · ${esc(p.autor||'')}</div>${p.objetivo?`<div class="small" style="margin-top:4px">${fmt(p.objetivo)}</div>`:''}</div>`;
+  return `<div class="item"><div class="top"><span class="ti">${p.libre?'🗒️':'📅'} ${esc(hd.title)}</span><span>${can('planner')?`<button class="att-btn" title="Eliminar" onclick="lpDeletePlan('${p.id}')">🗑</button> `:''}<button class="btn sec sm" onclick="lpPrintPlanById('${p.id}')">🖨️ Imprimir</button> <button class="btn sec sm" onclick="lpPrintPlanById('${p.id}')">📄 PDF</button> <button class="btn sec sm" onclick="lpEditPlan('${p.id}')">${can('planner')?'Editar':'Ver'}</button></span></div>${hd.subtitle?`<div class="small" style="color:var(--muted)">${esc(hd.subtitle)}</div>`:''}<div class="meta2">${esc(fmtFecha(p.fechaDesde))}${p.fechaHasta?' a '+esc(fmtFecha(p.fechaHasta)):''} · ${(p.bloques||[]).length} bloque(s) · ${mins} min · ${esc(p.autor||'')}</div>${p.objetivo?`<div class="small" style="margin-top:4px">${fmt(p.objetivo)}</div>`:''}</div>`;
 }
 function lpListHTML(){
   const list=lpFilteredPlans();
@@ -1505,6 +1506,12 @@ function lpNewPlan(){
   LP_SELECTED=null;LP_DRAW=null;
   renderLPView();
 }
+function lpNewFreePlan(){
+  if(!can('planner'))return;
+  LP_EDIT={titulo:'',programa:'',niveles:[],segmento:'',fechaDesde:'',fechaHasta:'',objetivo:'',contenido:'',libre:true,bloques:[]};
+  LP_SELECTED=null;LP_DRAW=null;
+  renderLPView();
+}
 function lpEditPlan(id){
   const p=LESSONPLANS.find(x=>x.id===id);if(!p)return;
   LP_EDIT=JSON.parse(JSON.stringify(p));
@@ -1523,9 +1530,9 @@ async function lpDeletePlan(id){
 }
 async function lpSavePlan(){
   if(!can('planner')||!LP_EDIT)return;
-  if(!LP_EDIT.programa){alert('Elegí el programa.');return;}
+  if(!LP_EDIT.libre&&!LP_EDIT.programa){alert('Elegí el programa.');return;}
   if(!LP_EDIT.fechaDesde){alert('Elegí la fecha desde.');return;}
-  const body={titulo:LP_EDIT.titulo||'',programa:LP_EDIT.programa,niveles:LP_EDIT.niveles||[],segmento:LP_EDIT.segmento||'',fechaDesde:LP_EDIT.fechaDesde,fechaHasta:LP_EDIT.fechaHasta,objetivo:LP_EDIT.objetivo,contenido:LP_EDIT.contenido,bloques:LP_EDIT.bloques};
+  const body={titulo:LP_EDIT.titulo||'',programa:LP_EDIT.programa||'',niveles:LP_EDIT.niveles||[],segmento:LP_EDIT.segmento||'',fechaDesde:LP_EDIT.fechaDesde,fechaHasta:LP_EDIT.fechaHasta,objetivo:LP_EDIT.objetivo,contenido:LP_EDIT.contenido,bloques:LP_EDIT.bloques,libre:!!LP_EDIT.libre};
   try{
     const saved=LP_EDIT.id?await api('PUT','/api/lessonplans/'+LP_EDIT.id,body):await api('POST','/api/lessonplans',body);
     LP_EDIT=saved;
@@ -1543,7 +1550,7 @@ function lpSetTop(field,val){
   }
 }
 function lpEditorHTML(){
-  const c=DB.config,editable=can('planner'),isNew=!LP_EDIT.id;
+  const c=DB.config,editable=can('planner'),isNew=!LP_EDIT.id,libre=!!LP_EDIT.libre;
   return `<div class="toolbar" style="margin-bottom:10px">
     <button class="btn sm ghost" onclick="lpBackToList()">← Volver al listado</button>
     <div class="spacer"></div>
@@ -1552,19 +1559,20 @@ function lpEditorHTML(){
     ${editable?`<button class="btn" onclick="lpSavePlan()">💾 ${isNew?'Crear planificación':'Guardar cambios'}</button>`:''}
     ${editable&&!isNew?`<button class="btn sec" onclick="lpDeletePlan('${LP_EDIT.id}')">🗑 Eliminar</button>`:''}
   </div>
+  ${libre?'<div class="small" style="margin-bottom:8px;color:var(--muted)">🗒️ Planificación libre — sin estructura fija. Agregá las secciones que necesites, cada una con su propio texto y gráficos.</div>':''}
   <div class="card" style="padding:18px;max-width:820px">
-    <div class="field"><label>Título de la planificación (opcional)</label><input ${editable?'':'disabled'} value="${esc(LP_EDIT.titulo||'')}" oninput="lpSetTop('titulo',this.value)" placeholder="Ej: Semana 1 - Fundamentos de saque"></div>
+    <div class="field"><label>Título de la planificación${libre?'':' (opcional)'}</label><input ${editable?'':'disabled'} value="${esc(LP_EDIT.titulo||'')}" oninput="lpSetTop('titulo',this.value)" placeholder="${libre?'Ej: Torneo interno de octubre':'Ej: Semana 1 - Fundamentos de saque'}"></div>
     <div class="grid2">
-      <div class="field"><label>Programa</label><select ${editable?'':'disabled'} onchange="lpSetTop('programa',this.value)">${lpOpt(c.programas,'—',LP_EDIT.programa)}</select></div>
+      <div class="field"><label>Programa${libre?' (opcional)':''}</label><select ${editable?'':'disabled'} onchange="lpSetTop('programa',this.value)">${lpOpt(c.programas,'—',LP_EDIT.programa)}</select></div>
       <div class="field"><label>Período — desde</label><input type="date" ${editable?'':'disabled'} value="${esc(LP_EDIT.fechaDesde||'')}" oninput="lpSetTop('fechaDesde',this.value)"></div>
       <div class="field"><label>Período — hasta</label><input type="date" ${editable?'':'disabled'} value="${esc(LP_EDIT.fechaHasta||'')}" oninput="lpSetTop('fechaHasta',this.value)"></div>
     </div>
-    <div class="field"><label>Niveles (podés elegir varios)</label>${lpNivelesChecklistHTML()}</div>
-    <div class="field"><label>Segmento personalizado (opcional, para clases que no encajan en un nivel)</label><input ${editable?'':'disabled'} value="${esc(LP_EDIT.segmento||'')}" oninput="lpSetTop('segmento',this.value)" placeholder="Ej: CANCHA TALLER"></div>
+    ${libre?'':`<div class="field"><label>Niveles (podés elegir varios)</label>${lpNivelesChecklistHTML()}</div>
+    <div class="field"><label>Segmento personalizado (opcional, para clases que no encajan en un nivel)</label><input ${editable?'':'disabled'} value="${esc(LP_EDIT.segmento||'')}" oninput="lpSetTop('segmento',this.value)" placeholder="Ej: CANCHA TALLER"></div>`}
     <div class="field"><label>Objetivo</label><textarea ${editable?'':'disabled'} oninput="lpSetTop('objetivo',this.value)" style="min-height:50px">${esc(LP_EDIT.objetivo||'')}</textarea></div>
     <div class="field"><label>Contenido</label><textarea ${editable?'':'disabled'} oninput="lpSetTop('contenido',this.value)" style="min-height:70px">${esc(LP_EDIT.contenido||'')}</textarea></div>
-    <div class="sectitle" style="margin-top:14px">Bloques de la clase</div>
-    ${lpBlocksChecklistHTML()}
+    <div class="sectitle" style="margin-top:14px">${libre?'Secciones':'Bloques de la clase'}</div>
+    ${libre?(editable?`<div style="margin:8px 0 0"><button type="button" class="btn sm ghost" onclick="lpAddCustomBlock()">+ Agregar sección</button> <button type="button" class="btn sm ghost" onclick="openLibPicker()">📚 Desde biblioteca</button></div>`:''):lpBlocksChecklistHTML()}
     <div id="lpBlockCards" style="margin-top:10px">${(LP_EDIT.bloques||[]).map(b=>lpBlockCardHTML(b)).join('')}</div>
   </div>`;
 }
@@ -1592,7 +1600,8 @@ function lpSortBlocks(){
 }
 function lpRenderBlockCards(){
   const wrap=document.getElementById('lpBlockCards');if(!wrap)return;
-  wrap.innerHTML=(LP_EDIT.bloques||[]).map(b=>lpBlockCardHTML(b)).join('')||'<p class="small">No hay bloques. Activá alguno arriba o agregá uno personalizado.</p>';
+  const emptyMsg=LP_EDIT.libre?'No hay secciones todavía. Agregá una con el botón de arriba.':'No hay bloques. Activá alguno arriba o agregá uno personalizado.';
+  wrap.innerHTML=(LP_EDIT.bloques||[]).map(b=>lpBlockCardHTML(b)).join('')||`<p class="small">${emptyMsg}</p>`;
 }
 function lpToggleBlock(tipo,label,checked){
   LP_EDIT.bloques=LP_EDIT.bloques||[];
@@ -1605,7 +1614,7 @@ function lpToggleBlock(tipo,label,checked){
 }
 function lpAddCustomBlock(){
   LP_EDIT.bloques=LP_EDIT.bloques||[];
-  LP_EDIT.bloques.push({id:'blk'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),tipo:'custom',titulo:'Bloque personalizado',minutos:0,descripcion:'',graficos:[]});
+  LP_EDIT.bloques.push({id:'blk'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),tipo:'custom',titulo:LP_EDIT.libre?'Sección':'Bloque personalizado',minutos:0,descripcion:'',graficos:[]});
   lpRenderBlockCards();
 }
 function lpRemoveCustomBlock(blockId){
