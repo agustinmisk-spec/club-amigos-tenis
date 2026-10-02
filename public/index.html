@@ -1817,7 +1817,7 @@ function lpCuadroRRHTML(block,cuadro){
   const headerCells=cuadro.nombres.map((_,j)=>`<th>${j+1}</th>`).join('');
   const rows=cuadro.nombres.map((name,i)=>{
     const cells=cuadro.nombres.map((_,j)=>{
-      if(j<=i)return `<td class="rrdiag">—</td>`;
+      if(j===i)return `<td class="rrdiag">—</td>`;
       const val=(cuadro.resultados[i]&&cuadro.resultados[i][j])||'';
       return `<td><input ${editable?'':'disabled'} value="${esc(val)}" oninput="lpSetRRResult('${block.id}','${cuadro.id}',${i},${j},this.value)" style="width:48px;padding:3px 4px;border:1px solid var(--line);border-radius:4px;font-size:11px;text-align:center"></td>`;
     }).join('');
@@ -2629,7 +2629,7 @@ function lpGeneratePDF(p){
         const head=c.nombres.map((_,j)=>`<th>${j+1}</th>`).join('');
         const rows=c.nombres.map((name,i)=>{
           const cells=c.nombres.map((_,j)=>{
-            if(j<=i)return `<td class="rrdiag">—</td>`;
+            if(j===i)return `<td class="rrdiag">—</td>`;
             const val=(c.resultados[i]&&c.resultados[i][j])||'';
             return `<td>${esc(val)}</td>`;
           }).join('');
