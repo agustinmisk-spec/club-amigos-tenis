@@ -243,7 +243,7 @@ const cleanCuadroMatch = m => ({
   b: String((m && m.b) || '').slice(0, 40),
   res: String((m && m.res) || '').slice(0, 40)
 });
-const cleanCuadro = c => {
+const cleanCuadroElim = c => {
   const jugadores = [4, 8, 16, 32].includes(c && c.jugadores) ? c.jugadores : 8;
   const totalRounds = Math.log2(jugadores);
   const srcRounds = Array.isArray(c && c.rounds) ? c.rounds : [];
@@ -253,13 +253,26 @@ const cleanCuadro = c => {
     const srcRound = Array.isArray(srcRounds[r]) ? srcRounds[r] : [];
     rounds.push(Array.from({ length: n }, (_, i) => cleanCuadroMatch(srcRound[i])));
   }
-  return {
-    id: String((c && c.id) || '').slice(0, 40),
-    nombre: String((c && c.nombre) || '').slice(0, 80),
-    jugadores,
-    campeon: String((c && c.campeon) || '').slice(0, 40),
-    rounds
-  };
+  return { formato: 'eliminacion', jugadores, campeon: String((c && c.campeon) || '').slice(0, 40), rounds };
+};
+const cleanCuadroRR = c => {
+  const srcNombres = Array.isArray(c && c.nombres) ? c.nombres : [];
+  const n = Math.min(20, Math.max(2, srcNombres.length || 4));
+  const nombres = Array.from({ length: n }, (_, i) => String(srcNombres[i] || '').slice(0, 40));
+  const srcRes = Array.isArray(c && c.resultados) ? c.resultados : [];
+  const resultados = Array.from({ length: n }, (_, i) => {
+    const srcRow = Array.isArray(srcRes[i]) ? srcRes[i] : [];
+    return Array.from({ length: n }, (_, j) => String(srcRow[j] || '').slice(0, 24));
+  });
+  const srcPuntos = Array.isArray(c && c.puntos) ? c.puntos : [];
+  const srcPos = Array.isArray(c && c.posiciones) ? c.posiciones : [];
+  const puntos = Array.from({ length: n }, (_, i) => String(srcPuntos[i] || '').slice(0, 10));
+  const posiciones = Array.from({ length: n }, (_, i) => String(srcPos[i] || '').slice(0, 10));
+  return { formato: 'roundrobin', nombres, resultados, puntos, posiciones };
+};
+const cleanCuadro = c => {
+  const base = { id: String((c && c.id) || '').slice(0, 40), nombre: String((c && c.nombre) || '').slice(0, 80) };
+  return Object.assign(base, (c && c.formato === 'roundrobin') ? cleanCuadroRR(c) : cleanCuadroElim(c));
 };
 const cleanBlock = bl => ({
   id: String((bl && bl.id) || '').slice(0, 40),
