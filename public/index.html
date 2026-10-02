@@ -1703,7 +1703,7 @@ function lpAddCuadroRR(blockId){
   const b=lpFindBlock(blockId);if(!b)return;
   b.cuadros=b.cuadros||[];
   const n=LP_RR_DEFAULT;
-  b.cuadros.push({id:'cu'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),formato:'roundrobin',nombre:'',nombres:Array(n).fill(''),resultados:Array.from({length:n},()=>Array(n).fill('')),puntos:Array(n).fill(''),posiciones:Array(n).fill('')});
+  b.cuadros.push({id:'cu'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),formato:'roundrobin',nombre:'',nombres:Array(n).fill(''),resultados:Array.from({length:n},()=>Array(n).fill('')),puntos:Array(n).fill(''),diferencia:Array(n).fill(''),posiciones:Array(n).fill('')});
   lpRenderBlock(blockId);
 }
 function lpRemoveCuadro(blockId,cuadroId){
@@ -1777,6 +1777,7 @@ function lpRRAddPlayer(blockId,cuadroId){
   c.resultados.forEach(row=>row.push(''));
   c.resultados.push(Array(c.nombres.length).fill(''));
   c.puntos.push('');
+  c.diferencia.push('');
   c.posiciones.push('');
   lpRenderBlock(blockId);
 }
@@ -1787,6 +1788,7 @@ function lpRRRemovePlayer(blockId,cuadroId,idx){
   c.resultados.splice(idx,1);
   c.resultados.forEach(row=>row.splice(idx,1));
   c.puntos.splice(idx,1);
+  c.diferencia.splice(idx,1);
   c.posiciones.splice(idx,1);
   lpRenderBlock(blockId);
 }
@@ -1801,6 +1803,10 @@ function lpSetRRResult(blockId,cuadroId,i,j,val){
 function lpSetRRPts(blockId,cuadroId,idx,val){
   const c=lpFindCuadro(blockId,cuadroId);if(!c)return;
   c.puntos[idx]=val;
+}
+function lpSetRRDif(blockId,cuadroId,idx,val){
+  const c=lpFindCuadro(blockId,cuadroId);if(!c)return;
+  c.diferencia[idx]=val;
 }
 function lpSetRRPos(blockId,cuadroId,idx,val){
   const c=lpFindCuadro(blockId,cuadroId);if(!c)return;
@@ -1819,6 +1825,7 @@ function lpCuadroRRHTML(block,cuadro){
       <td class="rrname">${editable?`<button type="button" class="att-btn" title="Quitar jugador/a" onclick="lpRRRemovePlayer('${block.id}','${cuadro.id}',${i})" style="padding:2px 6px;margin-right:4px">🗑</button>`:''}<b>${i+1}.</b> ${editable?`<input value="${esc(name||'')}" placeholder="Jugador/a ${i+1}" oninput="lpSetRRName('${block.id}','${cuadro.id}',${i},this.value)" style="width:120px;padding:3px 6px;border:1px solid var(--line);border-radius:4px;font-size:12px">`:`<span>${esc(name||'Jugador/a '+(i+1))}</span>`}</td>
       ${cells}
       <td><input ${editable?'':'disabled'} value="${esc(cuadro.puntos[i]||'')}" placeholder="Pts" oninput="lpSetRRPts('${block.id}','${cuadro.id}',${i},this.value)" style="width:42px;padding:3px 4px;border:1px solid var(--line);border-radius:4px;font-size:11px;text-align:center"></td>
+      <td><input ${editable?'':'disabled'} value="${esc(cuadro.diferencia[i]||'')}" placeholder="Dif." oninput="lpSetRRDif('${block.id}','${cuadro.id}',${i},this.value)" style="width:42px;padding:3px 4px;border:1px solid var(--line);border-radius:4px;font-size:11px;text-align:center"></td>
       <td><input ${editable?'':'disabled'} value="${esc(cuadro.posiciones[i]||'')}" placeholder="Pos." oninput="lpSetRRPos('${block.id}','${cuadro.id}',${i},this.value)" style="width:42px;padding:3px 4px;border:1px solid var(--line);border-radius:4px;font-size:11px;text-align:center"></td>
     </tr>`;
   }).join('');
@@ -1826,7 +1833,7 @@ function lpCuadroRRHTML(block,cuadro){
   return `<div class="card" id="lpCuadro-${cuadro.id}" style="padding:10px;margin-top:8px;background:#fafbfc">
     ${lpCuadroHeaderHTML(block,cuadro,addCtrl)}
     <div style="overflow-x:auto">
-      <table class="rrtbl"><thead><tr><th></th>${headerCells}<th>Pts</th><th>Pos.</th></tr></thead><tbody>${rows}</tbody></table>
+      <table class="rrtbl"><thead><tr><th></th>${headerCells}<th>Pts</th><th>Dif.</th><th>Pos.</th></tr></thead><tbody>${rows}</tbody></table>
     </div>
   </div>`;
 }
@@ -2626,9 +2633,9 @@ function lpGeneratePDF(p){
             const val=(c.resultados[i]&&c.resultados[i][j])||'';
             return `<td>${esc(val)}</td>`;
           }).join('');
-          return `<tr><td class="rrname">${i+1}. ${esc(name||'')}</td>${cells}<td>${esc(c.puntos[i]||'')}</td><td>${esc(c.posiciones[i]||'')}</td></tr>`;
+          return `<tr><td class="rrname">${i+1}. ${esc(name||'')}</td>${cells}<td>${esc(c.puntos[i]||'')}</td><td>${esc((c.diferencia&&c.diferencia[i])||'')}</td><td>${esc(c.posiciones[i]||'')}</td></tr>`;
         }).join('');
-        return `<div class="cuadro">${c.nombre?`<div class="cdtitle">🔁 ${esc(c.nombre)}</div>`:''}<table class="rrptbl"><thead><tr><th></th>${head}<th>Pts</th><th>Pos.</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+        return `<div class="cuadro">${c.nombre?`<div class="cdtitle">🔁 ${esc(c.nombre)}</div>`:''}<table class="rrptbl"><thead><tr><th></th>${head}<th>Pts</th><th>Dif.</th><th>Pos.</th></tr></thead><tbody>${rows}</tbody></table></div>`;
       }
       const totalRounds=c.rounds.length;
       const roundsHtml=c.rounds.map((matches,ri)=>`<div class="cdcol"><div class="cdlabel">${esc(lpRoundLabel(totalRounds,ri))}</div><div class="cdmatches">${matches.map(m=>`<div class="cdmatch"><div class="cdslot">${esc(m.a||'')}</div><div class="cdslot">${esc(m.b||'')}</div>${m.res?`<div class="cdres">${esc(m.res)}</div>`:''}</div>`).join('')}</div></div>`).join('');

@@ -265,10 +265,12 @@ const cleanCuadroRR = c => {
     return Array.from({ length: n }, (_, j) => String(srcRow[j] || '').slice(0, 24));
   });
   const srcPuntos = Array.isArray(c && c.puntos) ? c.puntos : [];
+  const srcDif = Array.isArray(c && c.diferencia) ? c.diferencia : [];
   const srcPos = Array.isArray(c && c.posiciones) ? c.posiciones : [];
   const puntos = Array.from({ length: n }, (_, i) => String(srcPuntos[i] || '').slice(0, 10));
+  const diferencia = Array.from({ length: n }, (_, i) => String(srcDif[i] || '').slice(0, 10));
   const posiciones = Array.from({ length: n }, (_, i) => String(srcPos[i] || '').slice(0, 10));
-  return { formato: 'roundrobin', nombres, resultados, puntos, posiciones };
+  return { formato: 'roundrobin', nombres, resultados, puntos, diferencia, posiciones };
 };
 const cleanCuadro = c => {
   const base = { id: String((c && c.id) || '').slice(0, 40), nombre: String((c && c.nombre) || '').slice(0, 80) };
