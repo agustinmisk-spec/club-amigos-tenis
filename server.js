@@ -284,7 +284,8 @@ const cleanBlock = bl => ({
   descripcion: String((bl && bl.descripcion) || '').slice(0, 4000),
   graficos: Array.isArray(bl && bl.graficos) ? bl.graficos.slice(0, 10).map(cleanGraph) : [],
   graphLayout: ['auto', 'col', 'row', 'grid2'].includes(bl && bl.graphLayout) ? bl.graphLayout : 'auto',
-  cuadros: Array.isArray(bl && bl.cuadros) ? bl.cuadros.slice(0, 6).map(cleanCuadro) : []
+  cuadros: Array.isArray(bl && bl.cuadros) ? bl.cuadros.slice(0, 6).map(cleanCuadro) : [],
+  notaGraficos: String((bl && bl.notaGraficos) || '').slice(0, 2000)
 });
 const cleanLessonPlan = b => {
   return {
