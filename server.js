@@ -238,6 +238,29 @@ const cleanGraph = g => ({
   elements: Array.isArray(g && g.elements) ? g.elements.slice(0, 60).map(cleanEl) : [],
   shapes: Array.isArray(g && g.shapes) ? g.shapes.slice(0, 60).map(cleanShape) : []
 });
+const cleanCuadroMatch = m => ({
+  a: String((m && m.a) || '').slice(0, 40),
+  b: String((m && m.b) || '').slice(0, 40),
+  res: String((m && m.res) || '').slice(0, 40)
+});
+const cleanCuadro = c => {
+  const jugadores = [4, 8, 16, 32].includes(c && c.jugadores) ? c.jugadores : 8;
+  const totalRounds = Math.log2(jugadores);
+  const srcRounds = Array.isArray(c && c.rounds) ? c.rounds : [];
+  const rounds = [];
+  for (let r = 0; r < totalRounds; r++) {
+    const n = jugadores / Math.pow(2, r + 1);
+    const srcRound = Array.isArray(srcRounds[r]) ? srcRounds[r] : [];
+    rounds.push(Array.from({ length: n }, (_, i) => cleanCuadroMatch(srcRound[i])));
+  }
+  return {
+    id: String((c && c.id) || '').slice(0, 40),
+    nombre: String((c && c.nombre) || '').slice(0, 80),
+    jugadores,
+    campeon: String((c && c.campeon) || '').slice(0, 40),
+    rounds
+  };
+};
 const cleanBlock = bl => ({
   id: String((bl && bl.id) || '').slice(0, 40),
   tipo: String((bl && bl.tipo) || '').slice(0, 30),
@@ -245,7 +268,8 @@ const cleanBlock = bl => ({
   minutos: num(bl && bl.minutos, 0, 300, 0),
   descripcion: String((bl && bl.descripcion) || '').slice(0, 4000),
   graficos: Array.isArray(bl && bl.graficos) ? bl.graficos.slice(0, 10).map(cleanGraph) : [],
-  graphLayout: ['auto', 'col', 'row', 'grid2'].includes(bl && bl.graphLayout) ? bl.graphLayout : 'auto'
+  graphLayout: ['auto', 'col', 'row', 'grid2'].includes(bl && bl.graphLayout) ? bl.graphLayout : 'auto',
+  cuadros: Array.isArray(bl && bl.cuadros) ? bl.cuadros.slice(0, 6).map(cleanCuadro) : []
 });
 const cleanLessonPlan = b => {
   return {

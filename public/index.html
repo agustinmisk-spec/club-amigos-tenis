@@ -1632,6 +1632,7 @@ function lpRenderBlock(blockId){
 function lpBlockCardHTML(block){
   const editable=can('planner');
   const graphs=(block.graficos||[]).map(g=>lpGraphicCardHTML(block,g)).join('');
+  const cuadros=(block.cuadros||[]).map(c=>lpCuadroCardHTML(block,c)).join('');
   const titleHtml=block.tipo==='custom'
     ?(editable?`<input value="${esc(block.titulo)}" oninput="lpSetBlockField('${block.id}','titulo',this.value)" style="font-weight:700;border:none;border-bottom:1px dashed var(--line);padding:2px 0;flex:1;max-width:260px;background:transparent">`:`<b>${esc(block.titulo)}</b>`)
     :`<b>${esc(block.titulo)}</b>`;
@@ -1647,8 +1648,10 @@ function lpBlockCardHTML(block){
     <div class="field" style="margin-top:8px"><label>Descripción del ejercicio</label>${editable?rteBox('','',block.descripcion,60,'Descripción del ejercicio…',`lpSetBlockField('${block.id}','descripcion',rteGet(this))`):`<div class="rte" style="border:1px solid var(--line);border-radius:8px;background:var(--card)">${fmtRaw(block.descripcion||'')}</div>`}</div>
     ${(block.graficos||[]).length>1?`<div class="field" style="margin-top:8px;max-width:280px"><label>Orden de los gráficos (al imprimir/PDF)</label><select ${editable?'':'disabled'} onchange="lpSetBlockField('${block.id}','graphLayout',this.value)">${LP_GRAPH_LAYOUTS.map(o=>`<option value="${o.v}"${(block.graphLayout||'auto')===o.v?' selected':''}>${esc(o.t)}</option>`).join('')}</select></div>`:''}
     ${graphs}
+    ${cuadros}
     ${editable?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
       <button type="button" class="btn sm ghost" onclick="lpAddGraphic('${block.id}')">+ Agregar gráfico</button>
+      <button type="button" class="btn sm ghost" onclick="lpAddCuadro('${block.id}')">🏆 Agregar cuadro de torneo</button>
       <button type="button" class="btn sm ghost" onclick="openLibPicker('${block.id}')">📚 Desde biblioteca</button>
       <button type="button" class="btn sm ghost" onclick="libSaveBlock('${block.id}')">💾 Guardar en biblioteca</button>
     </div>`:''}
@@ -1665,6 +1668,87 @@ function lpRemoveGraphic(blockId,graphId){
   b.graficos=(b.graficos||[]).filter(x=>x.id!==graphId);
   if(LP_SELECTED&&LP_SELECTED.graphId===graphId)LP_SELECTED=null;
   lpRenderBlock(blockId);
+}
+/* ---- Cuadro de torneo (eliminación directa, editable por el profesor) ---- */
+const LP_CUADRO_SIZES=[4,8,16,32];
+function lpCuadroRoundsFor(jugadores){
+  const total=Math.log2(jugadores);
+  const rounds=[];
+  for(let r=0;r<total;r++){
+    const n=jugadores/Math.pow(2,r+1);
+    rounds.push(Array.from({length:n},()=>({a:'',b:'',res:''})));
+  }
+  return rounds;
+}
+function lpRoundLabel(totalRounds,i){
+  const namesFromEnd=['Final','Semifinal','Cuartos de final','Octavos de final','Dieciseisavos de final'];
+  const fromEnd=totalRounds-1-i;
+  return namesFromEnd[fromEnd]||('Ronda '+(i+1));
+}
+function lpFindCuadro(blockId,cuadroId){const b=lpFindBlock(blockId);return b&&(b.cuadros||[]).find(c=>c.id===cuadroId);}
+function lpAddCuadro(blockId){
+  const b=lpFindBlock(blockId);if(!b)return;
+  b.cuadros=b.cuadros||[];
+  b.cuadros.push({id:'cu'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),nombre:'',jugadores:8,campeon:'',rounds:lpCuadroRoundsFor(8)});
+  lpRenderBlock(blockId);
+}
+function lpRemoveCuadro(blockId,cuadroId){
+  const b=lpFindBlock(blockId);if(!b)return;
+  b.cuadros=(b.cuadros||[]).filter(c=>c.id!==cuadroId);
+  lpRenderBlock(blockId);
+}
+function lpSetCuadroSize(blockId,cuadroId,val){
+  const c=lpFindCuadro(blockId,cuadroId);if(!c)return;
+  const n=parseInt(val,10);
+  if(n===c.jugadores)return;
+  if(!confirm('Cambiar la cantidad de jugadores reinicia los nombres y resultados cargados en el cuadro. ¿Continuar?')){lpRenderBlock(blockId);return;}
+  c.jugadores=n;c.rounds=lpCuadroRoundsFor(n);c.campeon='';
+  lpRenderBlock(blockId);
+}
+function lpSetCuadroField(blockId,cuadroId,field,val){
+  const c=lpFindCuadro(blockId,cuadroId);if(!c)return;
+  c[field]=val;
+}
+function lpSetCuadroCell(blockId,cuadroId,ri,mi,field,val){
+  const c=lpFindCuadro(blockId,cuadroId);if(!c)return;
+  const m=c.rounds[ri]&&c.rounds[ri][mi];if(!m)return;
+  m[field]=val;
+}
+function lpCuadroMatchHTML(blockId,cuadroId,ri,mi,m,editable){
+  return `<div class="card" style="padding:6px 7px;display:flex;flex-direction:column;gap:3px">
+    <input ${editable?'':'disabled'} value="${esc(m.a||'')}" placeholder="Jugador/a" oninput="lpSetCuadroCell('${blockId}','${cuadroId}',${ri},${mi},'a',this.value)" style="padding:4px 6px;border:1px solid var(--line);border-radius:5px;font-size:12px;width:100%">
+    <input ${editable?'':'disabled'} value="${esc(m.b||'')}" placeholder="Jugador/a" oninput="lpSetCuadroCell('${blockId}','${cuadroId}',${ri},${mi},'b',this.value)" style="padding:4px 6px;border:1px solid var(--line);border-radius:5px;font-size:12px;width:100%">
+    <input ${editable?'':'disabled'} value="${esc(m.res||'')}" placeholder="Resultado" oninput="lpSetCuadroCell('${blockId}','${cuadroId}',${ri},${mi},'res',this.value)" style="padding:3px 6px;border:1px dashed var(--line);border-radius:5px;font-size:11px;color:var(--muted);width:100%">
+  </div>`;
+}
+function lpCuadroCardHTML(block,cuadro){
+  const editable=can('planner');
+  const totalRounds=cuadro.rounds.length;
+  const roundsHtml=cuadro.rounds.map((matches,ri)=>`
+    <div style="display:flex;flex-direction:column;min-width:150px">
+      <div class="small" style="text-align:center;font-weight:700;color:var(--muted);margin-bottom:6px">${esc(lpRoundLabel(totalRounds,ri))}</div>
+      <div style="display:flex;flex-direction:column;justify-content:space-around;gap:10px;flex:1">
+        ${matches.map((m,mi)=>lpCuadroMatchHTML(block.id,cuadro.id,ri,mi,m,editable)).join('')}
+      </div>
+    </div>`).join('');
+  return `<div class="card" id="lpCuadro-${cuadro.id}" style="padding:10px;margin-top:8px;background:#fafbfc">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      ${editable?`<input value="${esc(cuadro.nombre||'')}" oninput="lpSetCuadroField('${block.id}','${cuadro.id}','nombre',this.value)" placeholder="Nombre del cuadro (opcional)" style="font-weight:700;border:none;border-bottom:1px dashed var(--line);padding:2px 0;flex:1;max-width:220px;background:transparent">`:`<b>${esc(cuadro.nombre||'Cuadro de torneo')}</b>`}
+      <span style="display:flex;align-items:center;gap:6px">
+        ${editable?`<span class="small" style="color:var(--muted)">Jugadores:</span><select onchange="lpSetCuadroSize('${block.id}','${cuadro.id}',this.value)">${LP_CUADRO_SIZES.map(n=>`<option value="${n}"${cuadro.jugadores===n?' selected':''}>${n}</option>`).join('')}</select>`:''}
+        ${editable?`<button type="button" class="att-btn" title="Eliminar cuadro" onclick="lpRemoveCuadro('${block.id}','${cuadro.id}')">🗑</button>`:''}
+      </span>
+    </div>
+    <div style="display:flex;gap:14px;overflow-x:auto;padding:2px 0 6px">
+      ${roundsHtml}
+      <div style="display:flex;flex-direction:column;min-width:130px">
+        <div class="small" style="text-align:center;font-weight:700;color:var(--muted);margin-bottom:6px">Campeón 🏆</div>
+        <div style="display:flex;flex-direction:column;justify-content:center;flex:1">
+          <input ${editable?'':'disabled'} value="${esc(cuadro.campeon||'')}" placeholder="Campeón" oninput="lpSetCuadroField('${block.id}','${cuadro.id}','campeon',this.value)" style="padding:6px 8px;border:1px solid #d8a93a;border-radius:6px;font-size:12px;font-weight:700;background:#fff8e6;width:100%">
+        </div>
+      </div>
+    </div>
+  </div>`;
 }
 /* ---- Selector de biblioteca (multi-selección) usado desde un bloque de planificación ---- */
 async function openLibPicker(blockId){
@@ -2450,12 +2534,19 @@ function lpGeneratePDF(p){
       const courtSvg=lpCourtBg(g.court,g.courtScale||1,g.courtWidth||1);
       return `<svg viewBox="0 0 100 ${LP_CH}" class="lppg" style="width:calc(${gw}px * var(--s))">${courtSvg}${shapesSvg}${elsSvg}</svg>`;
     }).join('');
+    const cuadrosHTML=(b.cuadros||[]).map(c=>{
+      const totalRounds=c.rounds.length;
+      const roundsHtml=c.rounds.map((matches,ri)=>`<div class="cdcol"><div class="cdlabel">${esc(lpRoundLabel(totalRounds,ri))}</div><div class="cdmatches">${matches.map(m=>`<div class="cdmatch"><div class="cdslot">${esc(m.a||'')}</div><div class="cdslot">${esc(m.b||'')}</div>${m.res?`<div class="cdres">${esc(m.res)}</div>`:''}</div>`).join('')}</div></div>`).join('');
+      const champHtml=`<div class="cdcol cdchamp"><div class="cdlabel">Campeón</div><div class="cdmatches"><div class="cdmatch cdchampbox">${esc(c.campeon||'')}</div></div></div>`;
+      return `<div class="cuadro">${c.nombre?`<div class="cdtitle">🏆 ${esc(c.nombre)}</div>`:''}<div class="cdrow">${roundsHtml}${champHtml}</div></div>`;
+    }).join('');
     return `<div class="blk">
       <div class="blkhd"><span>${st.icon}</span><b>${esc(b.titulo||'')}</b>${b.minutos?`<span class="blkmin">${esc(String(b.minutos))}′</span>`:''}</div>
       <div class="blkbody">
         ${b.descripcion?`<div class="blkdesc">${fmtRaw(b.descripcion)}</div>`:'<div class="blkdesc blkdesc-empty">—</div>'}
         ${graphsHTML?`<div class="blkgraphs${colstack?' colstack':''}"${graphsContainerStyle}>${graphsHTML}</div>`:''}
       </div>
+      ${cuadrosHTML?`<div class="blkcuadros">${cuadrosHTML}</div>`:''}
     </div>`;
   }).join('');
   const safeTitle=String(p.programa||'Planificación').replace(/[<>]/g,'');
@@ -2482,6 +2573,18 @@ function lpGeneratePDF(p){
     +'.blkdesc-empty{color:#aab2b8}'
     +'.blkgraphs{display:flex;flex-wrap:wrap;gap:calc(6px * var(--s));flex:0 0 auto;justify-content:flex-end}'
     +'.blkgraphs.colstack{flex-direction:column;flex-wrap:nowrap;justify-content:flex-start}'
+    +'.blkcuadros{padding:0 calc(11px * var(--s)) calc(9px * var(--s) * var(--g))}'
+    +'.cuadro{margin-top:calc(4px * var(--s))}'
+    +'.cdtitle{font-size:calc(11.5px * var(--s));font-weight:700;color:'+LP_PDF_COLOR+';margin-bottom:calc(4px * var(--s))}'
+    +'.cdrow{display:flex;gap:calc(10px * var(--s));overflow-x:auto}'
+    +'.cdcol{display:flex;flex-direction:column;min-width:calc(92px * var(--s))}'
+    +'.cdlabel{font-size:calc(8.5px * var(--s));font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:#8a95a1;text-align:center;margin-bottom:calc(4px * var(--s))}'
+    +'.cdmatches{display:flex;flex-direction:column;justify-content:space-around;gap:calc(6px * var(--s));flex:1}'
+    +'.cdmatch{border:1px solid #dde3de;border-radius:5px;padding:calc(3px * var(--s)) calc(5px * var(--s));background:#fff}'
+    +'.cdslot{font-size:calc(9.5px * var(--s));padding:calc(1.5px * var(--s)) 0;border-bottom:1px dashed #e4e8e6;min-height:calc(11px * var(--s))}'
+    +'.cdslot:last-of-type{border-bottom:none}'
+    +'.cdres{font-size:calc(8px * var(--s));color:#8a95a1;margin-top:calc(2px * var(--s))}'
+    +'.cdchamp .cdmatch{background:#fff8e6;border-color:#d8a93a;font-weight:700;font-size:calc(9.5px * var(--s));text-align:center;display:flex;align-items:center;justify-content:center;min-height:calc(30px * var(--s))}'
     +'.lppg{background:#fff;border:1px solid #dde3de;border-radius:5px}'
     +'.ft{margin-top:calc(9px * var(--s) * var(--g));font-size:calc(8.5px * var(--s));color:#9aa4ab;text-align:right}'
     +'</style></head><body>'
