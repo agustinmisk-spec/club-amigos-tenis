@@ -307,7 +307,8 @@ app.post('/api/lessonplans', auth, need('planner'), async (req, res) => {
   const b = req.body || {};
   if (!b.fechaDesde || (!b.libre && !b.programa)) return res.status(400).json({ error: 'Faltan programa y fecha desde' });
   const clean = cleanLessonPlan(b);
-  const p = Object.assign({ id: 'lp' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) }, clean, { autor: req.user.nombre, fecha: new Date().toISOString() });
+  const now = new Date().toISOString();
+  const p = Object.assign({ id: 'lp' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) }, clean, { autor: req.user.nombre, fecha: now, modificado: now });
   await store.addLessonPlan(p);
   res.json(p);
 });
@@ -315,7 +316,7 @@ app.put('/api/lessonplans/:id', auth, need('planner'), async (req, res) => {
   const list = await store.listLessonPlans();
   const p = list.find(x => x.id === req.params.id);
   if (!p) return res.status(404).json({ error: 'No existe' });
-  Object.assign(p, cleanLessonPlan(req.body || {}));
+  Object.assign(p, cleanLessonPlan(req.body || {}), { modificado: new Date().toISOString() });
   await store.updateLessonPlan(p);
   res.json(p);
 });
