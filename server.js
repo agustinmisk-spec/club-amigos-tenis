@@ -217,7 +217,7 @@ const cleanEl = e => ({
   x: num(e && e.x, 0, 100, 50), y: num(e && e.y, 0, 100, 50),
   rot: num(e && e.rot, -360, 360, 0),
   scale: num(e && e.scale, 0.4, 2.5, 1),
-  label: String((e && e.label) || '').slice(0, 10),
+  label: String((e && e.label) || '').slice(0, 40),
   color: /^#[0-9a-fA-F]{3,8}$/.test(e && e.color) ? e.color : ''
 });
 const cleanPt = p => ({ x: num(p && p.x, 0, 100, 0), y: num(p && p.y, 0, 100, 0) });
@@ -257,13 +257,14 @@ const cleanLessonPlan = b => {
     fechaHasta: String((b && b.fechaHasta) || '').slice(0, 10),
     objetivo: String((b && b.objetivo) || '').slice(0, 2000),
     contenido: String((b && b.contenido) || '').slice(0, 4000),
-    bloques: Array.isArray(b && b.bloques) ? b.bloques.slice(0, 12).map(cleanBlock) : []
+    bloques: Array.isArray(b && b.bloques) ? b.bloques.slice(0, 12).map(cleanBlock) : [],
+    libre: !!(b && b.libre)
   };
 };
 app.get('/api/lessonplans', auth, async (req, res) => { res.json(await store.listLessonPlans()); });
 app.post('/api/lessonplans', auth, need('planner'), async (req, res) => {
   const b = req.body || {};
-  if (!b.programa || !b.fechaDesde) return res.status(400).json({ error: 'Faltan programa y fecha desde' });
+  if (!b.fechaDesde || (!b.libre && !b.programa)) return res.status(400).json({ error: 'Faltan programa y fecha desde' });
   const clean = cleanLessonPlan(b);
   const p = Object.assign({ id: 'lp' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) }, clean, { autor: req.user.nombre, fecha: new Date().toISOString() });
   await store.addLessonPlan(p);
