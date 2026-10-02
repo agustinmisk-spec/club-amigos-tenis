@@ -217,7 +217,7 @@ const cleanEl = e => ({
   x: num(e && e.x, 0, 100, 50), y: num(e && e.y, 0, 100, 50),
   rot: num(e && e.rot, -360, 360, 0),
   scale: num(e && e.scale, 0.4, 2.5, 1),
-  label: String((e && e.label) || '').slice(0, 10),
+  label: String((e && e.label) || '').slice(0, 40),
   color: /^#[0-9a-fA-F]{3,8}$/.test(e && e.color) ? e.color : ''
 });
 const cleanPt = p => ({ x: num(p && p.x, 0, 100, 0), y: num(p && p.y, 0, 100, 0) });
