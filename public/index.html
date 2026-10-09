@@ -1186,7 +1186,7 @@ const LP_COLORS=['#111827','#c0392b','#1f8a4d','#2563eb','#ff7a1a','#f1c40f'];
 const LP_DEFAULT_COLOR={jugador:'#111827',raqueta:'#111827',pelota:'#cfe61c',canasto:'#e9c46a',cono:'#ff7a1a',conobajo:'#ff7a1a',aro:'#e0338c',texto:'#111827'};
 const LP_COLORABLE=new Set(Object.keys(LP_DEFAULT_COLOR));
 function lpColorId(c){return String(c||'c0392b').replace('#','');}
-let editMsgId=null,editEvId=null,editCompId=null,editRecId=null;
+let editMsgId=null,editEvId=null,editCompId=null,editRecId=null,compGroupBy={};
 let pickSel=new Set(),pickCb=null;
 function recCount(id,tipo){return RECOVERIES.filter(r=>r.studentId===id&&r.tipo===tipo).length;}
 let recHistFilter='all',_recHistId=null;
@@ -1248,16 +1248,29 @@ async function addRecoveryMulti(){
 async function delRecovery(id){if(!confirm('¿Eliminar este registro?'))return;try{await api('DELETE','/api/recoveries/'+id);renderRecoveries();}catch(e){alert(e.message);}}
 
 function compNewPid(){return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function compNewGid(){return 'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function compEnsureIds(c){
   c.participantes=(c.participantes||[]).map(p=>p.id?p:Object.assign({},p,{id:compNewPid()}));
+  if(!Array.isArray(c.catGroups))c.catGroups=[];
+  if(!c.catGroups.length){
+    const vals=new Set(DB.config.categorias||[]);
+    c.participantes.forEach(p=>{if(p.categoria)vals.add(p.categoria);});
+    c.catGroups=[{id:compNewGid(),nombre:'Categoría',opciones:[...vals]}];
+  }
+  const defGid=c.catGroups[0].id;
+  c.participantes.forEach(p=>{
+    if(!p.cats||typeof p.cats!=='object')p.cats={};
+    if(p.categoria&&p.cats[defGid]==null)p.cats[defGid]=p.categoria;
+  });
   return c.participantes;
 }
-function compCategoryOrder(){return (DB.config.categorias||[]).slice();}
-function compGroupedParticipants(c){
-  const parts=(c.participantes||[]).slice();
-  const order=compCategoryOrder();
+function compGroupedParticipants(c,groupId){
+  const parts=(c.participantes||[]).slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es',{numeric:true,sensitivity:'base'}));
+  if(!groupId)return [{valor:'',items:parts}];
+  const grp=(c.catGroups||[]).find(g=>g.id===groupId);
+  const order=grp?grp.opciones.slice():[];
   const groups={};
-  parts.forEach(p=>{const k=p.categoria||'';(groups[k]=groups[k]||[]).push(p);});
+  parts.forEach(p=>{const k=(p.cats&&p.cats[groupId])||'';(groups[k]=groups[k]||[]).push(p);});
   const keys=Object.keys(groups).filter(k=>k!=='');
   keys.sort((a,b)=>{
     const ia=order.indexOf(a),ib=order.indexOf(b);
@@ -1267,7 +1280,108 @@ function compGroupedParticipants(c){
     return a.localeCompare(b,'es',{numeric:true,sensitivity:'base'});
   });
   if(groups['']!=null)keys.push('');
-  return keys.map(k=>({categoria:k,items:groups[k].slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es',{numeric:true,sensitivity:'base'}))}));
+  return keys.map(k=>({valor:k,items:groups[k]}));
+}
+function compGroupName(cid,gid){const c=COMPS.find(x=>x.id===cid);const g=c&&(c.catGroups||[]).find(x=>x.id===gid);return g?g.nombre:'';}
+function setCompGroupBy(cid,val){compGroupBy[cid]=val;renderCompetitions();}
+async function addCompCatOption(cid,gid,nombre){
+  const c=COMPS.find(x=>x.id===cid);if(!c)return;
+  compEnsureIds(c);
+  const g=c.catGroups.find(x=>x.id===gid);if(!g)return;
+  if(!g.opciones.some(o=>o.toLowerCase()===nombre.toLowerCase()))g.opciones.push(nombre);
+  try{await api('PUT','/api/competitions/'+cid,{catGroups:c.catGroups});}catch(e){alert(e.message);}
+}
+async function promptAddCompCatOption(cid,gid){
+  const nombre=(prompt('Nombre de la nueva categoría:')||'').trim();
+  if(!nombre)return;
+  await addCompCatOption(cid,gid,nombre);
+  renderCompetitions();
+}
+async function rmCompCatOption(cid,gid,idx){
+  const c=COMPS.find(x=>x.id===cid);if(!c)return;
+  compEnsureIds(c);
+  const g=c.catGroups.find(x=>x.id===gid);if(!g)return;
+  const val=g.opciones[idx];if(val==null)return;
+  if(!confirm('¿Eliminar la categoría "'+val+'"? Los participantes que la tengan asignada quedarán sin categoría en "'+g.nombre+'".'))return;
+  g.opciones.splice(idx,1);
+  c.participantes.forEach(p=>{if(p.cats&&p.cats[gid]===val)p.cats[gid]='';});
+  try{await api('PUT','/api/competitions/'+cid,{catGroups:c.catGroups,participantes:c.participantes});renderCompetitions();}catch(e){alert(e.message);}
+}
+async function promptAddCompCatGroup(cid){
+  const nombre=(prompt('Nombre del nuevo tipo de categoría (ej: Equipo, Nivel, División):')||'').trim();
+  if(!nombre)return;
+  const c=COMPS.find(x=>x.id===cid);if(!c)return;
+  compEnsureIds(c);
+  c.catGroups.push({id:compNewGid(),nombre,opciones:[]});
+  try{await api('PUT','/api/competitions/'+cid,{catGroups:c.catGroups});renderCompetitions();}catch(e){alert(e.message);}
+}
+async function rmCompCatGroup(cid,gid){
+  const c=COMPS.find(x=>x.id===cid);if(!c)return;
+  compEnsureIds(c);
+  const g=c.catGroups.find(x=>x.id===gid);if(!g)return;
+  if(c.catGroups.length<=1){alert('Tiene que quedar al menos un tipo de categoría.');return;}
+  if(!confirm('¿Eliminar el tipo de categoría "'+g.nombre+'" y quitarlo de todos los participantes?'))return;
+  c.catGroups=c.catGroups.filter(x=>x.id!==gid);
+  c.participantes.forEach(p=>{if(p.cats)delete p.cats[gid];});
+  if(compGroupBy[cid]===gid)delete compGroupBy[cid];
+  try{await api('PUT','/api/competitions/'+cid,{catGroups:c.catGroups,participantes:c.participantes});renderCompetitions();}catch(e){alert(e.message);}
+}
+async function renameCompCatGroup(cid,gid,nombre){
+  const c=COMPS.find(x=>x.id===cid);if(!c)return;
+  compEnsureIds(c);
+  const g=c.catGroups.find(x=>x.id===gid);if(!g)return;
+  g.nombre=(nombre||'').trim()||g.nombre;
+  try{await api('PUT','/api/competitions/'+cid,{catGroups:c.catGroups});renderCompetitions();}catch(e){alert(e.message);}
+}
+async function setCompParticipantCat(cid,pid,gid,val){
+  const c=COMPS.find(x=>x.id===cid);if(!c)return;
+  compEnsureIds(c);
+  const p=c.participantes.find(x=>x.id===pid);if(!p)return;
+  p.cats=p.cats||{};
+  p.cats[gid]=val;
+  try{await api('PUT','/api/competitions/'+cid,{participantes:c.participantes});renderCompetitions();}catch(e){alert(e.message);}
+}
+async function onCompCatChange(sel,cid,pid,gid){
+  if(sel.value==='__new__'){
+    const nombre=(prompt('Nueva categoría para "'+compGroupName(cid,gid)+'":')||'').trim();
+    if(!nombre){renderCompetitions();return;}
+    await addCompCatOption(cid,gid,nombre);
+    await setCompParticipantCat(cid,pid,gid,nombre);
+  }else{
+    await setCompParticipantCat(cid,pid,gid,sel.value);
+  }
+}
+function compCatOptionsHtml(g,val){
+  return `<option value=""${!val?' selected':''}>Sin categoría</option>`+
+    g.opciones.map(o=>`<option value="${esc(o)}"${val===o?' selected':''}>${esc(o)}</option>`).join('')+
+    `<option value="__new__">+ Nueva…</option>`;
+}
+function compParticipantCatsHtml(c,pp){
+  return (c.catGroups||[]).map(g=>{
+    const val=(pp.cats&&pp.cats[g.id])||'';
+    return `<select title="${esc(g.nombre)}" onchange="onCompCatChange(this,'${c.id}','${pp.id}','${g.id}')" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px">${compCatOptionsHtml(g,val)}</select>`;
+  }).join(' ');
+}
+function compParticipantCatsText(c,pp){
+  const t=(c.catGroups||[]).filter(g=>pp.cats&&pp.cats[g.id]).map(g=>esc(g.nombre)+': '+esc(pp.cats[g.id])).join(' · ');
+  return t?`<span class="small">${t}</span>`:'';
+}
+function renderCompCatGroupsAdmin(c){
+  const groups=c.catGroups||[];
+  return `<div style="margin-top:10px;border:1px dashed var(--line);border-radius:8px;padding:8px">
+    <div class="small" style="font-weight:700;margin-bottom:6px">Categorías del torneo</div>
+    ${groups.map(g=>`<div style="margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <input value="${esc(g.nombre)}" onchange="renameCompCatGroup('${c.id}','${g.id}',this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px;font-weight:700;max-width:160px">
+        <span style="cursor:pointer;color:#b3261e;font-size:12px" onclick="rmCompCatGroup('${c.id}','${g.id}')" title="Eliminar este tipo de categoría">🗑 tipo</span>
+      </div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;align-items:center">
+        ${g.opciones.map((o,idx)=>`<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid var(--line);border-radius:12px;font-size:12px">${esc(o)} <span style="cursor:pointer;color:#b3261e" onclick="rmCompCatOption('${c.id}','${g.id}',${idx})">✕</span></span>`).join('')}
+        <span style="cursor:pointer;color:#2563eb;font-size:12px" onclick="promptAddCompCatOption('${c.id}','${g.id}')">+ Agregar opción</span>
+      </div>
+    </div>`).join('')}
+    <span style="cursor:pointer;color:#2563eb;font-size:12px" onclick="promptAddCompCatGroup('${c.id}')">+ Nuevo tipo de categoría (ej: Equipo, Nivel)</span>
+  </div>`;
 }
 async function compOpenPlan(planId){
   if(!planId)return;
@@ -1288,12 +1402,15 @@ async function renderCompetitions(){
   if(!COMPS.length){w.innerHTML='<div class="card empty"><div class="big">🏆</div><p>No hay competencias cargadas.</p></div>';return;}
   w.innerHTML='<div class="feed">'+COMPS.map(c=>{
     compEnsureIds(c);
-    const groups=compGroupedParticipants(c);
     const total=(c.participantes||[]).length;
-    const countsLine=groups.map(g=>`${esc(g.categoria||'Sin categoría')}: <b>${g.items.length}</b>`).join(' · ');
+    const groupSel=compGroupBy[c.id]!==undefined?compGroupBy[c.id]:(c.catGroups[0]?c.catGroups[0].id:'');
+    const groups=compGroupedParticipants(c,groupSel);
     const plan=c.planId?LESSONPLANS.find(p=>p.id===c.planId):null;
-    const groupsHtml=groups.length?groups.map(g=>`<div style="margin-top:8px"><div class="small" style="font-weight:700;color:var(--muted);margin-bottom:4px">${esc(g.categoria||'Sin categoría')} (${g.items.length})</div>${g.items.map(pp=>`<div style="display:flex;align-items:center;gap:6px;padding:3px 0;flex-wrap:wrap"><span style="flex:1;min-width:140px">${esc(pp.nombre)}</span>${editable?`<select onchange="setCompParticipantCategoria('${c.id}','${pp.id}',this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px"><option value=""${!pp.categoria?' selected':''}>Sin categoría</option>${(DB.config.categorias||[]).map(cat=>`<option value="${esc(cat)}"${pp.categoria===cat?' selected':''}>${esc(cat)}</option>`).join('')}</select> <span style="cursor:pointer;color:#b3261e" onclick="rmCompParticipant('${c.id}','${pp.id}')" title="Quitar">✕</span>`:''}</div>`).join('')}</div>`).join(''):'<p class="small">Sin participantes.</p>';
-    return `<div class="item"><div class="top"><span class="ti">🏆 ${esc(c.nombre)}</span><span><button class="att-btn" title="Informe PDF de este evento" onclick="informeCompetencia('${c.id}')">📄</button>${editable?` <button class="att-btn" title="Editar" onclick="editCompStart('${c.id}')">✎</button> <button class="att-btn" onclick="delCompetition('${c.id}')">🗑</button>`:''}</span></div><div class="meta2">${esc(fmtFecha(c.fecha))}${c.hora?' · '+esc(c.hora):''}${c.lugar?' · '+esc(c.lugar):''} · ${total} participante(s)${plan?` · <span style="cursor:pointer;color:#2563eb" onclick="compOpenPlan('${c.planId}')">📅 ${esc(lpPlanHeading(plan).title)}</span>`:''}</div>${c.nota?`<div class="rte small" style="margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--card)">${fmtRaw(c.nota)}</div>`:''}${total?`<div class="small" style="margin-top:8px;color:var(--muted)">${countsLine}</div>`:''}<div class="body2">${groupsHtml}</div>${editable?`<div style="margin-top:8px"><datalist id="dl_${c.id}">${DB.students.filter(s=>s.estado!=='Baja').map(s=>`<option value="${esc(fullName(s))}">`).join('')}</datalist><input id="cp_${c.id}" list="dl_${c.id}" placeholder="Agregar alumno (Apellido, Nombre)" style="padding:7px 9px;border:1px solid var(--line);border-radius:7px;font-size:13px"> <button class="btn sm" onclick="addCompParticipant('${c.id}')">+ Agregar</button> <button class="btn sm sec" onclick="addCompMulti('${c.id}')">Varios…</button></div>`:''}</div>`;
+    const countsLine=groupSel?groups.map(g=>`${esc(g.valor||'Sin categoría')}: <b>${g.items.length}</b>`).join(' · '):'';
+    const groupByOpts=`<option value="">Sin agrupar (solo alfabético)</option>`+(c.catGroups||[]).map(g=>`<option value="${g.id}"${groupSel===g.id?' selected':''}>${esc(g.nombre)}</option>`).join('');
+    const groupByHtml=(c.catGroups&&c.catGroups.length)?`<div class="small" style="margin-top:6px">Agrupar por: <select onchange="setCompGroupBy('${c.id}',this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px">${groupByOpts}</select></div>`:'';
+    const groupsHtml=groups.length?groups.map(g=>`<div style="margin-top:8px">${groupSel?`<div class="small" style="font-weight:700;color:var(--muted);margin-bottom:4px">${esc(g.valor||'Sin categoría')} (${g.items.length})</div>`:''}${g.items.map(pp=>`<div style="display:flex;align-items:center;gap:6px;padding:3px 0;flex-wrap:wrap"><span style="flex:1;min-width:140px">${esc(pp.nombre)}</span>${editable?compParticipantCatsHtml(c,pp):compParticipantCatsText(c,pp)}${editable?` <span style="cursor:pointer;color:#b3261e" onclick="rmCompParticipant('${c.id}','${pp.id}')" title="Quitar">✕</span>`:''}</div>`).join('')}</div>`).join(''):'<p class="small">Sin participantes.</p>';
+    return `<div class="item"><div class="top"><span class="ti">🏆 ${esc(c.nombre)}</span><span><button class="att-btn" title="Informe PDF de este evento" onclick="informeCompetencia('${c.id}')">📄</button>${editable?` <button class="att-btn" title="Editar" onclick="editCompStart('${c.id}')">✎</button> <button class="att-btn" onclick="delCompetition('${c.id}')">🗑</button>`:''}</span></div><div class="meta2">${esc(fmtFecha(c.fecha))}${c.hora?' · '+esc(c.hora):''}${c.lugar?' · '+esc(c.lugar):''} · ${total} participante(s)${plan?` · <span style="cursor:pointer;color:#2563eb" onclick="compOpenPlan('${c.planId}')">📅 ${esc(lpPlanHeading(plan).title)}</span>`:''}</div>${c.nota?`<div class="rte small" style="margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--card)">${fmtRaw(c.nota)}</div>`:''}${editable?renderCompCatGroupsAdmin(c):''}${total?`<div class="small" style="margin-top:8px;color:var(--muted)">${countsLine}</div>`:''}${groupByHtml}<div class="body2">${groupsHtml}</div>${editable?`<div style="margin-top:8px"><datalist id="dl_${c.id}">${DB.students.filter(s=>s.estado!=='Baja').map(s=>`<option value="${esc(fullName(s))}">`).join('')}</datalist><input id="cp_${c.id}" list="dl_${c.id}" placeholder="Agregar alumno (Apellido, Nombre)" style="padding:7px 9px;border:1px solid var(--line);border-radius:7px;font-size:13px"> <button class="btn sm" onclick="addCompParticipant('${c.id}')">+ Agregar</button> <button class="btn sm sec" onclick="addCompMulti('${c.id}')">Varios…</button></div>`:''}</div>`;
   }).join('')+'</div>';
 }
 async function addCompetition(){
@@ -1379,7 +1496,12 @@ function renderPickList(){
 function pickToggle(id,ch){if(ch)pickSel.add(id);else pickSel.delete(id);document.getElementById('pickBtn').textContent='Agregar'+(pickSel.size?' ('+pickSel.size+')':'');}
 function closePick(){document.getElementById('pickOverlay').classList.remove('show');}
 function confirmPick(){const studs=[...pickSel].map(id=>DB.students.find(s=>s.id===id)).filter(Boolean);closePick();if(pickCb)pickCb(studs);}
-async function addCompMulti(cid){openStudentPicker('Agregar participantes',async(studs)=>{if(!studs.length)return;const c=COMPS.find(x=>x.id===cid);if(!c)return;compEnsureIds(c);const part=c.participantes.slice();studs.forEach(s=>{if(!part.some(pp=>pp.studentId===s.id))part.push({id:compNewPid(),studentId:s.id,nombre:fullName(s),categoria:s.categoria||''});});try{await api('PUT','/api/competitions/'+cid,{participantes:part});renderCompetitions();}catch(e){alert(e.message);}});}
+function compDefaultCats(c,s){
+  const gid=c.catGroups[0]&&c.catGroups[0].id;
+  if(!gid)return {};
+  return c.catGroups[0].opciones.includes(s&&s.categoria)?{[gid]:s.categoria}:{};
+}
+async function addCompMulti(cid){openStudentPicker('Agregar participantes',async(studs)=>{if(!studs.length)return;const c=COMPS.find(x=>x.id===cid);if(!c)return;compEnsureIds(c);const part=c.participantes.slice();studs.forEach(s=>{if(!part.some(pp=>pp.studentId===s.id))part.push({id:compNewPid(),studentId:s.id,nombre:fullName(s),cats:compDefaultCats(c,s)});});try{await api('PUT','/api/competitions/'+cid,{participantes:part});renderCompetitions();}catch(e){alert(e.message);}});}
 async function addCompParticipant(cid){
   const inp=document.getElementById('cp_'+cid);const al=inp.value.trim();if(!al)return;
   const st=findStudentByName(al);const c=COMPS.find(x=>x.id===cid);if(!c)return;
@@ -1387,19 +1509,12 @@ async function addCompParticipant(cid){
   const part=c.participantes.slice();
   const nom=st?fullName(st):al;
   if(part.some(pp=>(st&&pp.studentId===st.id)||pp.nombre===nom)){alert('Ya está en la lista.');return;}
-  part.push({id:compNewPid(),studentId:st?st.id:'',nombre:nom,categoria:(st&&st.categoria)||''});
+  part.push({id:compNewPid(),studentId:st?st.id:'',nombre:nom,cats:compDefaultCats(c,st)});
   try{await api('PUT','/api/competitions/'+cid,{participantes:part});renderCompetitions();}catch(e){alert(e.message);}
 }
 async function rmCompParticipant(cid,pid){const c=COMPS.find(x=>x.id===cid);if(!c)return;compEnsureIds(c);const part=c.participantes.filter(pp=>pp.id!==pid);try{await api('PUT','/api/competitions/'+cid,{participantes:part});renderCompetitions();}catch(e){alert(e.message);}}
-async function setCompParticipantCategoria(cid,pid,categoria){
-  const c=COMPS.find(x=>x.id===cid);if(!c)return;
-  compEnsureIds(c);
-  const p=c.participantes.find(x=>x.id===pid);if(!p)return;
-  p.categoria=categoria;
-  try{await api('PUT','/api/competitions/'+cid,{participantes:c.participantes});renderCompetitions();}catch(e){alert(e.message);}
-}
 async function delCompetition(id){if(!confirm('¿Eliminar esta competencia?'))return;try{await api('DELETE','/api/competitions/'+id);renderCompetitions();}catch(e){alert(e.message);}}
-function buildCompetencias(list){let h=rptHeader('Competencias'+(list.length===1?' · '+esc(list[0].nombre||''):''));if(!list.length)return h+'<p>No hay competencias para mostrar.</p>';if(list.length>1)h+=`<p><b>${list.length}</b> competencias.</p>`;const sorted=list.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));sorted.forEach((c,i)=>{const parts=(c.participantes||[]);const plan=c.planId?LESSONPLANS.find(p=>p.id===c.planId):null;h+=`<div${i>0?' style="page-break-before:always"':''}><h2>🏆 ${esc(c.nombre||'(sin nombre)')}</h2>`;h+=rptTbl(['Dato','Valor'],[['Fecha',c.fecha?fmtFecha(c.fecha):'—'],['Hora',esc(c.hora||'—')],['Lugar',esc(c.lugar||'—')],['Planificación',plan?esc(lpPlanHeading(plan).title):'—'],['Formato / Observaciones',fmt(c.nota||'—')],['Participantes',String(parts.length)]]);if(parts.length){const flat=[];compGroupedParticipants(c).forEach(g=>g.items.forEach(p=>flat.push(p)));h+='<p><b>Participantes</b></p>'+rptTbl(['#','Alumno','Categoría','Programa','Nivel'],flat.map((p,ix)=>{const s=DB.students.find(x=>x.id===p.studentId);return [String(ix+1),esc(p.nombre||(s?fullName(s):'')),esc(p.categoria||'—'),esc(s?(s.programa||''):''),esc(s?(s.nivel||''):'')];}));}else h+='<p class="small">Sin participantes.</p>';h+='</div>';});return h;}
+function buildCompetencias(list){let h=rptHeader('Competencias'+(list.length===1?' · '+esc(list[0].nombre||''):''));if(!list.length)return h+'<p>No hay competencias para mostrar.</p>';if(list.length>1)h+=`<p><b>${list.length}</b> competencias.</p>`;const sorted=list.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));sorted.forEach((c,i)=>{compEnsureIds(c);const parts=(c.participantes||[]);const plan=c.planId?LESSONPLANS.find(p=>p.id===c.planId):null;h+=`<div${i>0?' style="page-break-before:always"':''}><h2>🏆 ${esc(c.nombre||'(sin nombre)')}</h2>`;h+=rptTbl(['Dato','Valor'],[['Fecha',c.fecha?fmtFecha(c.fecha):'—'],['Hora',esc(c.hora||'—')],['Lugar',esc(c.lugar||'—')],['Planificación',plan?esc(lpPlanHeading(plan).title):'—'],['Formato / Observaciones',fmt(c.nota||'—')],['Participantes',String(parts.length)]]);if(parts.length){const groupSel=compGroupBy[c.id]!==undefined?compGroupBy[c.id]:(c.catGroups[0]?c.catGroups[0].id:'');const flat=[];compGroupedParticipants(c,groupSel).forEach(g=>g.items.forEach(p=>flat.push(p)));const catCols=c.catGroups||[];h+='<p><b>Participantes</b></p>'+rptTbl(['#','Alumno',...catCols.map(g=>g.nombre),'Programa','Nivel'],flat.map((p,ix)=>{const s=DB.students.find(x=>x.id===p.studentId);return [String(ix+1),esc(p.nombre||(s?fullName(s):'')),...catCols.map(g=>esc((p.cats&&p.cats[g.id])||'—')),esc(s?(s.programa||''):''),esc(s?(s.nivel||''):'')];}));}else h+='<p class="small">Sin participantes.</p>';h+='</div>';});return h;}
 function informeCompetencia(id){const c=(COMPS||[]).find(x=>x.id===id);if(!c){alert('No se encontró la competencia.');return;}printReport(buildCompetencias([c]),'Competencia '+(c.nombre||''));}
 
 /* ===== Planificaciones y Comunicaciones ===== */
