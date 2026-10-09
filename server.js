@@ -587,12 +587,24 @@ app.post('/api/recoveries', auth, need('attendance'), async (req, res) => {
 app.delete('/api/recoveries/:id', auth, need('attendance'), async (req, res) => { await store.deleteRecovery(req.params.id); res.json({ ok: true }); });
 
 /* ---------------- Competencias ---------------- */
-const cleanCompParticipant = p => ({
-  id: String((p && p.id) || '').slice(0, 40) || ('p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
-  studentId: String((p && p.studentId) || '').slice(0, 40),
-  nombre: String((p && p.nombre) || '').slice(0, 150),
-  categoria: String((p && p.categoria) || '').slice(0, 80)
+const cleanCatGroup = g => ({
+  id: String((g && g.id) || '').slice(0, 40) || ('g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
+  nombre: String((g && g.nombre) || '').slice(0, 80),
+  opciones: Array.isArray(g && g.opciones) ? g.opciones.slice(0, 60).map(o => String(o || '').slice(0, 80)).filter(Boolean) : []
 });
+const cleanCompParticipant = p => {
+  const cats = {};
+  if (p && p.cats && typeof p.cats === 'object' && !Array.isArray(p.cats)) {
+    Object.keys(p.cats).slice(0, 20).forEach(k => { cats[String(k).slice(0, 40)] = String(p.cats[k] || '').slice(0, 80); });
+  }
+  return {
+    id: String((p && p.id) || '').slice(0, 40) || ('p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
+    studentId: String((p && p.studentId) || '').slice(0, 40),
+    nombre: String((p && p.nombre) || '').slice(0, 150),
+    categoria: String((p && p.categoria) || '').slice(0, 80),
+    cats
+  };
+};
 app.get('/api/competitions', auth, async (req, res) => { res.json(await store.listCompetitions()); });
 app.post('/api/competitions', auth, need('content'), async (req, res) => {
   const b = req.body || {};
@@ -600,6 +612,7 @@ app.post('/api/competitions', auth, need('content'), async (req, res) => {
   const c = { id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
     fecha: String(b.fecha), hora: String(b.hora || ''), nombre: String(b.nombre).slice(0, 200), lugar: String(b.lugar || '').slice(0, 200),
     nota: String(b.nota || '').slice(0, 4000), planId: String(b.planId || '').slice(0, 40),
+    catGroups: Array.isArray(b.catGroups) ? b.catGroups.slice(0, 20).map(cleanCatGroup) : [],
     participantes: Array.isArray(b.participantes) ? b.participantes.slice(0, 500).map(cleanCompParticipant) : [], autor: req.user.nombre };
   await store.addCompetition(c);
   res.json(c);
@@ -615,6 +628,7 @@ app.put('/api/competitions/:id', auth, need('content'), async (req, res) => {
   if (b.lugar != null) c.lugar = String(b.lugar).slice(0, 200);
   if (b.nota != null) c.nota = String(b.nota).slice(0, 4000);
   if (b.planId != null) c.planId = String(b.planId).slice(0, 40);
+  if (Array.isArray(b.catGroups)) c.catGroups = b.catGroups.slice(0, 20).map(cleanCatGroup);
   if (Array.isArray(b.participantes)) c.participantes = b.participantes.slice(0, 500).map(cleanCompParticipant);
   await store.updateCompetition(c);
   res.json(c);
