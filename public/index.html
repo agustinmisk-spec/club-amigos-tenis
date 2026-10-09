@@ -1193,7 +1193,7 @@ let recHistFilter='all',_recHistId=null;
 async function showRecHistory(id){_recHistId=id;recHistFilter='all';const box=document.getElementById('recHistBox');if(!box)return;box.innerHTML='<span class="small">Cargando…</span>';try{await loadRegistros();}catch(e){}renderRecHistory();}
 function renderRecHistory(){const box=document.getElementById('recHistBox');if(!box)return;const id=_recHistId;const all=(RECOVERIES||[]).filter(r=>r.studentId===id);const nR=all.filter(r=>r.tipo==='Recuperación').length,nI=all.filter(r=>r.tipo==='Invitación').length;let list=(recHistFilter==='all'?all:all.filter(r=>r.tipo===recHistFilter)).slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));const btn=(v,t)=>`<button class="btn sm${recHistFilter===v?'':' ghost'}" onclick="recHistFilter='${v}';renderRecHistory()">${t}</button>`;let h=`<div style="display:flex;gap:5px;margin-bottom:6px;flex-wrap:wrap">${btn('all','Todas ('+(nR+nI)+')')}${btn('Recuperación','Recuperaciones ('+nR+')')}${btn('Invitación','Invitaciones ('+nI+')')}</div>`;if(!list.length){h+='<span class="small">Sin registros'+(recHistFilter!=='all'?' de ese tipo':'')+'.</span>';box.innerHTML=h;return;}h+='<div style="max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px 8px">'+list.map(r=>`<div style="display:flex;justify-content:space-between;gap:12px;padding:3px 2px;border-bottom:1px solid #f0f0f0;font-size:12.5px"><span>${esc(diaSemana(r.fecha))} ${esc(fmtFecha(r.fecha))}</span><span>${r.tipo==='Invitación'?'<span style="color:#33459c;font-weight:700">Invitación</span>':'<span style="color:#1f7a4d;font-weight:700">Recuperación</span>'}${r.prof?' <span class="small">· '+esc(r.prof.split(' ')[0])+'</span>':''}${r.hora?' <span class="small">· '+esc(r.hora)+'</span>':''}${r.nota?' <span class="small">· '+esc(r.nota)+'</span>':''}</span></div>`).join('')+'</div>';box.innerHTML=h;}
 function compCount(id){return COMPS.filter(c=>(c.participantes||[]).some(p=>p.studentId===id)).length;}
-async function loadRegistros(){try{RECOVERIES=await api('GET','/api/recoveries');}catch(e){RECOVERIES=[];}try{COMPS=await api('GET','/api/competitions');}catch(e){COMPS=[];}try{GROUPNOTES=await api('GET','/api/groupnotes');}catch(e){GROUPNOTES=[];}}
+async function loadRegistros(){try{RECOVERIES=await api('GET','/api/recoveries');}catch(e){RECOVERIES=[];}try{COMPS=await api('GET','/api/competitions');}catch(e){COMPS=[];}try{GROUPNOTES=await api('GET','/api/groupnotes');}catch(e){GROUPNOTES=[];}if(!LESSONPLANS.length){try{LESSONPLANS=await api('GET','/api/lessonplans');}catch(e){}}}
 function findStudentByName(n){n=(n||'').trim().toLowerCase();return DB.students.find(s=>fullName(s).toLowerCase()===n);}
 function recName(r){if(r.studentId){const s=DB.students.find(x=>x.id===r.studentId);if(s)return fullName(s);}return r.nombre||'';}
 let recDate=null;
@@ -1247,20 +1247,61 @@ async function addRecoveryMulti(){
 }
 async function delRecovery(id){if(!confirm('¿Eliminar este registro?'))return;try{await api('DELETE','/api/recoveries/'+id);renderRecoveries();}catch(e){alert(e.message);}}
 
+function compNewPid(){return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function compEnsureIds(c){
+  c.participantes=(c.participantes||[]).map(p=>p.id?p:Object.assign({},p,{id:compNewPid()}));
+  return c.participantes;
+}
+function compCategoryOrder(){return (DB.config.categorias||[]).slice();}
+function compGroupedParticipants(c){
+  const parts=(c.participantes||[]).slice();
+  const order=compCategoryOrder();
+  const groups={};
+  parts.forEach(p=>{const k=p.categoria||'';(groups[k]=groups[k]||[]).push(p);});
+  const keys=Object.keys(groups).filter(k=>k!=='');
+  keys.sort((a,b)=>{
+    const ia=order.indexOf(a),ib=order.indexOf(b);
+    if(ia>=0&&ib>=0)return ia-ib;
+    if(ia>=0)return -1;
+    if(ib>=0)return 1;
+    return a.localeCompare(b,'es',{numeric:true,sensitivity:'base'});
+  });
+  if(groups['']!=null)keys.push('');
+  return keys.map(k=>({categoria:k,items:groups[k].slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es',{numeric:true,sensitivity:'base'}))}));
+}
+async function compOpenPlan(planId){
+  if(!planId)return;
+  try{if(!LESSONPLANS.length)LESSONPLANS=await api('GET','/api/lessonplans');}catch(e){}
+  const p=LESSONPLANS.find(x=>x.id===planId);
+  if(!p){alert('No se encontró la planificación vinculada (puede haber sido eliminada).');return;}
+  planSubTab='planificador';
+  showTab('planificaciones');
+  lpEditPlan(planId);
+}
 async function renderCompetitions(){
   const form=document.getElementById('compForm'),w=document.getElementById('compWrap');
   await loadRegistros();
+  const editable=can('content');
   const ec=editCompId?COMPS.find(x=>x.id===editCompId):null;
-  form.innerHTML=can('content')?`<div class="uploadcard"><div class="sectitle" style="margin-top:0">${ec?'Editar competencia':'Nueva competencia'}</div><div class="grid4"><div class="field"><label>Fecha</label><input type="date" id="cmp_fecha" value="${ec?esc(ec.fecha):''}"></div><div class="field"><label>Hora</label><input id="cmp_hora" value="${ec?esc(ec.hora||''):''}" placeholder="Ej: 9:00"></div><div class="field"><label>Nombre</label><input id="cmp_nombre" value="${ec?esc(ec.nombre||''):''}" placeholder="Ej: Torneo interclubes"></div><div class="field"><label>Lugar</label><input id="cmp_lugar" value="${ec?esc(ec.lugar||''):''}"></div></div><div class="field"><label>Nota</label>${rteBox('cmp_nota','',ec?ec.nota:'',44,'Observaciones de la competencia…')}</div><button class="btn" onclick="addCompetition()">${ec?'Guardar cambios':'Crear competencia'}</button>${ec?` <button class="btn ghost" onclick="cancelEditComp()">Cancelar</button>`:''}</div>`:'';
+  const planOpts='<option value="">— Ninguna —</option>'+LESSONPLANS.slice().sort((a,b)=>lpPlanHeading(a).title.localeCompare(lpPlanHeading(b).title,'es',{numeric:true,sensitivity:'base'})).map(p=>`<option value="${p.id}"${ec&&ec.planId===p.id?' selected':''}>${esc(lpPlanHeading(p).title)}</option>`).join('');
+  form.innerHTML=editable?`<div class="uploadcard"><div class="sectitle" style="margin-top:0">${ec?'Editar competencia':'Nueva competencia'}</div><div class="grid4"><div class="field"><label>Fecha</label><input type="date" id="cmp_fecha" value="${ec?esc(ec.fecha):''}"></div><div class="field"><label>Hora</label><input id="cmp_hora" value="${ec?esc(ec.hora||''):''}" placeholder="Ej: 9:00"></div><div class="field"><label>Nombre</label><input id="cmp_nombre" value="${ec?esc(ec.nombre||''):''}" placeholder="Ej: Torneo interclubes"></div><div class="field"><label>Lugar</label><input id="cmp_lugar" value="${ec?esc(ec.lugar||''):''}"></div></div><div class="field"><label>Planificación relacionada (opcional)</label><select id="cmp_plan">${planOpts}</select></div><div class="field"><label>Formato y observaciones</label>${rteBox('cmp_nota','',ec?ec.nota:'',44,'Formato del torneo, reglas, cronograma, etc…')}</div><button class="btn" onclick="addCompetition()">${ec?'Guardar cambios':'Crear competencia'}</button>${ec?` <button class="btn ghost" onclick="cancelEditComp()">Cancelar</button>`:''}</div>`:'';
   if(!COMPS.length){w.innerHTML='<div class="card empty"><div class="big">🏆</div><p>No hay competencias cargadas.</p></div>';return;}
-  w.innerHTML='<div class="feed">'+COMPS.map(c=>`<div class="item"><div class="top"><span class="ti">🏆 ${esc(c.nombre)}</span><span><button class="att-btn" title="Informe PDF de este evento" onclick="informeCompetencia('${c.id}')">📄</button>${can('content')?` <button class="att-btn" title="Editar" onclick="editCompStart('${c.id}')">✎</button> <button class="att-btn" onclick="delCompetition('${c.id}')">🗑</button>`:''}</span></div><div class="meta2">${esc(fmtFecha(c.fecha))}${c.hora?' · '+esc(c.hora):''}${c.lugar?' · '+esc(c.lugar):''}${c.nota?' · '+fmt(c.nota):''} · ${(c.participantes||[]).length} participante(s)</div><div class="body2">${(c.participantes||[]).map((pp,ix)=>`<span class="pill" style="background:#eef1f0;color:#445;margin:2px 3px 2px 0;display:inline-block">${esc(pp.nombre)}${can('content')?` <span style="cursor:pointer;color:#b3261e" onclick="rmCompParticipant('${c.id}',${ix})">✕</span>`:''}</span>`).join('')||'<span class="small">Sin participantes</span>'}</div>${can('content')?`<div style="margin-top:8px"><datalist id="dl_${c.id}">${DB.students.filter(s=>s.estado!=='Baja').map(s=>`<option value="${esc(fullName(s))}">`).join('')}</datalist><input id="cp_${c.id}" list="dl_${c.id}" placeholder="Agregar alumno (Apellido, Nombre)" style="padding:7px 9px;border:1px solid var(--line);border-radius:7px;font-size:13px"> <button class="btn sm" onclick="addCompParticipant('${c.id}')">+ Agregar</button> <button class="btn sm sec" onclick="addCompMulti('${c.id}')">Varios…</button></div>`:''}</div>`).join('')+'</div>';
+  w.innerHTML='<div class="feed">'+COMPS.map(c=>{
+    compEnsureIds(c);
+    const groups=compGroupedParticipants(c);
+    const total=(c.participantes||[]).length;
+    const countsLine=groups.map(g=>`${esc(g.categoria||'Sin categoría')}: <b>${g.items.length}</b>`).join(' · ');
+    const plan=c.planId?LESSONPLANS.find(p=>p.id===c.planId):null;
+    const groupsHtml=groups.length?groups.map(g=>`<div style="margin-top:8px"><div class="small" style="font-weight:700;color:var(--muted);margin-bottom:4px">${esc(g.categoria||'Sin categoría')} (${g.items.length})</div>${g.items.map(pp=>`<div style="display:flex;align-items:center;gap:6px;padding:3px 0;flex-wrap:wrap"><span style="flex:1;min-width:140px">${esc(pp.nombre)}</span>${editable?`<select onchange="setCompParticipantCategoria('${c.id}','${pp.id}',this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px"><option value=""${!pp.categoria?' selected':''}>Sin categoría</option>${(DB.config.categorias||[]).map(cat=>`<option value="${esc(cat)}"${pp.categoria===cat?' selected':''}>${esc(cat)}</option>`).join('')}</select> <span style="cursor:pointer;color:#b3261e" onclick="rmCompParticipant('${c.id}','${pp.id}')" title="Quitar">✕</span>`:''}</div>`).join('')}</div>`).join(''):'<p class="small">Sin participantes.</p>';
+    return `<div class="item"><div class="top"><span class="ti">🏆 ${esc(c.nombre)}</span><span><button class="att-btn" title="Informe PDF de este evento" onclick="informeCompetencia('${c.id}')">📄</button>${editable?` <button class="att-btn" title="Editar" onclick="editCompStart('${c.id}')">✎</button> <button class="att-btn" onclick="delCompetition('${c.id}')">🗑</button>`:''}</span></div><div class="meta2">${esc(fmtFecha(c.fecha))}${c.hora?' · '+esc(c.hora):''}${c.lugar?' · '+esc(c.lugar):''} · ${total} participante(s)${plan?` · <span style="cursor:pointer;color:#2563eb" onclick="compOpenPlan('${c.planId}')">📅 ${esc(lpPlanHeading(plan).title)}</span>`:''}</div>${c.nota?`<div class="rte small" style="margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--card)">${fmtRaw(c.nota)}</div>`:''}${total?`<div class="small" style="margin-top:8px;color:var(--muted)">${countsLine}</div>`:''}<div class="body2">${groupsHtml}</div>${editable?`<div style="margin-top:8px"><datalist id="dl_${c.id}">${DB.students.filter(s=>s.estado!=='Baja').map(s=>`<option value="${esc(fullName(s))}">`).join('')}</datalist><input id="cp_${c.id}" list="dl_${c.id}" placeholder="Agregar alumno (Apellido, Nombre)" style="padding:7px 9px;border:1px solid var(--line);border-radius:7px;font-size:13px"> <button class="btn sm" onclick="addCompParticipant('${c.id}')">+ Agregar</button> <button class="btn sm sec" onclick="addCompMulti('${c.id}')">Varios…</button></div>`:''}</div>`;
+  }).join('')+'</div>';
 }
 async function addCompetition(){
-  const fecha=document.getElementById('cmp_fecha').value,hora=document.getElementById('cmp_hora').value.trim(),nombre=document.getElementById('cmp_nombre').value.trim(),lugar=document.getElementById('cmp_lugar').value.trim(),nota=rteGet('cmp_nota').trim();
+  const fecha=document.getElementById('cmp_fecha').value,hora=document.getElementById('cmp_hora').value.trim(),nombre=document.getElementById('cmp_nombre').value.trim(),lugar=document.getElementById('cmp_lugar').value.trim(),nota=rteGet('cmp_nota').trim(),planId=document.getElementById('cmp_plan').value;
   if(!fecha||!nombre){alert('Completá fecha y nombre.');return;}
   try{
-    if(editCompId){await api('PUT','/api/competitions/'+editCompId,{fecha,hora,nombre,lugar,nota});editCompId=null;}
-    else await api('POST','/api/competitions',{fecha,hora,nombre,lugar,nota,participantes:[]});
+    if(editCompId){await api('PUT','/api/competitions/'+editCompId,{fecha,hora,nombre,lugar,nota,planId});editCompId=null;}
+    else await api('POST','/api/competitions',{fecha,hora,nombre,lugar,nota,planId,participantes:[]});
     renderCompetitions();
   }catch(e){alert(e.message);}
 }
@@ -1338,19 +1379,27 @@ function renderPickList(){
 function pickToggle(id,ch){if(ch)pickSel.add(id);else pickSel.delete(id);document.getElementById('pickBtn').textContent='Agregar'+(pickSel.size?' ('+pickSel.size+')':'');}
 function closePick(){document.getElementById('pickOverlay').classList.remove('show');}
 function confirmPick(){const studs=[...pickSel].map(id=>DB.students.find(s=>s.id===id)).filter(Boolean);closePick();if(pickCb)pickCb(studs);}
-async function addCompMulti(cid){openStudentPicker('Agregar participantes',async(studs)=>{if(!studs.length)return;const c=COMPS.find(x=>x.id===cid);if(!c)return;const part=(c.participantes||[]).slice();studs.forEach(s=>{if(!part.some(pp=>pp.studentId===s.id))part.push({studentId:s.id,nombre:fullName(s)});});try{await api('PUT','/api/competitions/'+cid,{participantes:part});renderCompetitions();}catch(e){alert(e.message);}});}
+async function addCompMulti(cid){openStudentPicker('Agregar participantes',async(studs)=>{if(!studs.length)return;const c=COMPS.find(x=>x.id===cid);if(!c)return;compEnsureIds(c);const part=c.participantes.slice();studs.forEach(s=>{if(!part.some(pp=>pp.studentId===s.id))part.push({id:compNewPid(),studentId:s.id,nombre:fullName(s),categoria:s.categoria||''});});try{await api('PUT','/api/competitions/'+cid,{participantes:part});renderCompetitions();}catch(e){alert(e.message);}});}
 async function addCompParticipant(cid){
   const inp=document.getElementById('cp_'+cid);const al=inp.value.trim();if(!al)return;
   const st=findStudentByName(al);const c=COMPS.find(x=>x.id===cid);if(!c)return;
-  const part=(c.participantes||[]).slice();
+  compEnsureIds(c);
+  const part=c.participantes.slice();
   const nom=st?fullName(st):al;
   if(part.some(pp=>(st&&pp.studentId===st.id)||pp.nombre===nom)){alert('Ya está en la lista.');return;}
-  part.push({studentId:st?st.id:'',nombre:nom});
+  part.push({id:compNewPid(),studentId:st?st.id:'',nombre:nom,categoria:(st&&st.categoria)||''});
   try{await api('PUT','/api/competitions/'+cid,{participantes:part});renderCompetitions();}catch(e){alert(e.message);}
 }
-async function rmCompParticipant(cid,ix){const c=COMPS.find(x=>x.id===cid);if(!c)return;const part=(c.participantes||[]).slice();part.splice(ix,1);try{await api('PUT','/api/competitions/'+cid,{participantes:part});renderCompetitions();}catch(e){alert(e.message);}}
+async function rmCompParticipant(cid,pid){const c=COMPS.find(x=>x.id===cid);if(!c)return;compEnsureIds(c);const part=c.participantes.filter(pp=>pp.id!==pid);try{await api('PUT','/api/competitions/'+cid,{participantes:part});renderCompetitions();}catch(e){alert(e.message);}}
+async function setCompParticipantCategoria(cid,pid,categoria){
+  const c=COMPS.find(x=>x.id===cid);if(!c)return;
+  compEnsureIds(c);
+  const p=c.participantes.find(x=>x.id===pid);if(!p)return;
+  p.categoria=categoria;
+  try{await api('PUT','/api/competitions/'+cid,{participantes:c.participantes});renderCompetitions();}catch(e){alert(e.message);}
+}
 async function delCompetition(id){if(!confirm('¿Eliminar esta competencia?'))return;try{await api('DELETE','/api/competitions/'+id);renderCompetitions();}catch(e){alert(e.message);}}
-function buildCompetencias(list){let h=rptHeader('Competencias'+(list.length===1?' · '+esc(list[0].nombre||''):''));if(!list.length)return h+'<p>No hay competencias para mostrar.</p>';if(list.length>1)h+=`<p><b>${list.length}</b> competencias.</p>`;const sorted=list.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));sorted.forEach((c,i)=>{const parts=(c.participantes||[]);h+=`<div${i>0?' style="page-break-before:always"':''}><h2>🏆 ${esc(c.nombre||'(sin nombre)')}</h2>`;h+=rptTbl(['Dato','Valor'],[['Fecha',c.fecha?fmtFecha(c.fecha):'—'],['Hora',esc(c.hora||'—')],['Lugar',esc(c.lugar||'—')],['Observaciones',fmt(c.nota||'—')],['Participantes',String(parts.length)]]);if(parts.length){h+='<p><b>Participantes</b></p>'+rptTbl(['#','Alumno','Programa','Nivel'],parts.map((p,ix)=>{const s=DB.students.find(x=>x.id===p.studentId);return [String(ix+1),esc(p.nombre||(s?fullName(s):'')),esc(s?(s.programa||''):''),esc(s?(s.nivel||''):'')];}));}else h+='<p class="small">Sin participantes.</p>';h+='</div>';});return h;}
+function buildCompetencias(list){let h=rptHeader('Competencias'+(list.length===1?' · '+esc(list[0].nombre||''):''));if(!list.length)return h+'<p>No hay competencias para mostrar.</p>';if(list.length>1)h+=`<p><b>${list.length}</b> competencias.</p>`;const sorted=list.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));sorted.forEach((c,i)=>{const parts=(c.participantes||[]);const plan=c.planId?LESSONPLANS.find(p=>p.id===c.planId):null;h+=`<div${i>0?' style="page-break-before:always"':''}><h2>🏆 ${esc(c.nombre||'(sin nombre)')}</h2>`;h+=rptTbl(['Dato','Valor'],[['Fecha',c.fecha?fmtFecha(c.fecha):'—'],['Hora',esc(c.hora||'—')],['Lugar',esc(c.lugar||'—')],['Planificación',plan?esc(lpPlanHeading(plan).title):'—'],['Formato / Observaciones',fmt(c.nota||'—')],['Participantes',String(parts.length)]]);if(parts.length){const flat=[];compGroupedParticipants(c).forEach(g=>g.items.forEach(p=>flat.push(p)));h+='<p><b>Participantes</b></p>'+rptTbl(['#','Alumno','Categoría','Programa','Nivel'],flat.map((p,ix)=>{const s=DB.students.find(x=>x.id===p.studentId);return [String(ix+1),esc(p.nombre||(s?fullName(s):'')),esc(p.categoria||'—'),esc(s?(s.programa||''):''),esc(s?(s.nivel||''):'')];}));}else h+='<p class="small">Sin participantes.</p>';h+='</div>';});return h;}
 function informeCompetencia(id){const c=(COMPS||[]).find(x=>x.id===id);if(!c){alert('No se encontró la competencia.');return;}printReport(buildCompetencias([c]),'Competencia '+(c.nombre||''));}
 
 /* ===== Planificaciones y Comunicaciones ===== */

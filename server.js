@@ -587,13 +587,20 @@ app.post('/api/recoveries', auth, need('attendance'), async (req, res) => {
 app.delete('/api/recoveries/:id', auth, need('attendance'), async (req, res) => { await store.deleteRecovery(req.params.id); res.json({ ok: true }); });
 
 /* ---------------- Competencias ---------------- */
+const cleanCompParticipant = p => ({
+  id: String((p && p.id) || '').slice(0, 40) || ('p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
+  studentId: String((p && p.studentId) || '').slice(0, 40),
+  nombre: String((p && p.nombre) || '').slice(0, 150),
+  categoria: String((p && p.categoria) || '').slice(0, 80)
+});
 app.get('/api/competitions', auth, async (req, res) => { res.json(await store.listCompetitions()); });
 app.post('/api/competitions', auth, need('content'), async (req, res) => {
   const b = req.body || {};
   if (!b.fecha || !b.nombre) return res.status(400).json({ error: 'Faltan fecha y nombre' });
   const c = { id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
-    fecha: String(b.fecha), hora: String(b.hora || ''), nombre: String(b.nombre).slice(0, 200), lugar: String(b.lugar || ''),
-    nota: String(b.nota || ''), participantes: Array.isArray(b.participantes) ? b.participantes : [], autor: req.user.nombre };
+    fecha: String(b.fecha), hora: String(b.hora || ''), nombre: String(b.nombre).slice(0, 200), lugar: String(b.lugar || '').slice(0, 200),
+    nota: String(b.nota || '').slice(0, 4000), planId: String(b.planId || '').slice(0, 40),
+    participantes: Array.isArray(b.participantes) ? b.participantes.slice(0, 500).map(cleanCompParticipant) : [], autor: req.user.nombre };
   await store.addCompetition(c);
   res.json(c);
 });
@@ -605,9 +612,10 @@ app.put('/api/competitions/:id', auth, need('content'), async (req, res) => {
   if (b.fecha != null) c.fecha = String(b.fecha);
   if (b.hora != null) c.hora = String(b.hora);
   if (b.nombre != null) c.nombre = String(b.nombre).slice(0, 200);
-  if (b.lugar != null) c.lugar = String(b.lugar);
-  if (b.nota != null) c.nota = String(b.nota);
-  if (Array.isArray(b.participantes)) c.participantes = b.participantes;
+  if (b.lugar != null) c.lugar = String(b.lugar).slice(0, 200);
+  if (b.nota != null) c.nota = String(b.nota).slice(0, 4000);
+  if (b.planId != null) c.planId = String(b.planId).slice(0, 40);
+  if (Array.isArray(b.participantes)) c.participantes = b.participantes.slice(0, 500).map(cleanCompParticipant);
   await store.updateCompetition(c);
   res.json(c);
 });
