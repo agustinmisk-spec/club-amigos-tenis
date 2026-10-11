@@ -1067,9 +1067,9 @@ function showAusencias(){document.getElementById('absBanner').style.display='non
 let dragCtx=null,suppressClick=false;
 function onCourtPointerDown(e){
   if(courtAttMode)return;
-  if(!can('students'))return;
-  const chip=e.target.closest('.chip[data-sid]');if(!chip)return;
-  dragCtx={sid:chip.dataset.sid,srcHora:chip.dataset.hora,x0:e.clientX,y0:e.clientY,started:false,ghost:null,chip,lastGrp:null};
+  const chip=e.target.closest('.chip[data-sid], .chip[data-recid]');if(!chip)return;
+  if(chip.dataset.sid){if(!can('students'))return;}else{if(!can('attendance'))return;}
+  dragCtx={sid:chip.dataset.sid||'',recId:chip.dataset.recid||'',srcHora:chip.dataset.hora,x0:e.clientX,y0:e.clientY,started:false,ghost:null,chip,lastGrp:null};
   document.addEventListener('pointermove',onCourtPointerMove,{passive:false});
   document.addEventListener('pointerup',onCourtPointerUp);
 }
@@ -1096,11 +1096,12 @@ function onCourtPointerUp(e){
   if(ctx.ghost)ctx.ghost.remove();
   if(ctx.chip)ctx.chip.style.opacity='';
   if(ctx.lastGrp)ctx.lastGrp.classList.remove('dragover');
-  if(!ctx.started)return; // fue un toque/clic: abre la ficha
+  if(!ctx.started)return; // fue un toque/clic: abre la ficha/edición
   const grp=grpUnder(e.clientX,e.clientY);
   if(!grp)return;
   suppressClick=true;setTimeout(()=>{suppressClick=false;},500);
-  moveStudentSession(ctx.sid,diaSemana(courtDate.value)||DB.config.dias[0],ctx.srcHora,decodeURIComponent(grp.dataset.prof),grp.dataset.court,grp.dataset.hora);
+  if(ctx.recId)moveRecovery(ctx.recId,decodeURIComponent(grp.dataset.prof),grp.dataset.court,grp.dataset.hora);
+  else moveStudentSession(ctx.sid,diaSemana(courtDate.value)||DB.config.dias[0],ctx.srcHora,decodeURIComponent(grp.dataset.prof),grp.dataset.court,grp.dataset.hora);
 }
 function newStudentInGroup(profEnc,court,hora){if(!can('students'))return;openForm(null,{dia:diaSemana(courtDate.value)||DB.config.dias[0],hora,prof:decodeURIComponent(profEnc),court,desde:courtDate.value||isoToday()});}
 async function moveStudentSession(id,day,srcHora,prof,court,dstHora){
@@ -1197,6 +1198,60 @@ async function loadRegistros(){try{RECOVERIES=await api('GET','/api/recoveries')
 function findStudentByName(n){n=(n||'').trim().toLowerCase();return DB.students.find(s=>fullName(s).toLowerCase()===n);}
 function recName(r){if(r.studentId){const s=DB.students.find(x=>x.id===r.studentId);if(s)return fullName(s);}return r.nombre||'';}
 let recDate=null;
+let REC_FILTER={q:'',tipo:'',hora:'',court:'',prof:'',sort:'alfabetico',sortDir:'asc'};
+const REC_SORTS=[{v:'alfabetico',t:'Alumno (alfabético)'},{v:'hora',t:'Horario'},{v:'prof',t:'Profesor'},{v:'court',t:'Cancha'},{v:'tipo',t:'Tipo'}];
+function recFilteredSorted(ofDay){
+  const q=REC_FILTER.q.trim().toLowerCase();
+  let list=ofDay.filter(r=>{
+    if(REC_FILTER.tipo&&r.tipo!==REC_FILTER.tipo)return false;
+    if(REC_FILTER.hora&&(r.hora||'')!==REC_FILTER.hora)return false;
+    if(REC_FILTER.court&&(r.court||'')!==REC_FILTER.court)return false;
+    if(REC_FILTER.prof&&(r.prof||'')!==REC_FILTER.prof)return false;
+    if(q&&!recName(r).toLowerCase().includes(q))return false;
+    return true;
+  });
+  const dir=REC_FILTER.sortDir==='desc'?-1:1;
+  const key=REC_FILTER.sort||'alfabetico';
+  let cmp;
+  if(key==='hora')cmp=(a,b)=>(a.hora||'').localeCompare(b.hora||'','es',{numeric:true,sensitivity:'base'});
+  else if(key==='prof')cmp=(a,b)=>(a.prof||'').localeCompare(b.prof||'','es',{sensitivity:'base'});
+  else if(key==='court')cmp=(a,b)=>(a.court||'').localeCompare(b.court||'','es',{numeric:true,sensitivity:'base'});
+  else if(key==='tipo')cmp=(a,b)=>(a.tipo||'').localeCompare(b.tipo||'','es',{sensitivity:'base'});
+  else cmp=(a,b)=>recName(a).localeCompare(recName(b),'es',{numeric:true,sensitivity:'base'});
+  list.sort((a,b)=>cmp(a,b)*dir);
+  return list;
+}
+function recFilterBarHTML(ofDay){
+  const horasOpts=DB.config.horas.filter(t=>ofDay.some(r=>r.hora===t));
+  const courtOpts=DB.config.courts.filter(ct=>ofDay.some(r=>r.court===ct));
+  const profOpts=[...new Set(ofDay.map(r=>r.prof).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  return `<div class="toolbar" style="margin:8px 0;flex-wrap:wrap">
+    <input type="search" placeholder="Buscar alumno…" value="${esc(REC_FILTER.q)}" oninput="recSetFilter('q',this.value)" style="flex:1;min-width:140px;padding:7px 9px;border:1px solid var(--line);border-radius:8px">
+    <select onchange="recSetFilter('tipo',this.value)" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px"><option value="">Todos los tipos</option><option value="Recuperación"${REC_FILTER.tipo==='Recuperación'?' selected':''}>Recuperación</option><option value="Invitación"${REC_FILTER.tipo==='Invitación'?' selected':''}>Invitación</option></select>
+    <select onchange="recSetFilter('hora',this.value)" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px"><option value="">Todos los horarios</option>${horasOpts.map(t=>`<option value="${esc(t)}"${REC_FILTER.hora===t?' selected':''}>${esc(t)}</option>`).join('')}</select>
+    <select onchange="recSetFilter('court',this.value)" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px"><option value="">Todas las canchas</option>${courtOpts.map(ct=>`<option value="${esc(ct)}"${REC_FILTER.court===ct?' selected':''}>${esc(ct)}</option>`).join('')}</select>
+    <select onchange="recSetFilter('prof',this.value)" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px"><option value="">Todos los profes</option>${profOpts.map(p=>`<option value="${esc(p)}"${REC_FILTER.prof===p?' selected':''}>${esc(p.split(' ')[0])}</option>`).join('')}</select>
+    <select onchange="recSetFilter('sort',this.value)" title="Ordenar por" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px">${REC_SORTS.map(o=>`<option value="${o.v}"${REC_FILTER.sort===o.v?' selected':''}>${esc(o.t)}</option>`).join('')}</select>
+    <button type="button" class="btn ghost sm" onclick="recToggleSortDir()" title="Invertir orden">${REC_FILTER.sortDir==='desc'?'↓ Descendente':'↑ Ascendente'}</button>
+    <button type="button" class="btn ghost sm" onclick="recClearFilter()">Borrar filtros</button>
+  </div>`;
+}
+function recListHTML(ofDay){
+  if(!ofDay.length)return '<div class="card empty"><div class="big">🎾</div><p>No hay registros para esa fecha.</p></div>';
+  const filtered=recFilteredSorted(ofDay);
+  if(!filtered.length)return '<div class="card empty"><p>Ningún registro coincide con los filtros.</p></div>';
+  return '<div class="feed">'+filtered.map(r=>`<div class="item"><div class="top"><span class="ti">${esc(recName(r))}</span><span>${can('attendance')?`<button class="att-btn" title="Editar" onclick="editRecStart('${r.id}')">✎</button> <button class="att-btn" onclick="delRecovery('${r.id}')">🗑</button>`:''}</span></div><div class="meta2">${esc(r.tipo)}${r.hora?' · '+esc(r.hora):''}${r.court?' · '+esc(r.court):''}${r.prof?' · '+esc(r.prof):''}${r.nota?' · '+esc(r.nota):''}</div></div>`).join('')+'</div>'+(filtered.length!==ofDay.length?`<div class="small" style="margin-top:6px;color:var(--muted)">Mostrando ${filtered.length} de ${ofDay.length}.</div>`:'');
+}
+function recOfDay(){return RECOVERIES.filter(r=>r.fecha===recDate);}
+function renderRecFilterBar(){const box=document.getElementById('recFilterBar');if(box)box.innerHTML=recFilterBarHTML(recOfDay());}
+function renderRecListOnly(){const box=document.getElementById('recListResults');if(box)box.innerHTML=recListHTML(recOfDay());}
+function recSetFilter(key,val){
+  REC_FILTER[key]=val;
+  if(key==='sort')renderRecFilterBar();
+  renderRecListOnly();
+}
+function recToggleSortDir(){REC_FILTER.sortDir=REC_FILTER.sortDir==='desc'?'asc':'desc';renderRecFilterBar();renderRecListOnly();}
+function recClearFilter(){REC_FILTER={q:'',tipo:'',hora:'',court:'',prof:'',sort:'alfabetico',sortDir:'asc'};renderRecFilterBar();renderRecListOnly();}
 async function renderRecoveries(){
   const form=document.getElementById('recForm'),w=document.getElementById('recWrap'),c=DB.config;
   if(!recDate){const n=new Date();const off=(n.getDay()===0)?0:(7-n.getDay());const d=new Date(n);d.setDate(n.getDate()+off);recDate=d.toISOString().slice(0,10);}
@@ -1218,7 +1273,7 @@ async function renderRecoveries(){
       }).join('')+'</tr>').join('')+'</tbody></table></div>';
   }
   w.innerHTML=`<div style="margin:6px 0 12px"><b>${esc(diaSemana(recDate))} ${esc(fmtFecha(recDate))}</b> · ${ofDay.length} participante(s)</div>`+grid+
-    '<div class="feed" style="margin-top:12px">'+(ofDay.length?ofDay.map(r=>`<div class="item"><div class="top"><span class="ti">${esc(recName(r))}</span><span>${can('attendance')?`<button class="att-btn" title="Editar" onclick="editRecStart('${r.id}')">✎</button> <button class="att-btn" onclick="delRecovery('${r.id}')">🗑</button>`:''}</span></div><div class="meta2">${esc(r.tipo)}${r.hora?' · '+esc(r.hora):''}${r.court?' · '+esc(r.court):''}${r.prof?' · '+esc(r.prof):''}${r.nota?' · '+esc(r.nota):''}</div></div>`).join(''):'<div class="card empty"><div class="big">🎾</div><p>No hay registros para esa fecha.</p></div>')+'</div>';renderRecDates();
+    `<div id="recFilterBar">${ofDay.length?recFilterBarHTML(ofDay):''}</div><div id="recListResults">${recListHTML(ofDay)}</div>`;renderRecDates();
 }
 let recDates=[];
 function renderRecDates(){const box=document.getElementById('recDatesBox');if(!box)return;if(!recDates.length){box.innerHTML='<span class="small">Sin fechas extra: se usará la fecha de arriba.</span>';return;}box.innerHTML=recDates.slice().sort().map(d=>`<span class="pill" style="background:#eef1fb;color:#33459c;margin:2px 5px 2px 0;display:inline-block">${esc(fmtFecha(d))} <span style="cursor:pointer;color:#b3261e" onclick="recRmDate('${d}')">✕</span></span>`).join('')+`<div class="small" style="margin-top:3px">Se crearán <b>${recDates.length}</b> registro(s) por participante.</div>`;}
@@ -4130,7 +4185,7 @@ function renderCourts(){
   courtLegend.innerHTML=`<b>${esc(day)} · ${esc(fmtFecha(dateISO))}</b>`+c.categorias.map(ct=>`<span class="pill c-${esc(ct)}">${esc(ct)}</span>`).join('')+`<span class="pill" style="background:#fdf3d6;color:#9a6b14">ENTRENAM.</span><span class="pill" style="border:1.5px dashed #c98a00;color:#9a6b14;background:#fff8e6">INV. FIJA</span><span class="pill" style="background:#eef1fb;color:#33459c">RECUP./INVIT.</span><span style="color:var(--clay)">▮ supera cupo (Mini ${c.capMini} · resto ${c.capGeneral})</span><span style="margin-left:8px;white-space:nowrap"><span class="attdot p"></span> asistió · <span class="attdot a"></span> faltó</span>${courtAttMode?'<span style="margin-left:8px;background:#eafaf0;color:#178048;border:1px solid #9fe1cb;border-radius:6px;padding:2px 8px;font-weight:700">👆 Tocá un alumno para marcar (asistió / faltó / sin marca)</span>':''}`;
   const occ=[];
   DB.students.forEach(s=>{if(s.estado==='Baja')return;sessionsOf(s,dateISO).forEach(x=>{if(x.dia===day)occ.push({kind:'reg',s,prof:x.prof,court:x.court||'',hora:x.hora,inv:x.inv,prueba:x.prueba});});});
-  (RECOVERIES||[]).filter(r=>r.fecha===dateISO).forEach(r=>{occ.push({kind:'rec',nombre:recName(r),prof:r.prof||'',court:r.court||'',hora:r.hora||'',tipo:r.tipo,studentId:r.studentId||''});});
+  (RECOVERIES||[]).filter(r=>r.fecha===dateISO).forEach(r=>{occ.push({kind:'rec',id:r.id,nombre:recName(r),prof:r.prof||'',court:r.court||'',hora:r.hora||'',tipo:r.tipo,studentId:r.studentId||''});});
   const usados=new Set(occ.map(x=>x.hora).filter(Boolean));
   let horas=c.horas.filter(t=>usados.has(t));[...usados].sort().forEach(t=>{if(!horas.includes(t))horas.push(t);});
   _courtHoras=horas.slice();
@@ -4178,7 +4233,7 @@ function buildCourtCell(occ,t,court,day,c){
     const attMsg=attPend===regs.length?'Falta tomar asistencia':`Falta asistencia de ${attPend}`;
     const nivs=[...new Set(regs.map(it=>it.s.nivel).filter(Boolean))].join(', ');
     const gn=groupNoteForTxt(day,t,prof);
-    const dropAttrs=can('students')?` data-prof="${encodeURIComponent(prof)}" data-court="${court}" data-hora="${t}"`:'';
+    const dropAttrs=(can('students')||can('attendance'))?` data-prof="${encodeURIComponent(prof)}" data-court="${court}" data-hora="${t}"`:'';
     return `<div class="grp ${over?'over':''} ${needAtt?'noatt':''}"${dropAttrs}>
           <div class="grphd"><span>${esc(prof.split(' ')[0])}${nivs?' · '+esc(nivs.replace(/ - .*?(,|$)/g,'$1')):''}</span><span class="gct">${arr.length}/${cap}${can('content')?` <span class="addg" style="background:#5b6fc9" title="Observación del grupo" onclick="editGroupNote('${day}','${t}','${encodeURIComponent(prof)}')">📝</span>`:''}${can('students')?` <span class="addg" title="Agregar alumno a este grupo" onclick="newStudentInGroup('${encodeURIComponent(prof)}','${court}','${t}')">＋</span>`:''}</span></div>
           ${needAtt?`<div class="attwarn">⚠ ${attMsg}</div>`:''}
@@ -4199,7 +4254,26 @@ function courtSplitHTML(top,bottom,horas,occ,day,c){
   });
   return out;
 }
-function recChip(it){const rs=it.studentId?DB.students.find(x=>x.id===it.studentId):null;const clk=rs?` onclick="openDetail('${rs.id}')" style="cursor:pointer" title="Ver ficha completa"`:'';return `<span class="chip rec"${clk}><span class="nm">${esc(it.nombre)} <span class="invtag" style="background:#5b6fc9">${it.tipo==='Invitación'?'INVIT.':'RECUP.'}</span></span><span class="meta">${esc(it.tipo)}${it.prof?' · '+esc(it.prof.split(' ')[0]):''}</span>${rs?chipInfo(rs):''}</span>`;}
+function recChip(it){
+  const rs=it.studentId?DB.students.find(x=>x.id===it.studentId):null;
+  const canEdit=can('attendance');
+  const dragAttrs=canEdit?` data-recid="${it.id}" data-hora="${it.hora}"`:'';
+  const clk=canEdit?` onclick="recChipClick('${it.id}')" style="cursor:pointer"`:(rs?` onclick="openDetail('${rs.id}')" style="cursor:pointer"`:'');
+  const ttl=canEdit?'Clic para editar esta recuperación/invitación · Arrastrá (también con el dedo) para mover':(rs?'Ver ficha completa':'');
+  return `<span class="chip rec"${dragAttrs}${clk}${ttl?` title="${esc(ttl)}"`:''}><span class="nm">${esc(it.nombre)} <span class="invtag" style="background:#5b6fc9">${it.tipo==='Invitación'?'INVIT.':'RECUP.'}</span></span><span class="meta">${esc(it.tipo)}${it.prof?' · '+esc(it.prof.split(' ')[0]):''}</span>${rs?chipInfo(rs):''}</span>`;
+}
+function recChipClick(id){if(suppressClick)return;showTab('recuperaciones');editRecStart(id);}
+async function moveRecovery(id,prof,court,hora){
+  if(!can('attendance'))return;
+  const r=RECOVERIES.find(x=>x.id===id);if(!r)return;
+  if((r.prof||'')===prof&&(r.court||'')===court&&(r.hora||'')===hora)return;
+  if(!confirm(`¿Mover a ${recName(r)} a ${prof?prof.split(' ')[0]:'(sin profe)'} (${court||'sin cancha'} · ${hora})?`))return;
+  try{
+    const saved=await api('PUT','/api/recoveries/'+id,{prof,court,hora});
+    const i=RECOVERIES.findIndex(x=>x.id===id);if(i>=0)RECOVERIES[i]=saved;
+    renderCourts();
+  }catch(e){alert('No se pudo mover: '+e.message);}
+}
 
 /* Por profesor */
 
