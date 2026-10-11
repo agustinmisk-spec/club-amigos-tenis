@@ -1242,6 +1242,28 @@ function recListHTML(ofDay){
   if(!filtered.length)return '<div class="card empty"><p>Ningún registro coincide con los filtros.</p></div>';
   return '<div class="feed">'+filtered.map(r=>`<div class="item"><div class="top"><span class="ti">${esc(recName(r))}</span><span>${can('attendance')?`<button class="att-btn" title="Editar" onclick="editRecStart('${r.id}')">✎</button> <button class="att-btn" onclick="delRecovery('${r.id}')">🗑</button>`:''}</span></div><div class="meta2">${esc(r.tipo)}${r.hora?' · '+esc(r.hora):''}${r.court?' · '+esc(r.court):''}${r.prof?' · '+esc(r.prof):''}${r.nota?' · '+esc(r.nota):''}</div></div>`).join('')+'</div>'+(filtered.length!==ofDay.length?`<div class="small" style="margin-top:6px;color:var(--muted)">Mostrando ${filtered.length} de ${ofDay.length}.</div>`:'');
 }
+function recMiniGridHTML(ofDay){
+  if(!ofDay.length)return '';
+  const horas=DB.config.horas.filter(t=>ofDay.some(r=>r.hora===t));if(ofDay.some(r=>!r.hora))horas.push('');
+  const cols=DB.config.courts.filter(ct=>ofDay.some(r=>r.court===ct));if(ofDay.some(r=>!r.court))cols.push('');
+  const cell=(t,ct)=>{
+    const here=ofDay.filter(r=>(r.hora||'')===t&&(r.court||'')===ct);
+    if(!here.length)return '<span class="small">—</span>';
+    const groups={};
+    here.forEach(r=>{const pr=r.prof||'';(groups[pr]=groups[pr]||[]).push(r);});
+    const profKeys=Object.keys(groups).sort((a,b)=>a.localeCompare(b,'es'));
+    return profKeys.map(prof=>{
+      const arr=groups[prof];
+      const dropAttrs=can('attendance')?` data-prof="${encodeURIComponent(prof)}" data-court="${ct}" data-hora="${t}"`:'';
+      return `<div class="grp"${dropAttrs}>
+        <div class="grphd"><span>${esc(prof?prof.split(' ')[0]:'Sin profesor')}</span></div>
+        <div class="grpbody">${arr.map(r=>recChip({id:r.id,nombre:recName(r),prof:r.prof||'',court:r.court||'',hora:r.hora||'',tipo:r.tipo,studentId:r.studentId||''})).join('')}</div>
+      </div>`;
+    }).join('');
+  };
+  return '<div class="courtgrid"><table><thead><tr><th class="timecol">Hora</th>'+cols.map(ct=>`<th>${ct===''?'Sin cancha':esc(ct)}</th>`).join('')+'</tr></thead><tbody>'+
+    horas.map(t=>'<tr><td class="timecol">'+(t===''?'Sin hora':esc(t))+'</td>'+cols.map(ct=>`<td class="slot">${cell(t,ct)}</td>`).join('')+'</tr>').join('')+'</tbody></table></div>';
+}
 function recOfDay(){return RECOVERIES.filter(r=>r.fecha===recDate);}
 function renderRecFilterBar(){const box=document.getElementById('recFilterBar');if(box)box.innerHTML=recFilterBarHTML(recOfDay());}
 function renderRecListOnly(){const box=document.getElementById('recListResults');if(box)box.innerHTML=recListHTML(recOfDay());}
@@ -1262,16 +1284,7 @@ async function renderRecoveries(){
   form.innerHTML=`<div class="toolbar"><label class="small" style="font-weight:600">Fecha:</label><input type="date" id="recFecha" value="${recDate}" onchange="recDate=this.value;editRecId=null;renderRecoveries()"><div class="spacer"></div><span class="small">Registrá quién vino ese día.</span></div>`+
     (can('attendance')?`<div class="uploadcard">${dl}<div class="sectitle" style="margin-top:0">${er?'Editar participante':'Agregar participante'}</div><div class="grid4"><div class="field"><label>Alumno o invitado</label><input id="rec_al" list="studentsDL" value="${er?esc(er.nombre||''):''}" placeholder="Apellido, Nombre"></div><div class="field"><label>Tipo</label><select id="rec_tipo"><option ${er&&er.tipo==='Recuperación'?'selected':''}>Recuperación</option><option ${er&&er.tipo==='Invitación'?'selected':''}>Invitación</option></select></div><div class="field"><label>Horario</label><select id="rec_hora"><option value="">—</option>${sel(c.horas,er?er.hora:'')}</select></div><div class="field"><label>Cancha</label><select id="rec_court"><option value="">—</option>${sel(c.courts,er?er.court:'')}</select></div></div><div class="grid2"><div class="field"><label>Profesor</label><select id="rec_prof"><option value="">—</option>${sel(c.profs,er?er.prof:'')}</select></div><div class="field"><label>Nota</label><input id="rec_nota" value="${er?esc(er.nota||''):''}"></div></div>${!er?'<div class="field" style="margin-top:6px"><label>Varias fechas (invitar/recuperar en varias clases de una vez)</label><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input type="date" id="rec_extra"><button type="button" class="btn sm sec" onclick="recAddDate()">＋ fecha</button><span class="small">o semanal desde la fecha de arriba:</span><input type="number" id="rec_weeks" min="1" max="30" value="5" style="width:62px;padding:6px;border:1px solid var(--line);border-radius:6px"><button type="button" class="btn sm sec" onclick="recGenWeekly()">Generar</button><button type="button" class="btn sm ghost" onclick="recDates=[];renderRecDates()">Limpiar</button></div><div id="recDatesBox" style="margin-top:6px"></div></div>':''}<button class="btn" onclick="addRecovery()">${er?'Guardar cambios':'Agregar'}</button>${er?` <button class="btn ghost" onclick="cancelEditRec()">Cancelar</button>`:` <button class="btn sec" onclick="addRecoveryMulti()">Agregar varios…</button>`}</div>`:'');
   const ofDay=RECOVERIES.filter(r=>r.fecha===recDate);
-  let grid='';
-  if(ofDay.length){
-    const horas=c.horas.filter(t=>ofDay.some(r=>r.hora===t));if(ofDay.some(r=>!r.hora))horas.push('');
-    const cols=c.courts.filter(ct=>ofDay.some(r=>r.court===ct));if(ofDay.some(r=>!r.court))cols.push('');
-    grid='<div class="courtgrid"><table><thead><tr><th class="timecol">Hora</th>'+cols.map(ct=>`<th>${ct===''?'Sin cancha':esc(ct)}</th>`).join('')+'</tr></thead><tbody>'+
-      horas.map(t=>'<tr><td class="timecol">'+(t===''?'Sin hora':esc(t))+'</td>'+cols.map(ct=>{
-        const here=ofDay.filter(r=>(r.hora||'')===t&&(r.court||'')===ct);
-        return '<td class="slot">'+(here.map(r=>`<span class="chip ${r.tipo==='Invitación'?'inv':''}"><span class="nm">${esc(recName(r))}</span><span class="meta">${esc(r.tipo)}${r.prof?' · '+esc(r.prof.split(' ')[0]):''}</span></span>`).join('')||'<span class="small">—</span>')+'</td>';
-      }).join('')+'</tr>').join('')+'</tbody></table></div>';
-  }
+  const grid=recMiniGridHTML(ofDay);
   w.innerHTML=`<div style="margin:6px 0 12px"><b>${esc(diaSemana(recDate))} ${esc(fmtFecha(recDate))}</b> · ${ofDay.length} participante(s)</div>`+grid+
     `<div id="recFilterBar">${ofDay.length?recFilterBarHTML(ofDay):''}</div><div id="recListResults">${recListHTML(ofDay)}</div>`;renderRecDates();
 }
@@ -4185,7 +4198,7 @@ function renderCourts(){
   courtLegend.innerHTML=`<b>${esc(day)} · ${esc(fmtFecha(dateISO))}</b>`+c.categorias.map(ct=>`<span class="pill c-${esc(ct)}">${esc(ct)}</span>`).join('')+`<span class="pill" style="background:#fdf3d6;color:#9a6b14">ENTRENAM.</span><span class="pill" style="border:1.5px dashed #c98a00;color:#9a6b14;background:#fff8e6">INV. FIJA</span><span class="pill" style="background:#eef1fb;color:#33459c">RECUP./INVIT.</span><span style="color:var(--clay)">▮ supera cupo (Mini ${c.capMini} · resto ${c.capGeneral})</span><span style="margin-left:8px;white-space:nowrap"><span class="attdot p"></span> asistió · <span class="attdot a"></span> faltó</span>${courtAttMode?'<span style="margin-left:8px;background:#eafaf0;color:#178048;border:1px solid #9fe1cb;border-radius:6px;padding:2px 8px;font-weight:700">👆 Tocá un alumno para marcar (asistió / faltó / sin marca)</span>':''}`;
   const occ=[];
   DB.students.forEach(s=>{if(s.estado==='Baja')return;sessionsOf(s,dateISO).forEach(x=>{if(x.dia===day)occ.push({kind:'reg',s,prof:x.prof,court:x.court||'',hora:x.hora,inv:x.inv,prueba:x.prueba});});});
-  (RECOVERIES||[]).filter(r=>r.fecha===dateISO).forEach(r=>{occ.push({kind:'rec',id:r.id,nombre:recName(r),prof:r.prof||'',court:r.court||'',hora:r.hora||'',tipo:r.tipo,studentId:r.studentId||''});});
+  (RECOVERIES||[]).filter(r=>r.fecha===dateISO).forEach(r=>{occ.push({kind:'rec',nombre:recName(r),prof:r.prof||'',court:r.court||'',hora:r.hora||'',tipo:r.tipo,studentId:r.studentId||''});});
   const usados=new Set(occ.map(x=>x.hora).filter(Boolean));
   let horas=c.horas.filter(t=>usados.has(t));[...usados].sort().forEach(t=>{if(!horas.includes(t))horas.push(t);});
   _courtHoras=horas.slice();
@@ -4233,12 +4246,12 @@ function buildCourtCell(occ,t,court,day,c){
     const attMsg=attPend===regs.length?'Falta tomar asistencia':`Falta asistencia de ${attPend}`;
     const nivs=[...new Set(regs.map(it=>it.s.nivel).filter(Boolean))].join(', ');
     const gn=groupNoteForTxt(day,t,prof);
-    const dropAttrs=(can('students')||can('attendance'))?` data-prof="${encodeURIComponent(prof)}" data-court="${court}" data-hora="${t}"`:'';
+    const dropAttrs=can('students')?` data-prof="${encodeURIComponent(prof)}" data-court="${court}" data-hora="${t}"`:'';
     return `<div class="grp ${over?'over':''} ${needAtt?'noatt':''}"${dropAttrs}>
           <div class="grphd"><span>${esc(prof.split(' ')[0])}${nivs?' · '+esc(nivs.replace(/ - .*?(,|$)/g,'$1')):''}</span><span class="gct">${arr.length}/${cap}${can('content')?` <span class="addg" style="background:#5b6fc9" title="Observación del grupo" onclick="editGroupNote('${day}','${t}','${encodeURIComponent(prof)}')">📝</span>`:''}${can('students')?` <span class="addg" title="Agregar alumno a este grupo" onclick="newStudentInGroup('${encodeURIComponent(prof)}','${court}','${t}')">＋</span>`:''}</span></div>
           ${needAtt?`<div class="attwarn">⚠ ${attMsg}</div>`:''}
           ${gn?`<div class="gnote">📝 ${esc(gn)}</div>`:''}
-          <div class="grpbody">${arr.map(it=>it.kind==='reg'?chipHTML(it.s,it.inv,{hora:t},it.prueba):recChip(it)).join('')}</div>
+          <div class="grpbody">${arr.map(it=>it.kind==='reg'?chipHTML(it.s,it.inv,{hora:t},it.prueba):recChipMap(it)).join('')}</div>
         </div>`;
   }).join('');
 }
@@ -4254,6 +4267,7 @@ function courtSplitHTML(top,bottom,horas,occ,day,c){
   });
   return out;
 }
+function recChipMap(it){const rs=it.studentId?DB.students.find(x=>x.id===it.studentId):null;const clk=rs?` onclick="openDetail('${rs.id}')" style="cursor:pointer" title="Ver ficha completa"`:'';return `<span class="chip rec"${clk}><span class="nm">${esc(it.nombre)} <span class="invtag" style="background:#5b6fc9">${it.tipo==='Invitación'?'INVIT.':'RECUP.'}</span></span><span class="meta">${esc(it.tipo)}${it.prof?' · '+esc(it.prof.split(' ')[0]):''}</span>${rs?chipInfo(rs):''}</span>`;}
 function recChip(it){
   const rs=it.studentId?DB.students.find(x=>x.id===it.studentId):null;
   const canEdit=can('attendance');
@@ -4973,7 +4987,7 @@ function tecMoveSub(itId,i,d){const f=_tecFindItem(itId);if(!f)return;const a=f.
 function tecNewPlantilla(){const nombre=(prompt('Nombre de la nueva evaluación:','Nueva evaluación')||'').trim();if(!nombre)return;const pl={id:tecUID('pl'),nombre,programas:[],niveles:[],rubros:[]};DB.config.evalTecPlantillas=tecPlantillas().slice();DB.config.evalTecPlantillas.push(pl);tecEditPl=pl.id;tecDesignerOpen=true;tecSaveConfig();refreshTecDesigner();}
 function tecDupPlantilla(){const pl=_tecPl();if(!pl)return;const copy=JSON.parse(JSON.stringify(pl));copy.id=tecUID('pl');copy.nombre=pl.nombre+' (copia)';(copy.rubros||[]).forEach(r=>{r.id=tecUID('r');(r.items||[]).forEach(it=>{it.id=tecUID('i');(it.sub||[]).forEach(s=>s.id=tecUID('s'));});});DB.config.evalTecPlantillas=tecPlantillas().slice();DB.config.evalTecPlantillas.push(copy);tecEditPl=copy.id;tecSaveConfig();refreshTecDesigner();}
 function tecDelPlantilla(){const pl=_tecPl();if(!pl)return;if(!confirm('¿Eliminar la plantilla "'+pl.nombre+'"? Las evaluaciones ya cargadas se conservan.'))return;DB.config.evalTecPlantillas=tecPlantillas().filter(p=>p.id!==pl.id);tecEditPl=null;tecSaveConfig();refreshTecDesigner();}
-function initUI(){applyDarkMode();if(!attDate.value)attDate.value=new Date().toISOString().slice(0,10);loadConfigForm();refreshSelects();const cg=document.getElementById('courtGrid');if(cg)cg.addEventListener('pointerdown',onCourtPointerDown);if(TOKEN)bootstrap();else applyPermissions();}
+function initUI(){applyDarkMode();if(!attDate.value)attDate.value=new Date().toISOString().slice(0,10);loadConfigForm();refreshSelects();const cg=document.getElementById('courtGrid');if(cg)cg.addEventListener('pointerdown',onCourtPointerDown);const rw=document.getElementById('recWrap');if(rw)rw.addEventListener('pointerdown',onCourtPointerDown);if(TOKEN)bootstrap();else applyPermissions();}
 initUI();
 </script>
 <button id="taskFab" onclick="taskToggle()" title="Tareas">✓<span id="taskCount" class="taskbadge"></span></button>
