@@ -4198,7 +4198,7 @@ function renderCourts(){
   courtLegend.innerHTML=`<b>${esc(day)} · ${esc(fmtFecha(dateISO))}</b>`+c.categorias.map(ct=>`<span class="pill c-${esc(ct)}">${esc(ct)}</span>`).join('')+`<span class="pill" style="background:#fdf3d6;color:#9a6b14">ENTRENAM.</span><span class="pill" style="border:1.5px dashed #c98a00;color:#9a6b14;background:#fff8e6">INV. FIJA</span><span class="pill" style="background:#eef1fb;color:#33459c">RECUP./INVIT.</span><span style="color:var(--clay)">▮ supera cupo (Mini ${c.capMini} · resto ${c.capGeneral})</span><span style="margin-left:8px;white-space:nowrap"><span class="attdot p"></span> asistió · <span class="attdot a"></span> faltó</span>${courtAttMode?'<span style="margin-left:8px;background:#eafaf0;color:#178048;border:1px solid #9fe1cb;border-radius:6px;padding:2px 8px;font-weight:700">👆 Tocá un alumno para marcar (asistió / faltó / sin marca)</span>':''}`;
   const occ=[];
   DB.students.forEach(s=>{if(s.estado==='Baja')return;sessionsOf(s,dateISO).forEach(x=>{if(x.dia===day)occ.push({kind:'reg',s,prof:x.prof,court:x.court||'',hora:x.hora,inv:x.inv,prueba:x.prueba});});});
-  (RECOVERIES||[]).filter(r=>r.fecha===dateISO).forEach(r=>{occ.push({kind:'rec',id:r.id,nombre:recName(r),prof:r.prof||'',court:r.court||'',hora:r.hora||'',tipo:r.tipo,studentId:r.studentId||''});});
+  (RECOVERIES||[]).filter(r=>r.fecha===dateISO).forEach(r=>{occ.push({kind:'rec',nombre:recName(r),prof:r.prof||'',court:r.court||'',hora:r.hora||'',tipo:r.tipo,studentId:r.studentId||''});});
   const usados=new Set(occ.map(x=>x.hora).filter(Boolean));
   let horas=c.horas.filter(t=>usados.has(t));[...usados].sort().forEach(t=>{if(!horas.includes(t))horas.push(t);});
   _courtHoras=horas.slice();
@@ -4246,12 +4246,12 @@ function buildCourtCell(occ,t,court,day,c){
     const attMsg=attPend===regs.length?'Falta tomar asistencia':`Falta asistencia de ${attPend}`;
     const nivs=[...new Set(regs.map(it=>it.s.nivel).filter(Boolean))].join(', ');
     const gn=groupNoteForTxt(day,t,prof);
-    const dropAttrs=(can('students')||can('attendance'))?` data-prof="${encodeURIComponent(prof)}" data-court="${court}" data-hora="${t}"`:'';
+    const dropAttrs=can('students')?` data-prof="${encodeURIComponent(prof)}" data-court="${court}" data-hora="${t}"`:'';
     return `<div class="grp ${over?'over':''} ${needAtt?'noatt':''}"${dropAttrs}>
           <div class="grphd"><span>${esc(prof.split(' ')[0])}${nivs?' · '+esc(nivs.replace(/ - .*?(,|$)/g,'$1')):''}</span><span class="gct">${arr.length}/${cap}${can('content')?` <span class="addg" style="background:#5b6fc9" title="Observación del grupo" onclick="editGroupNote('${day}','${t}','${encodeURIComponent(prof)}')">📝</span>`:''}${can('students')?` <span class="addg" title="Agregar alumno a este grupo" onclick="newStudentInGroup('${encodeURIComponent(prof)}','${court}','${t}')">＋</span>`:''}</span></div>
           ${needAtt?`<div class="attwarn">⚠ ${attMsg}</div>`:''}
           ${gn?`<div class="gnote">📝 ${esc(gn)}</div>`:''}
-          <div class="grpbody">${arr.map(it=>it.kind==='reg'?chipHTML(it.s,it.inv,{hora:t},it.prueba):recChip(it)).join('')}</div>
+          <div class="grpbody">${arr.map(it=>it.kind==='reg'?chipHTML(it.s,it.inv,{hora:t},it.prueba):recChipMap(it)).join('')}</div>
         </div>`;
   }).join('');
 }
@@ -4267,6 +4267,7 @@ function courtSplitHTML(top,bottom,horas,occ,day,c){
   });
   return out;
 }
+function recChipMap(it){const rs=it.studentId?DB.students.find(x=>x.id===it.studentId):null;const clk=rs?` onclick="openDetail('${rs.id}')" style="cursor:pointer" title="Ver ficha completa"`:'';return `<span class="chip rec"${clk}><span class="nm">${esc(it.nombre)} <span class="invtag" style="background:#5b6fc9">${it.tipo==='Invitación'?'INVIT.':'RECUP.'}</span></span><span class="meta">${esc(it.tipo)}${it.prof?' · '+esc(it.prof.split(' ')[0]):''}</span>${rs?chipInfo(rs):''}</span>`;}
 function recChip(it){
   const rs=it.studentId?DB.students.find(x=>x.id===it.studentId):null;
   const canEdit=can('attendance');
