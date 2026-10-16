@@ -194,6 +194,7 @@
   .tecstat{display:inline-block;font-size:11px;font-weight:700;border-radius:20px;padding:1px 9px}
   .tecstat.ok{background:#e7f6ee;color:#0f7a43}
   .tecstat.no{background:#f1f3f5;color:#7a828c}
+  .tecstat.partial{background:#fdf0d9;color:#9a6b14}
   .tecchks{display:flex;flex-wrap:wrap;gap:5px 16px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#fafbfc}
   .tecchks label{display:flex;align-items:center;gap:5px;font-size:12.5px;font-weight:500;cursor:pointer}
   @media print{.overlay.tecprint{position:static!important;background:#fff!important}.overlay.tecprint .modal{box-shadow:none!important;max-width:none!important;width:100%!important;max-height:none!important}.overlay.tecprint .tecnoprint{display:none!important}.tecnum{border:none}}
@@ -4849,6 +4850,8 @@ function tecMaxTotal(pl){let m=0;(pl.rubros||[]).forEach(r=>(r.items||[]).forEac
 function tecRubroMax(r){let m=0;(r.items||[]).forEach(it=>{if(it.tipo==='suma')(it.sub||[]).forEach(s=>m+=(+s.max||0));else m+=(+it.max||0);});return m;}
 function tecPlantillaById(id){return tecPlantillas().find(p=>p.id===id)||null;}
 function tecEvalFor(sid,periodo,plId){return TECEVALS.find(e=>e.studentId===sid&&e.periodo===periodo&&e.plantillaId===plId)||null;}
+function tecFieldIds(pl){const ids=[];(pl.rubros||[]).forEach(r=>(r.items||[]).forEach(it=>{if(it.tipo==='suma')(it.sub||[]).forEach(sb=>ids.push(sb.id));else ids.push(it.id);}));return ids;}
+function tecCompletionPct(pl,vals){const ids=tecFieldIds(pl);if(!ids.length)return 100;const filled=ids.filter(id=>vals[id]!=null).length;return Math.round(filled/ids.length*100);}
 function tecEvalsOfStudent(sid){return TECEVALS.filter(e=>e.studentId===sid).slice().sort((a,b)=>String(b.periodo||'').localeCompare(String(a.periodo||'')));}
 /* lista de puntuación */
 function tecFillPlantillaSel(){const sel=document.getElementById('tecPlantillaSel');if(!sel)return;const pls=tecPlantillas();const cur=sel.value;sel.innerHTML=pls.map(p=>`<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join('');if(cur&&pls.some(p=>p.id===cur))sel.value=cur;}
@@ -4870,7 +4873,7 @@ function tecRenderList(){
   if(cnt)cnt.textContent=list.length+' alumno(s) · '+done+' evaluados · máx '+mx+' pts';
   if(!list.length){wrap.innerHTML='<div class="card empty"><p>No hay alumnos que coincidan con los filtros.</p></div>';return;}
   const dis=can('obs')?'':'disabled';
-  wrap.innerHTML=`<div class="card" style="padding:6px 8px;overflow:auto"><table class="evaltbl"><thead><tr><th style="min-width:190px">Alumno</th><th style="width:96px">Estado</th><th style="width:90px">Total</th><th style="width:130px"></th></tr></thead><tbody>${list.map(s=>{const ev=tecEvalFor(s.id,periodo,plId);return `<tr><td><b class="lnk" onclick="openDetail('${esc(s.id)}')">${esc(fullName(s))}</b><br><span class="small">${esc(s.programa||'')}${s.nivel?' · '+esc(s.nivel):''}</span></td><td><span class="tecstat ${ev?'ok':'no'}">${ev?'✓ Evaluado':'Sin evaluar'}</span></td><td>${ev?('<b>'+ev.total+'</b> / '+mx):'—'}</td><td><button class="btn sm ${ev?'ghost':''}" ${dis} onclick="openTecEval('${esc(s.id)}','${esc(plId)}')">${ev?'Ver / editar':'Evaluar'}</button></td></tr>`;}).join('')}</tbody></table></div>`;
+  wrap.innerHTML=`<div class="card" style="padding:6px 8px;overflow:auto"><table class="evaltbl"><thead><tr><th style="min-width:190px">Alumno</th><th style="width:110px">Estado</th><th style="width:90px">Total</th><th style="width:130px"></th></tr></thead><tbody>${list.map(s=>{const ev=tecEvalFor(s.id,periodo,plId);const pct=ev?tecCompletionPct(pl,ev.valores||{}):0;const estadoHtml=ev?`<span class="tecstat ${pct>=100?'ok':'partial'}">${pct}% completado</span>`:'<span class="tecstat no">Sin evaluar</span>';return `<tr><td><b class="lnk" onclick="openDetail('${esc(s.id)}')">${esc(fullName(s))}</b><br><span class="small">${esc(s.programa||'')}${s.nivel?' · '+esc(s.nivel):''}</span></td><td>${estadoHtml}</td><td>${ev?('<b>'+ev.total+'</b> / '+mx):'—'}</td><td><button class="btn sm ${ev?'ghost':''}" ${dis} onclick="openTecEval('${esc(s.id)}','${esc(plId)}')">${ev?'Ver / editar':'Evaluar'}</button></td></tr>`;}).join('')}</tbody></table></div>`;
 }
 /* overlay de carga */
 function tecRubroFormHTML(r,vals){
