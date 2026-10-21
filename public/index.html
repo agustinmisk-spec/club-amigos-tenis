@@ -889,6 +889,17 @@
   </div>
 </div>
 
+<div class="overlay" id="pizPickOverlay">
+  <div class="modal" style="max-width:640px">
+    <h2>Agregar dibujo de la Pizarra</h2>
+    <div class="body">
+      <input type="search" id="pizPickSearch" placeholder="Buscar hoja…" oninput="pizPickRender()" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px">
+      <div id="pizPickList" style="max-height:52vh;overflow:auto"></div>
+    </div>
+    <div class="foot"><button class="btn ghost" onclick="pizPickClose()">Cancelar</button></div>
+  </div>
+</div>
+
 <div class="overlay" id="libOverlay">
   <div class="modal" style="max-width:640px">
     <h2>Biblioteca de ejercicios</h2>
@@ -1914,6 +1925,7 @@ function lpBlockCardHTML(block){
   const editable=can('planner');
   const graphs=(block.graficos||[]).map(g=>lpGraphicCardHTML(block,g)).join('');
   const cuadros=(block.cuadros||[]).map(c=>lpCuadroCardHTML(block,c)).join('');
+  const pizarras=(block.pizarras||[]).map(p=>lpPizarraCardHTML(block,p)).join('');
   const titleHtml=block.tipo==='custom'
     ?(editable?`<input value="${esc(block.titulo)}" oninput="lpSetBlockField('${block.id}','titulo',this.value)" style="font-weight:700;border:none;border-bottom:1px dashed var(--line);padding:2px 0;flex:1;max-width:260px;background:transparent">`:`<b>${esc(block.titulo)}</b>`)
     :`<b>${esc(block.titulo)}</b>`;
@@ -1932,10 +1944,12 @@ function lpBlockCardHTML(block){
     ${graphs}
     ${(block.graficos||[]).length>0?`<div class="field" style="margin-top:8px"><label>Texto debajo de los gráficos (opcional, ej: cronograma de partidos)</label>${editable?rteBox('','',block.notaGraficos,40,'Aparece a la derecha, debajo de los gráficos, en el PDF…',`lpSetBlockField('${block.id}','notaGraficos',rteGet(this))`):(block.notaGraficos?`<div class="rte" style="border:1px solid var(--line);border-radius:8px;background:var(--card)">${fmtRaw(block.notaGraficos)}</div>`:'')}</div>`:''}
     ${cuadros}
+    ${pizarras}
     ${editable?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
       <button type="button" class="btn sm ghost" onclick="lpAddGraphic('${block.id}')">+ Agregar gráfico</button>
       <button type="button" class="btn sm ghost" onclick="lpAddCuadro('${block.id}')">🏆 Cuadro de eliminación</button>
       <button type="button" class="btn sm ghost" onclick="lpAddCuadroRR('${block.id}')">🔁 Cuadro round robin</button>
+      <button type="button" class="btn sm ghost" onclick="pizPickOpen('${block.id}')">📝 Agregar dibujo de pizarra</button>
       <button type="button" class="btn sm ghost" onclick="openLibPicker('${block.id}')">📚 Desde biblioteca</button>
       <button type="button" class="btn sm ghost" onclick="libSaveBlock('${block.id}')">💾 Guardar en biblioteca</button>
     </div>`:''}
@@ -1952,6 +1966,62 @@ function lpRemoveGraphic(blockId,graphId){
   b.graficos=(b.graficos||[]).filter(x=>x.id!==graphId);
   if(LP_SELECTED&&LP_SELECTED.graphId===graphId)LP_SELECTED=null;
   lpRenderBlock(blockId);
+}
+/* ---- Dibujos de la Pizarra embebidos en un bloque (solo lectura, copiados al agregarlos) ---- */
+let PIZ_PICK_BLOCK=null;
+async function pizPickOpen(blockId){
+  if(!can('planner'))return;
+  PIZ_PICK_BLOCK=blockId;
+  if(!FREEDOCS.length){try{FREEDOCS=await api('GET','/api/freedocs');}catch(e){}}
+  document.getElementById('pizPickSearch').value='';
+  pizPickRender();
+  document.getElementById('pizPickOverlay').classList.add('show');
+}
+function pizPickClose(){document.getElementById('pizPickOverlay').classList.remove('show');PIZ_PICK_BLOCK=null;}
+function pizPickRender(){
+  const q=(document.getElementById('pizPickSearch').value||'').toLowerCase().trim();
+  const box=document.getElementById('pizPickList');if(!box)return;
+  if(!FREEDOCS.length){box.innerHTML='<p class="small">Todavía no hay hojas creadas en la Pizarra.</p>';return;}
+  const rows=[];
+  FREEDOCS.forEach(d=>{
+    if(q&&!(d.nombre||'').toLowerCase().includes(q))return;
+    fdDocPages(d).forEach((p,idx,arr)=>rows.push({d,idx,n:arr.length,elCount:p.elementos.length}));
+  });
+  if(!rows.length){box.innerHTML='<p class="small">Sin resultados.</p>';return;}
+  box.innerHTML=rows.map(r=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:pointer" onclick="pizPickChoose('${r.d.id}',${r.idx})">
+    <span>📝 ${esc(r.d.nombre||'Sin título')}${r.n>1?' · página '+(r.idx+1)+' de '+r.n:''}</span>
+    <span class="small">${r.elCount} elemento(s)</span>
+  </div>`).join('');
+}
+function pizPickChoose(freedocId,pageIdx){
+  const blockId=PIZ_PICK_BLOCK;if(!blockId)return;
+  const d=FREEDOCS.find(x=>x.id===freedocId);if(!d)return;
+  const page=fdDocPages(d)[pageIdx];if(!page)return;
+  const b=lpFindBlock(blockId);if(!b)return;
+  b.pizarras=b.pizarras||[];
+  b.pizarras.push({
+    id:'pz'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),
+    freedocId:d.id,freedocNombre:d.nombre||'Sin título',pageIdx,
+    orientacion:fdDocOrientacion(d),
+    elementos:JSON.parse(JSON.stringify(page.elementos||[]))
+  });
+  pizPickClose();
+  lpRenderBlock(blockId);
+}
+function lpRemovePizarra(blockId,pizId){
+  const b=lpFindBlock(blockId);if(!b)return;
+  b.pizarras=(b.pizarras||[]).filter(x=>x.id!==pizId);
+  lpRenderBlock(blockId);
+}
+function lpPizarraCardHTML(block,piz){
+  const editable=can('planner');
+  return `<div class="card" style="padding:10px;margin-top:8px;background:#fafbfc">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <span class="small" style="font-weight:600">📝 Dibujo de Pizarra${piz.freedocNombre?' · '+esc(piz.freedocNombre):''}</span>
+      ${editable?`<button type="button" class="btn sm ghost" onclick="lpRemovePizarra('${block.id}','${piz.id}')">🗑 Quitar</button>`:''}
+    </div>
+    <div class="fdcanvas${piz.orientacion==='horizontal'?' horizontal':''}" style="max-width:240px">${(piz.elementos||[]).map(el=>fdElHTML(el,true)).join('')}</div>
+  </div>`;
 }
 /* ---- Cuadro de torneo: eliminación directa o round robin, editable por el profesor ---- */
 const LP_CUADRO_SIZES=[4,8,16,32];
@@ -2854,6 +2924,13 @@ document.addEventListener('keydown',e=>{
 function lpPrintPlanById(id){const p=LESSONPLANS.find(x=>x.id===id);if(p)lpGeneratePDF(p);}
 const LP_PDF_COLOR='#1b3a6b';
 const LP_BLOCK_STYLE={inicio:{icon:'🏁'},calentamiento:{icon:'🔥'},drill:{icon:'🎯'},saques:{icon:'🎾'},juego:{icon:'🏆'},cierre:{icon:'✅'},custom:{icon:'📌'}};
+function lpPizarraPdfHTML(piz){
+  const orient=piz.orientacion==='horizontal';
+  return `<div style="width:calc(${orient?170:120}px * var(--s))">
+    <div style="position:relative;width:100%;aspect-ratio:${orient?'297/210':'210/297'};background:#fff;border:1px solid #dde3de;border-radius:6px;overflow:hidden">${(piz.elementos||[]).map(fdElInlineHTML).join('')}</div>
+    ${piz.freedocNombre?`<div style="font-size:calc(8px * var(--s));color:#8a95a1;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📝 ${esc(piz.freedocNombre)}</div>`:''}
+  </div>`;
+}
 function lpGeneratePDF(p){
   if(!p)return;
   const w=window.open('','_blank');
@@ -2933,10 +3010,12 @@ function lpGeneratePDF(p){
         ${asideHTML}
         ${b.descripcion?`<div class="blkdesc${b.descColumns===2?' blkdesc-2col':''}">${fmtRaw(b.descripcion)}</div>`:(hasCuadro?'':'<div class="blkdesc blkdesc-empty">—</div>')}
       </div>`:'';
+    const pizarrasHTML=(b.pizarras||[]).map(lpPizarraPdfHTML).join('');
     return `<div class="blk">
       <div class="blkhd"><span>${st.icon}</span><b>${esc(b.titulo||'')}</b>${b.minutos?`<span class="blkmin">${esc(String(b.minutos))}′</span>`:''}</div>
       ${bodyHTML}
       ${cuadrosHTML?`<div class="blkcuadros" style="--cs:calc(var(--s) * 1.55)">${cuadrosHTML}</div>`:''}
+      ${pizarrasHTML?`<div style="padding:calc(4px * var(--s)) calc(11px * var(--s)) calc(10px * var(--s) * var(--g));display:flex;gap:calc(10px * var(--s));flex-wrap:wrap">${pizarrasHTML}</div>`:''}
     </div>`;
   }).join('');
   const safeTitle=String(p.programa||'Planificación').replace(/[<>]/g,'');
@@ -2987,6 +3066,7 @@ function lpGeneratePDF(p){
     +'.rrptbl td.rrname{text-align:left;font-weight:600;border:none;padding-right:calc(8px * var(--cs))}'
     +'.rrptbl td.rrdiag{background:#f2f4f2;color:#b7bdb7}'
     +'.lppg{background:#fff;border:1px solid #dde3de;border-radius:5px}'
+    +'.fdgcanvas{width:100%;height:100%;display:block;background:#fff}.fdgcanvas-clear{width:100%;height:100%;display:block}'
     +'.ft{margin-top:calc(9px * var(--s) * var(--g));font-size:calc(8.5px * var(--s));color:#9aa4ab;text-align:right}'
     +'</style></head><body>'
     +'<svg width="0" height="0" style="position:absolute"><defs>'+LP_COLORS.map(c=>`<marker id="lppArrow-${lpColorId(c)}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="${c}"/></marker>`).join('')+'</defs></svg>'
@@ -3238,21 +3318,22 @@ function fdCanvasBgPointerDown(ev){
   if(FD_DRAW){fdStartShapeDraw(ev,FD_DRAW);return;}
   if(FD_SELECTED||FD_MULTISEL.size){FD_SELECTED=null;FD_MULTISEL=new Set();fdRenderCanvas();}
 }
-function fdElHTML(el){
-  const sel=FD_MULTISEL.has(el.id);
-  const editable=can('content');
+function fdElHTML(el,readOnly){
+  const sel=!readOnly&&FD_MULTISEL.has(el.id);
+  const editable=!readOnly&&can('content');
   let inner='';
-  if(el.type==='texto')inner=fdTextInner(el);
-  else if(el.type==='tabla')inner=fdTableInner(el);
+  if(el.type==='texto')inner=fdTextInner(el,readOnly);
+  else if(el.type==='tabla')inner=fdTableInner(el,readOnly);
   else if(el.type==='cancha')inner=fdCanchaInner(el);
   else if(el.type==='icono')inner=fdIconoInner(el);
-  else inner=fdFormaInner(el);
+  else inner=fdFormaInner(el,readOnly);
   const textRot=el.type==='texto'?(el.rot||0):0;
   const bodyStyleParts=[];
   if(el.type==='cancha'||textRot)bodyStyleParts.push('overflow:visible');
   if(textRot)bodyStyleParts.push(`transform:rotate(${textRot}deg)`);
   const bodyStyle=bodyStyleParts.length?` style="${bodyStyleParts.join(';')}"`:'';
-  return `<div class="fd-el${sel?' sel':''}" id="fdEl-${el.id}" style="left:${el.x}%;top:${el.y}%;width:${el.w}%;height:${el.h}%" onpointerdown="fdElPointerDown(event,'${el.id}')">
+  const dragAttrs=readOnly?'':` onpointerdown="fdElPointerDown(event,'${el.id}')"`;
+  return `<div class="fd-el${sel?' sel':''}" id="fdEl-${el.id}" style="left:${el.x}%;top:${el.y}%;width:${el.w}%;height:${el.h}%"${dragAttrs}>
     ${editable&&sel?`<div class="fd-toolbar"><span class="fd-grab">⠿ Arrastrar${FD_MULTISEL.size>1?' ('+FD_MULTISEL.size+')':''}</span><button type="button" onclick="fdCopySel()">📋</button><button type="button" onclick="fdDeleteSel()">🗑</button></div>`:''}
     <div class="fd-el-body"${bodyStyle}>${inner}</div>
     ${editable&&sel?`<div class="fd-resize" onpointerdown="fdResizeStart(event,'${el.id}')"></div>`:''}
@@ -3364,14 +3445,14 @@ function fdAddTable(){
   fdSelectOnly(id);
   fdRenderCanvas();
 }
-function fdTextInner(el){
-  const editable=can('content');
+function fdTextInner(el,readOnly){
+  const editable=!readOnly&&can('content');
   return editable?fdRteArea('fdText-'+el.id,el.html,'Escribí acá…',`fdSetTextHtml('${el.id}',rteGet(this))`):`<div class="rte" style="border:1px solid var(--line);border-radius:8px;background:var(--card);height:100%;overflow:auto">${fmtRaw(el.html||'')}</div>`;
 }
 function fdRteArea(id,val,ph,onInput){return `<div class="rtewrap"><div ${id?`id="${id}" `:''}class="rte" contenteditable="true" onkeydown="rteKey(event)"${onInput?` oninput="${onInput}"`:''}${ph?` data-ph="${esc(ph)}"`:''}>${fmtRaw(val||'')}</div></div>`;}
 function fdSetTextHtml(id,html){const el=fdFindEl(id);if(!el)return;el.html=html;}
-function fdTableInner(el){
-  const editable=can('content');
+function fdTableInner(el,readOnly){
+  const editable=!readOnly&&can('content');
   const rows=el.rows&&el.rows.length?el.rows:[['','']];
   const controls=editable?`<div style="display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap">
     <button type="button" class="btn sm ghost" onclick="fdTableAddRow('${el.id}')">+ Fila</button>
@@ -3399,10 +3480,22 @@ function fdCanchaInner(el){
 function fdIconoInner(el){
   return `<svg viewBox="-6 -6 12 12" preserveAspectRatio="xMidYMid meet" class="fdgcanvas-clear"><g transform="rotate(${el.rot||0})">${lpElGlyph(el.kind,el.color,el.label,el.id)}</g></svg>`;
 }
-function fdFormaInner(el){
-  const isSel=FD_SELECTED===el.id&&FD_MULTISEL.size<=1;
+function fdFormaInner(el,readOnly){
+  const isSel=!readOnly&&FD_SELECTED===el.id&&FD_MULTISEL.size<=1;
   const s={type:el.shapeType,x1:el.x1,y1:el.y1,x2:el.x2,y2:el.y2,pts:el.pts,color:el.color,width:el.width};
   return `<svg viewBox="0 0 100 100" preserveAspectRatio="none" class="fdgcanvas-clear">${lpShapeInnerSvg(s,isSel)}</svg>`;
+}
+function fdElInlineHTML(el){
+  let inner='';
+  if(el.type==='texto')inner=`<div style="width:100%;height:100%;overflow:hidden;font-size:9px;line-height:1.35">${fmtRaw(el.html||'')}</div>`;
+  else if(el.type==='tabla')inner=`<table style="width:100%;height:100%;border-collapse:collapse;font-size:8px"><tbody>${(el.rows&&el.rows.length?el.rows:[['','']]).map(row=>`<tr>${row.map(cell=>`<td style="border:1px solid #ccc;padding:1px 3px">${fmtRaw(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  else if(el.type==='cancha')inner=fdCanchaInner(el);
+  else if(el.type==='icono')inner=fdIconoInner(el);
+  else inner=fdFormaInner(el,true);
+  const textRot=el.type==='texto'?(el.rot||0):0;
+  const overflow=(el.type==='cancha'||textRot)?'visible':'hidden';
+  const rot=textRot?`;transform:rotate(${textRot}deg)`:'';
+  return `<div style="position:absolute;left:${el.x}%;top:${el.y}%;width:${el.w}%;height:${el.h}%;overflow:${overflow}${rot}">${inner}</div>`;
 }
 function fdAddCanchaTop(tipo){
   if(!can('content'))return;
