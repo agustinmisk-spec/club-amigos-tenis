@@ -276,6 +276,14 @@ const cleanCuadro = c => {
   const base = { id: String((c && c.id) || '').slice(0, 40), nombre: String((c && c.nombre) || '').slice(0, 80) };
   return Object.assign(base, (c && c.formato === 'roundrobin') ? cleanCuadroRR(c) : cleanCuadroElim(c));
 };
+const cleanPizarra = p => ({
+  id: String((p && p.id) || '').slice(0, 40),
+  freedocId: String((p && p.freedocId) || '').slice(0, 40),
+  freedocNombre: String((p && p.freedocNombre) || '').slice(0, 150),
+  pageIdx: num(p && p.pageIdx, 0, 100, 0),
+  orientacion: (p && p.orientacion) === 'horizontal' ? 'horizontal' : 'vertical',
+  elementos: Array.isArray(p && p.elementos) ? p.elementos.slice(0, 80).map(cleanFreeElement) : []
+});
 const cleanBlock = bl => ({
   id: String((bl && bl.id) || '').slice(0, 40),
   tipo: String((bl && bl.tipo) || '').slice(0, 30),
@@ -285,6 +293,7 @@ const cleanBlock = bl => ({
   graficos: Array.isArray(bl && bl.graficos) ? bl.graficos.slice(0, 10).map(cleanGraph) : [],
   graphLayout: ['auto', 'col', 'row', 'grid2'].includes(bl && bl.graphLayout) ? bl.graphLayout : 'auto',
   cuadros: Array.isArray(bl && bl.cuadros) ? bl.cuadros.slice(0, 6).map(cleanCuadro) : [],
+  pizarras: Array.isArray(bl && bl.pizarras) ? bl.pizarras.slice(0, 6).map(cleanPizarra) : [],
   notaGraficos: String((bl && bl.notaGraficos) || '').slice(0, 2000),
   descColumns: (bl && bl.descColumns === 2) ? 2 : 1
 });
