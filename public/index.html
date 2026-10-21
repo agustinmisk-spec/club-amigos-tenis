@@ -1199,7 +1199,8 @@ const LP_COLORS=['#111827','#c0392b','#1f8a4d','#2563eb','#ff7a1a','#f1c40f'];
 const LP_DEFAULT_COLOR={jugador:'#111827',raqueta:'#111827',pelota:'#cfe61c',canasto:'#e9c46a',cono:'#ff7a1a',conobajo:'#ff7a1a',aro:'#e0338c',texto:'#111827'};
 const LP_COLORABLE=new Set(Object.keys(LP_DEFAULT_COLOR));
 function lpColorId(c){return String(c||'c0392b').replace('#','');}
-let editMsgId=null,editEvId=null,editCompId=null,editRecId=null,compGroupBy={},compSubGroupBy={};
+let editMsgId=null,editEvId=null,editCompId=null,editRecId=null,compGroupBy={},compSubGroupBy={},compExpanded={};
+function toggleCompExpand(cid){compExpanded[cid]=!compExpanded[cid];renderCompetitions();}
 let pickSel=new Set(),pickCb=null;
 function recCount(id,tipo){return RECOVERIES.filter(r=>r.studentId===id&&r.tipo===tipo).length;}
 let recHistFilter='all',_recHistId=null;
@@ -1489,18 +1490,23 @@ async function renderCompetitions(){
   w.innerHTML='<div class="feed">'+COMPS.map(c=>{
     compEnsureIds(c);
     const total=(c.participantes||[]).length;
-    const groupSel=compGroupBy[c.id]!==undefined?compGroupBy[c.id]:(c.catGroups[0]?c.catGroups[0].id:'');
-    const subSel=groupSel?(compSubGroupBy[c.id]||''):'';
-    const groups=compGroupedParticipants(c,groupSel,subSel);
+    const isOpen=!!compExpanded[c.id];
     const plan=c.planId?LESSONPLANS.find(p=>p.id===c.planId):null;
-    const countsLine=groupSel?groups.map(g=>`${esc(g.valor||'Sin categoría')}: <b>${g.items.length}</b>`).join(' · '):'';
-    const groupByOpts=`<option value="">Sin agrupar (solo alfabético)</option>`+(c.catGroups||[]).map(g=>`<option value="${g.id}"${groupSel===g.id?' selected':''}>${esc(g.nombre)}</option>`).join('');
-    const subGroupOpts=(c.catGroups||[]).filter(g=>g.id!==groupSel);
-    const subGroupByHtml=(groupSel&&subGroupOpts.length)?` <span class="small">y dentro, ordenar por: <select onchange="setCompSubGroupBy('${c.id}',this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px"><option value="">Ninguno (solo alfabético)</option>${subGroupOpts.map(g=>`<option value="${g.id}"${subSel===g.id?' selected':''}>${esc(g.nombre)}</option>`).join('')}</select></span>`:'';
-    const groupByHtml=(c.catGroups&&c.catGroups.length)?`<div class="small" style="margin-top:6px">Agrupar por: <select onchange="setCompGroupBy('${c.id}',this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px">${groupByOpts}</select>${subGroupByHtml}</div>`:'';
-    const partRow=pp=>`<div style="display:flex;align-items:center;gap:6px;padding:3px 0;flex-wrap:wrap"><span style="flex:1;min-width:140px">${esc(pp.nombre)}</span>${editable?compParticipantCatsHtml(c,pp):compParticipantCatsText(c,pp)}${editable?` <span style="cursor:pointer;color:#b3261e" onclick="rmCompParticipant('${c.id}','${pp.id}')" title="Quitar">✕</span>`:''}</div>`;
-    const groupsHtml=groups.length?groups.map(g=>`<div style="margin-top:8px">${groupSel?`<div class="small" style="font-weight:700;color:var(--muted);margin-bottom:4px">${esc(g.valor||'Sin categoría')} (${g.items.length})</div>`:''}${g.sub?g.sub.map(sg=>`<div style="margin-left:14px;margin-top:4px"><div class="small" style="font-weight:600;color:var(--muted);margin-bottom:2px">${esc(sg.valor||'Sin categoría')} (${sg.items.length})</div>${sg.items.map(partRow).join('')}</div>`).join(''):g.items.map(partRow).join('')}</div>`).join(''):'<p class="small">Sin participantes.</p>';
-    return `<div class="item"><div class="top"><span class="ti">🏆 ${esc(c.nombre)}</span><span><button class="att-btn" title="Informe PDF de este evento" onclick="informeCompetencia('${c.id}')">📄</button>${editable?` <button class="att-btn" title="Editar" onclick="editCompStart('${c.id}')">✎</button> <button class="att-btn" onclick="delCompetition('${c.id}')">🗑</button>`:''}</span></div><div class="meta2">${esc(fmtFecha(c.fecha))}${c.hora?' · '+esc(c.hora):''}${c.lugar?' · '+esc(c.lugar):''} · ${total} participante(s)${plan?` · <span style="cursor:pointer;color:#2563eb" onclick="compOpenPlan('${c.planId}')">📅 ${esc(lpPlanHeading(plan).title)}</span>`:''}</div>${c.nota?`<div class="rte small" style="margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--card)">${fmtRaw(c.nota)}</div>`:''}${editable?renderCompCatGroupsAdmin(c):''}${total?`<div class="small" style="margin-top:8px;color:var(--muted)">${countsLine}</div>`:''}${groupByHtml}<div class="body2">${groupsHtml}</div>${editable?`<div style="margin-top:8px"><datalist id="dl_${c.id}">${DB.students.filter(s=>s.estado!=='Baja').map(s=>`<option value="${esc(fullName(s))}">`).join('')}</datalist><input id="cp_${c.id}" list="dl_${c.id}" placeholder="Agregar alumno (Apellido, Nombre)" style="padding:7px 9px;border:1px solid var(--line);border-radius:7px;font-size:13px"> <button class="btn sm" onclick="addCompParticipant('${c.id}')">+ Agregar</button> <button class="btn sm sec" onclick="addCompMulti('${c.id}')">Varios…</button></div>`:''}</div>`;
+    let detailsHtml='';
+    if(isOpen){
+      const groupSel=compGroupBy[c.id]!==undefined?compGroupBy[c.id]:(c.catGroups[0]?c.catGroups[0].id:'');
+      const subSel=groupSel?(compSubGroupBy[c.id]||''):'';
+      const groups=compGroupedParticipants(c,groupSel,subSel);
+      const countsLine=groupSel?groups.map(g=>`${esc(g.valor||'Sin categoría')}: <b>${g.items.length}</b>`).join(' · '):'';
+      const groupByOpts=`<option value="">Sin agrupar (solo alfabético)</option>`+(c.catGroups||[]).map(g=>`<option value="${g.id}"${groupSel===g.id?' selected':''}>${esc(g.nombre)}</option>`).join('');
+      const subGroupOpts=(c.catGroups||[]).filter(g=>g.id!==groupSel);
+      const subGroupByHtml=(groupSel&&subGroupOpts.length)?` <span class="small">y dentro, ordenar por: <select onchange="setCompSubGroupBy('${c.id}',this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px"><option value="">Ninguno (solo alfabético)</option>${subGroupOpts.map(g=>`<option value="${g.id}"${subSel===g.id?' selected':''}>${esc(g.nombre)}</option>`).join('')}</select></span>`:'';
+      const groupByHtml=(c.catGroups&&c.catGroups.length)?`<div class="small" style="margin-top:6px">Agrupar por: <select onchange="setCompGroupBy('${c.id}',this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px">${groupByOpts}</select>${subGroupByHtml}</div>`:'';
+      const partRow=pp=>`<div style="display:flex;align-items:center;gap:6px;padding:3px 0;flex-wrap:wrap"><span style="flex:1;min-width:140px">${esc(pp.nombre)}</span>${editable?compParticipantCatsHtml(c,pp):compParticipantCatsText(c,pp)}${editable?` <span style="cursor:pointer;color:#b3261e" onclick="rmCompParticipant('${c.id}','${pp.id}')" title="Quitar">✕</span>`:''}</div>`;
+      const groupsHtml=groups.length?groups.map(g=>`<div style="margin-top:8px">${groupSel?`<div class="small" style="font-weight:700;color:var(--muted);margin-bottom:4px">${esc(g.valor||'Sin categoría')} (${g.items.length})</div>`:''}${g.sub?g.sub.map(sg=>`<div style="margin-left:14px;margin-top:4px"><div class="small" style="font-weight:600;color:var(--muted);margin-bottom:2px">${esc(sg.valor||'Sin categoría')} (${sg.items.length})</div>${sg.items.map(partRow).join('')}</div>`).join(''):g.items.map(partRow).join('')}</div>`).join(''):'<p class="small">Sin participantes.</p>';
+      detailsHtml=`<div class="meta2" style="margin-top:4px">${c.hora?esc(c.hora)+' · ':''}${c.lugar?esc(c.lugar)+' · ':''}${plan?`<span style="cursor:pointer;color:#2563eb" onclick="compOpenPlan('${c.planId}')">📅 ${esc(lpPlanHeading(plan).title)}</span>`:'<span style="color:var(--muted)">Sin planificación vinculada</span>'}</div>${c.nota?`<div class="rte small" style="margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--card)">${fmtRaw(c.nota)}</div>`:''}${editable?renderCompCatGroupsAdmin(c):''}${total?`<div class="small" style="margin-top:8px;color:var(--muted)">${countsLine}</div>`:''}${groupByHtml}<div class="body2">${groupsHtml}</div>${editable?`<div style="margin-top:8px"><datalist id="dl_${c.id}">${DB.students.filter(s=>s.estado!=='Baja').map(s=>`<option value="${esc(fullName(s))}">`).join('')}</datalist><input id="cp_${c.id}" list="dl_${c.id}" placeholder="Agregar alumno (Apellido, Nombre)" style="padding:7px 9px;border:1px solid var(--line);border-radius:7px;font-size:13px"> <button class="btn sm" onclick="addCompParticipant('${c.id}')">+ Agregar</button> <button class="btn sm sec" onclick="addCompMulti('${c.id}')">Varios…</button></div>`:''}`;
+    }
+    return `<div class="item"><div class="top"><span class="ti" style="cursor:pointer" onclick="toggleCompExpand('${c.id}')" title="${isOpen?'Contraer':'Ver y editar jugadores'}">${isOpen?'▾':'▸'} 🏆 ${esc(c.nombre)}</span><span><button class="att-btn" title="Informe PDF de este evento" onclick="informeCompetencia('${c.id}')">📄</button>${editable?` <button class="att-btn" title="Editar" onclick="editCompStart('${c.id}')">✎</button> <button class="att-btn" onclick="delCompetition('${c.id}')">🗑</button>`:''}</span></div><div class="meta2" style="cursor:pointer" onclick="toggleCompExpand('${c.id}')">${esc(fmtFecha(c.fecha))} · ${total} participante(s)</div>${detailsHtml}</div>`;
   }).join('')+'</div>';
 }
 async function addCompetition(){
@@ -1508,7 +1514,7 @@ async function addCompetition(){
   if(!fecha||!nombre){alert('Completá fecha y nombre.');return;}
   try{
     if(editCompId){await api('PUT','/api/competitions/'+editCompId,{fecha,hora,nombre,lugar,nota,planId});editCompId=null;}
-    else await api('POST','/api/competitions',{fecha,hora,nombre,lugar,nota,planId,participantes:[]});
+    else{const created=await api('POST','/api/competitions',{fecha,hora,nombre,lugar,nota,planId,participantes:[]});compExpanded[created.id]=true;}
     renderCompetitions();
   }catch(e){alert(e.message);}
 }
