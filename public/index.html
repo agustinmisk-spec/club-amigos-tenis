@@ -1394,6 +1394,15 @@ async function rmCompCatOption(cid,gid,idx){
   c.participantes.forEach(p=>{if(p.cats&&p.cats[gid]===val)p.cats[gid]='';});
   try{await api('PUT','/api/competitions/'+cid,{catGroups:c.catGroups,participantes:c.participantes});renderCompetitions();}catch(e){alert(e.message);}
 }
+async function moveCompCatOption(cid,gid,idx,dir){
+  const c=COMPS.find(x=>x.id===cid);if(!c)return;
+  compEnsureIds(c);
+  const g=c.catGroups.find(x=>x.id===gid);if(!g)return;
+  const j=idx+dir;
+  if(j<0||j>=g.opciones.length)return;
+  const tmp=g.opciones[idx];g.opciones[idx]=g.opciones[j];g.opciones[j]=tmp;
+  try{await api('PUT','/api/competitions/'+cid,{catGroups:c.catGroups});renderCompetitions();}catch(e){alert(e.message);}
+}
 async function promptAddCompCatGroup(cid){
   const nombre=(prompt('Nombre del nuevo tipo de categoría (ej: Equipo, Nivel, División):')||'').trim();
   if(!nombre)return;
@@ -1463,7 +1472,7 @@ function renderCompCatGroupsAdmin(c){
         <span style="cursor:pointer;color:#b3261e;font-size:12px" onclick="rmCompCatGroup('${c.id}','${g.id}')" title="Eliminar este tipo de categoría">🗑 tipo</span>
       </div>
       <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;align-items:center">
-        ${g.opciones.map((o,idx)=>`<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid var(--line);border-radius:12px;font-size:12px">${esc(o)} <span style="cursor:pointer;color:#b3261e" onclick="rmCompCatOption('${c.id}','${g.id}',${idx})">✕</span></span>`).join('')}
+        ${g.opciones.map((o,idx)=>`<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid var(--line);border-radius:12px;font-size:12px">${idx>0?`<span style="cursor:pointer;color:var(--muted)" onclick="moveCompCatOption('${c.id}','${g.id}',${idx},-1)" title="Mover antes">◀</span>`:''}${esc(o)}${idx<g.opciones.length-1?`<span style="cursor:pointer;color:var(--muted)" onclick="moveCompCatOption('${c.id}','${g.id}',${idx},1)" title="Mover después">▶</span>`:''} <span style="cursor:pointer;color:#b3261e" onclick="rmCompCatOption('${c.id}','${g.id}',${idx})" title="Eliminar">✕</span></span>`).join('')}
         <span style="cursor:pointer;color:#2563eb;font-size:12px" onclick="promptAddCompCatOption('${c.id}','${g.id}')">+ Agregar opción</span>
       </div>
     </div>`).join('')}
