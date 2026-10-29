@@ -301,6 +301,7 @@ const cleanLessonPlan = b => {
   return {
     titulo: String((b && b.titulo) || '').slice(0, 150),
     programa: String((b && b.programa) || '').slice(0, 80),
+    carpetaId: String((b && b.carpetaId) || '').slice(0, 40),
     niveles: Array.isArray(b && b.niveles) ? b.niveles.slice(0, 10).map(x => String(x).slice(0, 80)) : (b && b.nivel ? [String(b.nivel).slice(0, 80)] : []),
     segmento: String((b && b.segmento) || '').slice(0, 150),
     fechaDesde: String((b && b.fechaDesde) || '').slice(0, 10),
