@@ -1373,7 +1373,7 @@ function compFilteredParticipants(c,filter){
 }
 function compGroupOrderFor(c){
   const order=compGroupOrder[c.id];
-  if(Array.isArray(order)&&order.length)return order.filter(gid=>(c.catGroups||[]).some(g=>g.id===gid));
+  if(Array.isArray(order))return order.filter(gid=>(c.catGroups||[]).some(g=>g.id===gid));
   return c.catGroups&&c.catGroups[0]?[c.catGroups[0].id]:[];
 }
 function compGroupTree(parts,c,order){
