@@ -1362,7 +1362,15 @@ function compGroupByKey(parts,c,groupId){
   if(groups['']!=null)keys.push('');
   return keys.map(k=>({valor:k,items:groups[k],grouped:true}));
 }
-function compSortedParticipants(c){return (c.participantes||[]).slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es',{numeric:true,sensitivity:'base'}));}
+function compSortedParticipants(c,list){return (list||c.participantes||[]).slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es',{numeric:true,sensitivity:'base'}));}
+function compFilteredParticipants(c,filter){
+  if(!filter)return c.participantes||[];
+  return (c.participantes||[]).filter(p=>(c.catGroups||[]).every(g=>{
+    const want=filter[g.id];
+    if(!want)return true;
+    return ((p.cats&&p.cats[g.id])||'')===want;
+  }));
+}
 function compGroupOrderFor(c){
   const order=compGroupOrder[c.id];
   if(Array.isArray(order)&&order.length)return order.filter(gid=>(c.catGroups||[]).some(g=>g.id===gid));
@@ -1374,8 +1382,8 @@ function compGroupTree(parts,c,order){
   const level=compGroupByKey(parts,c,gid);
   return level.map(g=>({valor:g.valor,items:g.items,grouped:g.grouped,sub:rest.length?compGroupTree(g.items,c,rest):null}));
 }
-function compGroupedParticipants(c,order){
-  return compGroupTree(compSortedParticipants(c),c,order);
+function compGroupedParticipants(c,order,list){
+  return compGroupTree(compSortedParticipants(c,list),c,order);
 }
 function compFlattenTree(nodes){
   let out=[];
@@ -1508,6 +1516,72 @@ function compApplyBulkCatFromInputs(cid){
   if(!gidSel||!valSel)return;
   compApplyBulkCat(cid,gidSel.value,valSel.value);
 }
+let compPrintFilter={},compCompareCol={},compCompareOrder={};
+function compPrintFilterFor(cid){if(!compPrintFilter[cid])compPrintFilter[cid]={};return compPrintFilter[cid];}
+function setCompPrintFilter(cid,gid,val){compPrintFilterFor(cid)[gid]=val;renderCompetitions();}
+function clearCompPrintFilter(cid){compPrintFilter[cid]={};renderCompetitions();}
+function compPrintFiltered(cid){
+  const c=COMPS.find(x=>x.id===cid);if(!c)return;
+  compEnsureIds(c);
+  const filter=compPrintFilterFor(cid);
+  const parts=compFilteredParticipants(c,filter);
+  if(!parts.length){alert('No hay participantes que coincidan con el filtro elegido.');return;}
+  printReport(buildCompetencias([c],filter),'Competencia '+(c.nombre||''));
+}
+function compCompareColFor(c){
+  const stored=compCompareCol[c.id];
+  if(stored&&(c.catGroups||[]).some(g=>g.id===stored))return stored;
+  const guess=(c.catGroups||[]).find(g=>/equipo/i.test(g.nombre));
+  return (guess||(c.catGroups||[])[0]||{}).id||'';
+}
+function compCompareOrderFor(c){
+  const colGid=compCompareColFor(c);
+  const order=compCompareOrder[c.id];
+  if(Array.isArray(order))return order.filter(gid=>gid!==colGid&&(c.catGroups||[]).some(g=>g.id===gid));
+  return [];
+}
+function setCompCompareCol(cid,val){compCompareCol[cid]=val;compCompareOrder[cid]=[];renderCompetitions();}
+function setCompCompareOrderLevel(cid,idx,val){
+  const c=COMPS.find(x=>x.id===cid);if(!c)return;
+  const order=compCompareOrderFor(c).slice(0,idx);
+  if(val)order.push(val);
+  compCompareOrder[cid]=order;
+  renderCompetitions();
+}
+function buildCompararEquipos(c,colGid,order){
+  compEnsureIds(c);
+  const colGroup=(c.catGroups||[]).find(g=>g.id===colGid);
+  const h=rptHeader('Tabla comparativa'+(c.nombre?' · '+esc(c.nombre):''));
+  if(!colGroup)return h+'<p>Este torneo no tiene categorías configuradas para usar como columnas.</p>';
+  const parts=compSortedParticipants(c);
+  const cols=colGroup.opciones.slice();
+  if(parts.some(p=>!(p.cats&&p.cats[colGid])))cols.push('');
+  const renderNode=(node,depth)=>{
+    const head=node.grouped?`<div style="font-weight:600;margin-top:${depth===0?0:4}px;font-size:11px">${esc(node.valor||'Sin categoría')}</div>`:'';
+    const indent=depth>0?`margin-left:${depth*10}px`:'';
+    const body=node.sub?node.sub.map(s=>renderNode(s,depth+1)).join(''):node.items.map(p=>`<div style="${indent}">${esc(p.nombre)}</div>`).join('');
+    return `<div>${head}${body}</div>`;
+  };
+  const theadCells=cols.map(v=>{
+    const n=parts.filter(p=>((p.cats&&p.cats[colGid])||'')===v).length;
+    return `<th>${esc(v||'Sin '+colGroup.nombre.toLowerCase())} (${n})</th>`;
+  }).join('');
+  const bodyCells=cols.map(v=>{
+    const subset=parts.filter(p=>((p.cats&&p.cats[colGid])||'')===v);
+    const tree=compGroupTree(subset,c,order);
+    return `<td style="vertical-align:top">${tree.map(n=>renderNode(n,0)).join('')||'<span class="small">—</span>'}</td>`;
+  }).join('');
+  const ordenLine=order.length?('<p class="small">Orden dentro de cada columna: '+order.map(gid=>esc(compGroupName(c.id,gid))).join(' → ')+'</p>'):'<p class="small">Orden dentro de cada columna: alfabético.</p>';
+  return h+ordenLine+`<table><thead><tr>${theadCells}</tr></thead><tbody><tr>${bodyCells}</tr></tbody></table>`;
+}
+function compPrintCompareTable(cid){
+  const c=COMPS.find(x=>x.id===cid);if(!c)return;
+  compEnsureIds(c);
+  const colGid=compCompareColFor(c);
+  if(!colGid){alert('Este torneo no tiene categorías configuradas.');return;}
+  const order=compCompareOrderFor(c);
+  printReport(buildCompararEquipos(c,colGid,order),'Tabla comparativa - '+(c.nombre||''));
+}
 function compCatOptionsHtml(g,val){
   return `<option value=""${!val?' selected':''}>Sin categoría</option>`+
     g.opciones.map(o=>`<option value="${esc(o)}"${val===o?' selected':''}>${esc(o)}</option>`).join('')+
@@ -1592,7 +1666,31 @@ async function renderCompetitions(){
         <span style="cursor:pointer;color:#2563eb" onclick="compToggleSelectAll('${c.id}')">${bulkSet.size===total?'☑ Deseleccionar todos':'☐ Seleccionar todos'}</span>
         ${bulkSet.size?`<b>${bulkSet.size} seleccionado(s)</b> <span>Asignar</span> <select id="bulkGid_${c.id}" onchange="compBulkGidChanged('${c.id}')" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px">${(c.catGroups||[]).map(g=>`<option value="${g.id}">${esc(g.nombre)}</option>`).join('')}</select><select id="bulkVal_${c.id}" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px">${compCatOptionsHtml((c.catGroups||[])[0]||{opciones:[]},'')}</select><button class="btn sm" onclick="compApplyBulkCatFromInputs('${c.id}')">Aplicar a todos</button> <button class="btn sm ghost" onclick="compClearBulkSel('${c.id}')">Cancelar</button>`:''}
       </div>`:'';
-      detailsHtml=`<div class="meta2" style="margin-top:4px">${c.hora?esc(c.hora)+' · ':''}${c.lugar?esc(c.lugar)+' · ':''}${plan?`<span style="cursor:pointer;color:#2563eb" onclick="compOpenPlan('${c.planId}')">📅 ${esc(lpPlanHeading(plan).title)}</span>`:'<span style="color:var(--muted)">Sin planificación vinculada</span>'}</div>${c.nota?`<div class="rte small" style="margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--card)">${fmtRaw(c.nota)}</div>`:''}${editable?renderCompCatGroupsAdmin(c):''}${total?`<div class="small" style="margin-top:8px;color:var(--muted)">${countsLine}</div>`:''}${groupByHtml}${bulkBarHtml}<div class="body2">${groupsHtml}</div>${editable?`<div style="margin-top:8px"><datalist id="dl_${c.id}">${DB.students.filter(s=>s.estado!=='Baja').map(s=>`<option value="${esc(fullName(s))}">`).join('')}</datalist><input id="cp_${c.id}" list="dl_${c.id}" placeholder="Agregar alumno (Apellido, Nombre)" style="padding:7px 9px;border:1px solid var(--line);border-radius:7px;font-size:13px"> <button class="btn sm" onclick="addCompParticipant('${c.id}')">+ Agregar</button> <button class="btn sm sec" onclick="addCompMulti('${c.id}')">Varios…</button></div>`:''}`;
+      const printFilter=compPrintFilterFor(c.id);
+      const printFilterHtml=(c.catGroups&&c.catGroups.length&&total)?`<div class="small" style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span>🖨️ Imprimir solo:</span>
+        ${(c.catGroups||[]).map(g=>`<select onchange="setCompPrintFilter('${c.id}','${g.id}',this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px"><option value="">${esc(g.nombre)}: todas</option>${g.opciones.map(o=>`<option value="${esc(o)}"${printFilter[g.id]===o?' selected':''}>${esc(g.nombre)}: ${esc(o)}</option>`).join('')}</select>`).join(' ')}
+        <button class="btn sm sec" onclick="compPrintFiltered('${c.id}')">Imprimir filtrado</button>
+        ${Object.values(printFilter).some(Boolean)?`<span class="small" style="cursor:pointer;color:var(--muted)" onclick="clearCompPrintFilter('${c.id}')">Borrar filtro</span>`:''}
+      </div>`:'';
+      const compareColGid=compCompareColFor(c);
+      const compareOrder=compCompareOrderFor(c);
+      const compareRows=[];
+      const cmpOpts0=`<option value="">Alfabético</option>`+(c.catGroups||[]).filter(g=>g.id!==compareColGid).map(g=>`<option value="${g.id}"${compareOrder[0]===g.id?' selected':''}>${esc(g.nombre)}</option>`).join('');
+      compareRows.push(`<select onchange="setCompCompareOrderLevel('${c.id}',0,this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px">${cmpOpts0}</select>`);
+      for(let lvl=1;lvl<=compareOrder.length;lvl++){
+        const chosenBefore=[compareColGid,...compareOrder.slice(0,lvl)];
+        const remaining=(c.catGroups||[]).filter(g=>!chosenBefore.includes(g.id));
+        if(!remaining.length)break;
+        const optsN=`<option value="">Ninguno más</option>`+remaining.map(g=>`<option value="${g.id}"${compareOrder[lvl]===g.id?' selected':''}>${esc(g.nombre)}</option>`).join('');
+        compareRows.push(`<span class="small">y dentro, por: <select onchange="setCompCompareOrderLevel('${c.id}',${lvl},this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px">${optsN}</select></span>`);
+      }
+      const compareHtml=(c.catGroups&&c.catGroups.length&&total)?`<div class="small" style="margin-top:6px;padding:6px 8px;border:1px dashed var(--line);border-radius:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <b>📊 Tabla comparativa:</b> columnas = <select onchange="setCompCompareCol('${c.id}',this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px">${(c.catGroups||[]).map(g=>`<option value="${g.id}"${compareColGid===g.id?' selected':''}>${esc(g.nombre)}</option>`).join('')}</select>
+        ordenar por: ${compareRows.join(' ')}
+        <button class="btn sm sec" onclick="compPrintCompareTable('${c.id}')">Imprimir tabla comparativa</button>
+      </div>`:'';
+      detailsHtml=`<div class="meta2" style="margin-top:4px">${c.hora?esc(c.hora)+' · ':''}${c.lugar?esc(c.lugar)+' · ':''}${plan?`<span style="cursor:pointer;color:#2563eb" onclick="compOpenPlan('${c.planId}')">📅 ${esc(lpPlanHeading(plan).title)}</span>`:'<span style="color:var(--muted)">Sin planificación vinculada</span>'}</div>${c.nota?`<div class="rte small" style="margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--card)">${fmtRaw(c.nota)}</div>`:''}${editable?renderCompCatGroupsAdmin(c):''}${total?`<div class="small" style="margin-top:8px;color:var(--muted)">${countsLine}</div>`:''}${groupByHtml}${bulkBarHtml}${printFilterHtml}${compareHtml}<div class="body2">${groupsHtml}</div>${editable?`<div style="margin-top:8px"><datalist id="dl_${c.id}">${DB.students.filter(s=>s.estado!=='Baja').map(s=>`<option value="${esc(fullName(s))}">`).join('')}</datalist><input id="cp_${c.id}" list="dl_${c.id}" placeholder="Agregar alumno (Apellido, Nombre)" style="padding:7px 9px;border:1px solid var(--line);border-radius:7px;font-size:13px"> <button class="btn sm" onclick="addCompParticipant('${c.id}')">+ Agregar</button> <button class="btn sm sec" onclick="addCompMulti('${c.id}')">Varios…</button></div>`:''}`;
     }
     return `<div class="item"><div class="top"><span class="ti" style="cursor:pointer" onclick="toggleCompExpand('${c.id}')" title="${isOpen?'Contraer':'Ver y editar jugadores'}">${isOpen?'▾':'▸'} 🏆 ${esc(c.nombre)}</span><span><button class="att-btn" title="Informe PDF de este evento" onclick="informeCompetencia('${c.id}')">📄</button>${editable?` <button class="att-btn" title="Editar" onclick="editCompStart('${c.id}')">✎</button> <button class="att-btn" onclick="delCompetition('${c.id}')">🗑</button>`:''}</span></div><div class="meta2" style="cursor:pointer" onclick="toggleCompExpand('${c.id}')">${esc(fmtFecha(c.fecha))} · ${total} participante(s)</div>${detailsHtml}</div>`;
   }).join('')+'</div>';
@@ -1698,7 +1796,7 @@ async function addCompParticipant(cid){
 }
 async function rmCompParticipant(cid,pid){const c=COMPS.find(x=>x.id===cid);if(!c)return;compEnsureIds(c);const part=c.participantes.filter(pp=>pp.id!==pid);try{await api('PUT','/api/competitions/'+cid,{participantes:part});renderCompetitions();}catch(e){alert(e.message);}}
 async function delCompetition(id){if(!confirm('¿Eliminar esta competencia?'))return;try{await api('DELETE','/api/competitions/'+id);renderCompetitions();}catch(e){alert(e.message);}}
-function buildCompetencias(list){let h=rptHeader('Competencias'+(list.length===1?' · '+esc(list[0].nombre||''):''));if(!list.length)return h+'<p>No hay competencias para mostrar.</p>';if(list.length>1)h+=`<p><b>${list.length}</b> competencias.</p>`;const sorted=list.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));sorted.forEach((c,i)=>{compEnsureIds(c);const parts=(c.participantes||[]);const plan=c.planId?LESSONPLANS.find(p=>p.id===c.planId):null;h+=`<div${i>0?' style="page-break-before:always"':''}><h2>🏆 ${esc(c.nombre||'(sin nombre)')}</h2>`;h+=rptTbl(['Dato','Valor'],[['Fecha',c.fecha?fmtFecha(c.fecha):'—'],['Hora',esc(c.hora||'—')],['Lugar',esc(c.lugar||'—')],['Planificación',plan?esc(lpPlanHeading(plan).title):'—'],['Formato / Observaciones',fmt(c.nota||'—')],['Participantes',String(parts.length)]]);if(parts.length){const order=compGroupOrderFor(c);const flat=compFlattenTree(compGroupedParticipants(c,order));const catCols=c.catGroups||[];h+='<p><b>Participantes</b></p>'+rptTbl(['#','Alumno',...catCols.map(g=>g.nombre),'Programa','Nivel'],flat.map((p,ix)=>{const s=DB.students.find(x=>x.id===p.studentId);return [String(ix+1),esc(p.nombre||(s?fullName(s):'')),...catCols.map(g=>esc((p.cats&&p.cats[g.id])||'—')),esc(s?(s.programa||''):''),esc(s?(s.nivel||''):'')];}));}else h+='<p class="small">Sin participantes.</p>';h+='</div>';});return h;}
+function buildCompetencias(list,filter){let h=rptHeader('Competencias'+(list.length===1?' · '+esc(list[0].nombre||''):''));if(!list.length)return h+'<p>No hay competencias para mostrar.</p>';if(list.length>1)h+=`<p><b>${list.length}</b> competencias.</p>`;const sorted=list.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));sorted.forEach((c,i)=>{compEnsureIds(c);const allParts=(c.participantes||[]);const parts=filter?compFilteredParticipants(c,filter):allParts;const plan=c.planId?LESSONPLANS.find(p=>p.id===c.planId):null;h+=`<div${i>0?' style="page-break-before:always"':''}><h2>🏆 ${esc(c.nombre||'(sin nombre)')}</h2>`;const filterLine=(filter&&(c.catGroups||[]).some(g=>filter[g.id]))?`<p class="small"><b>Filtro:</b> ${(c.catGroups||[]).filter(g=>filter[g.id]).map(g=>esc(g.nombre)+': '+esc(filter[g.id])).join(' · ')}</p>`:'';h+=filterLine+rptTbl(['Dato','Valor'],[['Fecha',c.fecha?fmtFecha(c.fecha):'—'],['Hora',esc(c.hora||'—')],['Lugar',esc(c.lugar||'—')],['Planificación',plan?esc(lpPlanHeading(plan).title):'—'],['Formato / Observaciones',fmt(c.nota||'—')],['Participantes',String(parts.length)+(filter&&parts.length!==allParts.length?' (de '+allParts.length+')':'')]]);if(parts.length){const order=compGroupOrderFor(c);const flat=compFlattenTree(compGroupedParticipants(c,order,parts));const catCols=c.catGroups||[];h+='<p><b>Participantes</b></p>'+rptTbl(['#','Alumno',...catCols.map(g=>g.nombre),'Programa','Nivel'],flat.map((p,ix)=>{const s=DB.students.find(x=>x.id===p.studentId);return [String(ix+1),esc(p.nombre||(s?fullName(s):'')),...catCols.map(g=>esc((p.cats&&p.cats[g.id])||'—')),esc(s?(s.programa||''):''),esc(s?(s.nivel||''):'')];}));}else h+='<p class="small">Sin participantes.</p>';h+='</div>';});return h;}
 function informeCompetencia(id){const c=(COMPS||[]).find(x=>x.id===id);if(!c){alert('No se encontró la competencia.');return;}printReport(buildCompetencias([c]),'Competencia '+(c.nombre||''));}
 
 /* ===== Planificaciones y Comunicaciones ===== */
