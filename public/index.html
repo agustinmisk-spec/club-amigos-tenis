@@ -1199,7 +1199,7 @@ const LP_COLORS=['#111827','#c0392b','#1f8a4d','#2563eb','#ff7a1a','#f1c40f'];
 const LP_DEFAULT_COLOR={jugador:'#111827',raqueta:'#111827',pelota:'#cfe61c',canasto:'#e9c46a',cono:'#ff7a1a',conobajo:'#ff7a1a',aro:'#e0338c',texto:'#111827'};
 const LP_COLORABLE=new Set(Object.keys(LP_DEFAULT_COLOR));
 function lpColorId(c){return String(c||'c0392b').replace('#','');}
-let editMsgId=null,editEvId=null,editCompId=null,editRecId=null,compGroupBy={},compSubGroupBy={},compExpanded={};
+let editMsgId=null,editEvId=null,editCompId=null,editRecId=null,compGroupOrder={},compBulkSel={},compExpanded={};
 function toggleCompExpand(cid){compExpanded[cid]=!compExpanded[cid];renderCompetitions();}
 let pickSel=new Set(),pickCb=null;
 function recCount(id,tipo){return RECOVERIES.filter(r=>r.studentId===id&&r.tipo===tipo).length;}
@@ -1346,7 +1346,7 @@ function compEnsureIds(c){
   return c.participantes;
 }
 function compGroupByKey(parts,c,groupId){
-  if(!groupId)return [{valor:'',items:parts}];
+  if(!groupId)return [{valor:'',items:parts,grouped:false}];
   const grp=(c.catGroups||[]).find(g=>g.id===groupId);
   const order=grp?grp.opciones.slice():[];
   const groups={};
@@ -1360,17 +1360,36 @@ function compGroupByKey(parts,c,groupId){
     return a.localeCompare(b,'es',{numeric:true,sensitivity:'base'});
   });
   if(groups['']!=null)keys.push('');
-  return keys.map(k=>({valor:k,items:groups[k]}));
+  return keys.map(k=>({valor:k,items:groups[k],grouped:true}));
 }
-function compGroupedParticipants(c,groupId,subGroupId){
-  const parts=(c.participantes||[]).slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es',{numeric:true,sensitivity:'base'}));
-  const primary=compGroupByKey(parts,c,groupId);
-  if(!subGroupId||!groupId)return primary;
-  return primary.map(g=>({valor:g.valor,items:g.items,sub:compGroupByKey(g.items,c,subGroupId)}));
+function compSortedParticipants(c){return (c.participantes||[]).slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es',{numeric:true,sensitivity:'base'}));}
+function compGroupOrderFor(c){
+  const order=compGroupOrder[c.id];
+  if(Array.isArray(order)&&order.length)return order.filter(gid=>(c.catGroups||[]).some(g=>g.id===gid));
+  return c.catGroups&&c.catGroups[0]?[c.catGroups[0].id]:[];
+}
+function compGroupTree(parts,c,order){
+  if(!order.length)return [{valor:'',items:parts,grouped:false,sub:null}];
+  const [gid,...rest]=order;
+  const level=compGroupByKey(parts,c,gid);
+  return level.map(g=>({valor:g.valor,items:g.items,grouped:g.grouped,sub:rest.length?compGroupTree(g.items,c,rest):null}));
+}
+function compGroupedParticipants(c,order){
+  return compGroupTree(compSortedParticipants(c),c,order);
+}
+function compFlattenTree(nodes){
+  let out=[];
+  nodes.forEach(n=>{if(n.sub)out=out.concat(compFlattenTree(n.sub));else out=out.concat(n.items);});
+  return out;
 }
 function compGroupName(cid,gid){const c=COMPS.find(x=>x.id===cid);const g=c&&(c.catGroups||[]).find(x=>x.id===gid);return g?g.nombre:'';}
-function setCompGroupBy(cid,val){compGroupBy[cid]=val;if(compSubGroupBy[cid]===val)compSubGroupBy[cid]='';renderCompetitions();}
-function setCompSubGroupBy(cid,val){compSubGroupBy[cid]=val;renderCompetitions();}
+function setCompGroupLevel(cid,idx,val){
+  const c=COMPS.find(x=>x.id===cid);if(!c)return;
+  const order=compGroupOrderFor(c).slice(0,idx);
+  if(val)order.push(val);
+  compGroupOrder[cid]=order;
+  renderCompetitions();
+}
 async function addCompCatOption(cid,gid,nombre){
   const c=COMPS.find(x=>x.id===cid);if(!c)return;
   compEnsureIds(c);
@@ -1419,7 +1438,7 @@ async function rmCompCatGroup(cid,gid){
   if(!confirm('¿Eliminar el tipo de categoría "'+g.nombre+'" y quitarlo de todos los participantes?'))return;
   c.catGroups=c.catGroups.filter(x=>x.id!==gid);
   c.participantes.forEach(p=>{if(p.cats)delete p.cats[gid];});
-  if(compGroupBy[cid]===gid)delete compGroupBy[cid];
+  if(Array.isArray(compGroupOrder[cid]))compGroupOrder[cid]=compGroupOrder[cid].filter(x=>x!==gid);
   try{await api('PUT','/api/competitions/'+cid,{catGroups:c.catGroups,participantes:c.participantes});renderCompetitions();}catch(e){alert(e.message);}
 }
 async function renameCompCatGroup(cid,gid,nombre){
@@ -1446,6 +1465,48 @@ async function onCompCatChange(sel,cid,pid,gid){
   }else{
     await setCompParticipantCat(cid,pid,gid,sel.value);
   }
+}
+function compBulkSelFor(cid){if(!compBulkSel[cid])compBulkSel[cid]=new Set();return compBulkSel[cid];}
+function compToggleBulkSel(cid,pid,checked){
+  const set=compBulkSelFor(cid);
+  if(checked)set.add(pid);else set.delete(pid);
+  renderCompetitions();
+}
+function compToggleSelectAll(cid){
+  const c=COMPS.find(x=>x.id===cid);if(!c)return;
+  compEnsureIds(c);
+  const set=compBulkSelFor(cid);
+  compBulkSel[cid]=(set.size===c.participantes.length)?new Set():new Set(c.participantes.map(p=>p.id));
+  renderCompetitions();
+}
+function compClearBulkSel(cid){compBulkSel[cid]=new Set();renderCompetitions();}
+function compBulkGidChanged(cid){
+  const gidSel=document.getElementById('bulkGid_'+cid),valSel=document.getElementById('bulkVal_'+cid);
+  if(!gidSel||!valSel)return;
+  const c=COMPS.find(x=>x.id===cid);if(!c)return;
+  const g=(c.catGroups||[]).find(x=>x.id===gidSel.value);
+  valSel.innerHTML=compCatOptionsHtml(g||{opciones:[]},'');
+}
+async function compApplyBulkCat(cid,gid,val){
+  if(!gid)return;
+  const c=COMPS.find(x=>x.id===cid);if(!c)return;
+  compEnsureIds(c);
+  const set=compBulkSelFor(cid);
+  if(!set.size)return;
+  let finalVal=val;
+  if(val==='__new__'){
+    const nombre=(prompt('Nueva categoría para "'+compGroupName(cid,gid)+'":')||'').trim();
+    if(!nombre)return;
+    await addCompCatOption(cid,gid,nombre);
+    finalVal=nombre;
+  }
+  c.participantes.forEach(p=>{if(set.has(p.id)){p.cats=p.cats||{};p.cats[gid]=finalVal;}});
+  try{await api('PUT','/api/competitions/'+cid,{participantes:c.participantes});compBulkSel[cid]=new Set();renderCompetitions();}catch(e){alert(e.message);}
+}
+function compApplyBulkCatFromInputs(cid){
+  const gidSel=document.getElementById('bulkGid_'+cid),valSel=document.getElementById('bulkVal_'+cid);
+  if(!gidSel||!valSel)return;
+  compApplyBulkCat(cid,gidSel.value,valSel.value);
 }
 function compCatOptionsHtml(g,val){
   return `<option value=""${!val?' selected':''}>Sin categoría</option>`+
@@ -1503,17 +1564,35 @@ async function renderCompetitions(){
     const plan=c.planId?LESSONPLANS.find(p=>p.id===c.planId):null;
     let detailsHtml='';
     if(isOpen){
-      const groupSel=compGroupBy[c.id]!==undefined?compGroupBy[c.id]:(c.catGroups[0]?c.catGroups[0].id:'');
-      const subSel=groupSel?(compSubGroupBy[c.id]||''):'';
-      const groups=compGroupedParticipants(c,groupSel,subSel);
-      const countsLine=groupSel?groups.map(g=>`${esc(g.valor||'Sin categoría')}: <b>${g.items.length}</b>`).join(' · '):'';
-      const groupByOpts=`<option value="">Sin agrupar (solo alfabético)</option>`+(c.catGroups||[]).map(g=>`<option value="${g.id}"${groupSel===g.id?' selected':''}>${esc(g.nombre)}</option>`).join('');
-      const subGroupOpts=(c.catGroups||[]).filter(g=>g.id!==groupSel);
-      const subGroupByHtml=(groupSel&&subGroupOpts.length)?` <span class="small">y dentro, ordenar por: <select onchange="setCompSubGroupBy('${c.id}',this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px"><option value="">Ninguno (solo alfabético)</option>${subGroupOpts.map(g=>`<option value="${g.id}"${subSel===g.id?' selected':''}>${esc(g.nombre)}</option>`).join('')}</select></span>`:'';
-      const groupByHtml=(c.catGroups&&c.catGroups.length)?`<div class="small" style="margin-top:6px">Agrupar por: <select onchange="setCompGroupBy('${c.id}',this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px">${groupByOpts}</select>${subGroupByHtml}</div>`:'';
-      const partRow=pp=>`<div style="display:flex;align-items:center;gap:6px;padding:3px 0;flex-wrap:wrap"><span style="flex:1;min-width:140px">${esc(pp.nombre)}</span>${editable?compParticipantCatsHtml(c,pp):compParticipantCatsText(c,pp)}${editable?` <span style="cursor:pointer;color:#b3261e" onclick="rmCompParticipant('${c.id}','${pp.id}')" title="Quitar">✕</span>`:''}</div>`;
-      const groupsHtml=groups.length?groups.map(g=>`<div style="margin-top:8px">${groupSel?`<div class="small" style="font-weight:700;color:var(--muted);margin-bottom:4px">${esc(g.valor||'Sin categoría')} (${g.items.length})</div>`:''}${g.sub?g.sub.map(sg=>`<div style="margin-left:14px;margin-top:4px"><div class="small" style="font-weight:600;color:var(--muted);margin-bottom:2px">${esc(sg.valor||'Sin categoría')} (${sg.items.length})</div>${sg.items.map(partRow).join('')}</div>`).join(''):g.items.map(partRow).join('')}</div>`).join(''):'<p class="small">Sin participantes.</p>';
-      detailsHtml=`<div class="meta2" style="margin-top:4px">${c.hora?esc(c.hora)+' · ':''}${c.lugar?esc(c.lugar)+' · ':''}${plan?`<span style="cursor:pointer;color:#2563eb" onclick="compOpenPlan('${c.planId}')">📅 ${esc(lpPlanHeading(plan).title)}</span>`:'<span style="color:var(--muted)">Sin planificación vinculada</span>'}</div>${c.nota?`<div class="rte small" style="margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--card)">${fmtRaw(c.nota)}</div>`:''}${editable?renderCompCatGroupsAdmin(c):''}${total?`<div class="small" style="margin-top:8px;color:var(--muted)">${countsLine}</div>`:''}${groupByHtml}<div class="body2">${groupsHtml}</div>${editable?`<div style="margin-top:8px"><datalist id="dl_${c.id}">${DB.students.filter(s=>s.estado!=='Baja').map(s=>`<option value="${esc(fullName(s))}">`).join('')}</datalist><input id="cp_${c.id}" list="dl_${c.id}" placeholder="Agregar alumno (Apellido, Nombre)" style="padding:7px 9px;border:1px solid var(--line);border-radius:7px;font-size:13px"> <button class="btn sm" onclick="addCompParticipant('${c.id}')">+ Agregar</button> <button class="btn sm sec" onclick="addCompMulti('${c.id}')">Varios…</button></div>`:''}`;
+      const order=compGroupOrderFor(c);
+      const groups=compGroupedParticipants(c,order);
+      const countsLine=order.length?groups.map(g=>`${esc(g.valor||'Sin categoría')}: <b>${g.items.length}</b>`).join(' · '):'';
+      const groupByRows=[];
+      const opts0=`<option value="">Sin agrupar (solo alfabético)</option>`+(c.catGroups||[]).map(g=>`<option value="${g.id}"${order[0]===g.id?' selected':''}>${esc(g.nombre)}</option>`).join('');
+      groupByRows.push(`<select onchange="setCompGroupLevel('${c.id}',0,this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px">${opts0}</select>`);
+      for(let lvl=1;lvl<=order.length;lvl++){
+        const chosenBefore=order.slice(0,lvl);
+        const remaining=(c.catGroups||[]).filter(g=>!chosenBefore.includes(g.id));
+        if(!remaining.length)break;
+        const label=lvl===1?'y dentro, ordenar por:':'y dentro de eso, por:';
+        const optsN=`<option value="">Ninguno (solo alfabético)</option>`+remaining.map(g=>`<option value="${g.id}"${order[lvl]===g.id?' selected':''}>${esc(g.nombre)}</option>`).join('');
+        groupByRows.push(`<span class="small">${label} <select onchange="setCompGroupLevel('${c.id}',${lvl},this.value)" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px">${optsN}</select></span>`);
+      }
+      const groupByHtml=(c.catGroups&&c.catGroups.length)?`<div class="small" style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">Agrupar por: ${groupByRows.join(' ')}</div>`:'';
+      const bulkSet=compBulkSelFor(c.id);
+      const partRow=pp=>`<div style="display:flex;align-items:center;gap:6px;padding:3px 0;flex-wrap:wrap">${editable?`<input type="checkbox" ${bulkSet.has(pp.id)?'checked':''} onchange="compToggleBulkSel('${c.id}','${pp.id}',this.checked)">`:''}<span style="flex:1;min-width:140px">${esc(pp.nombre)}</span>${editable?compParticipantCatsHtml(c,pp):compParticipantCatsText(c,pp)}${editable?` <span style="cursor:pointer;color:#b3261e" onclick="rmCompParticipant('${c.id}','${pp.id}')" title="Quitar">✕</span>`:''}</div>`;
+      const compGroupNodeHtml=(node,depth)=>{
+        const header=node.grouped?`<div class="small" style="font-weight:${depth===0?700:600};color:var(--muted);margin-bottom:${depth===0?4:2}px">${esc(node.valor||'Sin categoría')} (${node.items.length})</div>`:'';
+        const indentStyle=depth>0?`margin-left:${depth*14}px;margin-top:4px`:'margin-top:8px';
+        const body=node.sub?node.sub.map(sub=>compGroupNodeHtml(sub,depth+1)).join(''):node.items.map(partRow).join('');
+        return `<div style="${indentStyle}">${header}${body}</div>`;
+      };
+      const groupsHtml=groups.length?groups.map(g=>compGroupNodeHtml(g,0)).join(''):'<p class="small">Sin participantes.</p>';
+      const bulkBarHtml=(editable&&total)?`<div class="small" style="margin:8px 0;padding:6px 8px;border:1px dashed var(--line);border-radius:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span style="cursor:pointer;color:#2563eb" onclick="compToggleSelectAll('${c.id}')">${bulkSet.size===total?'☑ Deseleccionar todos':'☐ Seleccionar todos'}</span>
+        ${bulkSet.size?`<b>${bulkSet.size} seleccionado(s)</b> <span>Asignar</span> <select id="bulkGid_${c.id}" onchange="compBulkGidChanged('${c.id}')" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px">${(c.catGroups||[]).map(g=>`<option value="${g.id}">${esc(g.nombre)}</option>`).join('')}</select><select id="bulkVal_${c.id}" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px">${compCatOptionsHtml((c.catGroups||[])[0]||{opciones:[]},'')}</select><button class="btn sm" onclick="compApplyBulkCatFromInputs('${c.id}')">Aplicar a todos</button> <button class="btn sm ghost" onclick="compClearBulkSel('${c.id}')">Cancelar</button>`:''}
+      </div>`:'';
+      detailsHtml=`<div class="meta2" style="margin-top:4px">${c.hora?esc(c.hora)+' · ':''}${c.lugar?esc(c.lugar)+' · ':''}${plan?`<span style="cursor:pointer;color:#2563eb" onclick="compOpenPlan('${c.planId}')">📅 ${esc(lpPlanHeading(plan).title)}</span>`:'<span style="color:var(--muted)">Sin planificación vinculada</span>'}</div>${c.nota?`<div class="rte small" style="margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--card)">${fmtRaw(c.nota)}</div>`:''}${editable?renderCompCatGroupsAdmin(c):''}${total?`<div class="small" style="margin-top:8px;color:var(--muted)">${countsLine}</div>`:''}${groupByHtml}${bulkBarHtml}<div class="body2">${groupsHtml}</div>${editable?`<div style="margin-top:8px"><datalist id="dl_${c.id}">${DB.students.filter(s=>s.estado!=='Baja').map(s=>`<option value="${esc(fullName(s))}">`).join('')}</datalist><input id="cp_${c.id}" list="dl_${c.id}" placeholder="Agregar alumno (Apellido, Nombre)" style="padding:7px 9px;border:1px solid var(--line);border-radius:7px;font-size:13px"> <button class="btn sm" onclick="addCompParticipant('${c.id}')">+ Agregar</button> <button class="btn sm sec" onclick="addCompMulti('${c.id}')">Varios…</button></div>`:''}`;
     }
     return `<div class="item"><div class="top"><span class="ti" style="cursor:pointer" onclick="toggleCompExpand('${c.id}')" title="${isOpen?'Contraer':'Ver y editar jugadores'}">${isOpen?'▾':'▸'} 🏆 ${esc(c.nombre)}</span><span><button class="att-btn" title="Informe PDF de este evento" onclick="informeCompetencia('${c.id}')">📄</button>${editable?` <button class="att-btn" title="Editar" onclick="editCompStart('${c.id}')">✎</button> <button class="att-btn" onclick="delCompetition('${c.id}')">🗑</button>`:''}</span></div><div class="meta2" style="cursor:pointer" onclick="toggleCompExpand('${c.id}')">${esc(fmtFecha(c.fecha))} · ${total} participante(s)</div>${detailsHtml}</div>`;
   }).join('')+'</div>';
@@ -1619,7 +1698,7 @@ async function addCompParticipant(cid){
 }
 async function rmCompParticipant(cid,pid){const c=COMPS.find(x=>x.id===cid);if(!c)return;compEnsureIds(c);const part=c.participantes.filter(pp=>pp.id!==pid);try{await api('PUT','/api/competitions/'+cid,{participantes:part});renderCompetitions();}catch(e){alert(e.message);}}
 async function delCompetition(id){if(!confirm('¿Eliminar esta competencia?'))return;try{await api('DELETE','/api/competitions/'+id);renderCompetitions();}catch(e){alert(e.message);}}
-function buildCompetencias(list){let h=rptHeader('Competencias'+(list.length===1?' · '+esc(list[0].nombre||''):''));if(!list.length)return h+'<p>No hay competencias para mostrar.</p>';if(list.length>1)h+=`<p><b>${list.length}</b> competencias.</p>`;const sorted=list.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));sorted.forEach((c,i)=>{compEnsureIds(c);const parts=(c.participantes||[]);const plan=c.planId?LESSONPLANS.find(p=>p.id===c.planId):null;h+=`<div${i>0?' style="page-break-before:always"':''}><h2>🏆 ${esc(c.nombre||'(sin nombre)')}</h2>`;h+=rptTbl(['Dato','Valor'],[['Fecha',c.fecha?fmtFecha(c.fecha):'—'],['Hora',esc(c.hora||'—')],['Lugar',esc(c.lugar||'—')],['Planificación',plan?esc(lpPlanHeading(plan).title):'—'],['Formato / Observaciones',fmt(c.nota||'—')],['Participantes',String(parts.length)]]);if(parts.length){const groupSel=compGroupBy[c.id]!==undefined?compGroupBy[c.id]:(c.catGroups[0]?c.catGroups[0].id:'');const subSel=groupSel?(compSubGroupBy[c.id]||''):'';const flat=[];compGroupedParticipants(c,groupSel,subSel).forEach(g=>(g.sub||[{items:g.items}]).forEach(sg=>sg.items.forEach(p=>flat.push(p))));const catCols=c.catGroups||[];h+='<p><b>Participantes</b></p>'+rptTbl(['#','Alumno',...catCols.map(g=>g.nombre),'Programa','Nivel'],flat.map((p,ix)=>{const s=DB.students.find(x=>x.id===p.studentId);return [String(ix+1),esc(p.nombre||(s?fullName(s):'')),...catCols.map(g=>esc((p.cats&&p.cats[g.id])||'—')),esc(s?(s.programa||''):''),esc(s?(s.nivel||''):'')];}));}else h+='<p class="small">Sin participantes.</p>';h+='</div>';});return h;}
+function buildCompetencias(list){let h=rptHeader('Competencias'+(list.length===1?' · '+esc(list[0].nombre||''):''));if(!list.length)return h+'<p>No hay competencias para mostrar.</p>';if(list.length>1)h+=`<p><b>${list.length}</b> competencias.</p>`;const sorted=list.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));sorted.forEach((c,i)=>{compEnsureIds(c);const parts=(c.participantes||[]);const plan=c.planId?LESSONPLANS.find(p=>p.id===c.planId):null;h+=`<div${i>0?' style="page-break-before:always"':''}><h2>🏆 ${esc(c.nombre||'(sin nombre)')}</h2>`;h+=rptTbl(['Dato','Valor'],[['Fecha',c.fecha?fmtFecha(c.fecha):'—'],['Hora',esc(c.hora||'—')],['Lugar',esc(c.lugar||'—')],['Planificación',plan?esc(lpPlanHeading(plan).title):'—'],['Formato / Observaciones',fmt(c.nota||'—')],['Participantes',String(parts.length)]]);if(parts.length){const order=compGroupOrderFor(c);const flat=compFlattenTree(compGroupedParticipants(c,order));const catCols=c.catGroups||[];h+='<p><b>Participantes</b></p>'+rptTbl(['#','Alumno',...catCols.map(g=>g.nombre),'Programa','Nivel'],flat.map((p,ix)=>{const s=DB.students.find(x=>x.id===p.studentId);return [String(ix+1),esc(p.nombre||(s?fullName(s):'')),...catCols.map(g=>esc((p.cats&&p.cats[g.id])||'—')),esc(s?(s.programa||''):''),esc(s?(s.nivel||''):'')];}));}else h+='<p class="small">Sin participantes.</p>';h+='</div>';});return h;}
 function informeCompetencia(id){const c=(COMPS||[]).find(x=>x.id===id);if(!c){alert('No se encontró la competencia.');return;}printReport(buildCompetencias([c]),'Competencia '+(c.nombre||''));}
 
 /* ===== Planificaciones y Comunicaciones ===== */
